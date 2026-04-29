@@ -1,0 +1,9 @@
+export const APP_NAME = 'SheetForge'
+export const DEFAULT_ROWS = 100
+export const DEFAULT_COLS = 26
+export const DEFAULT_CELL_WIDTH = 100
+export const DEFAULT_CELL_HEIGHT = 24
+export const AUTOSAVE_INTERVAL_MS = 30_000
+export const UNDO_HISTORY_LIMIT = 100
+export const AI_FORMULA_TRIGGER = '=?'
+export const GROQ_MODEL = 'llama-3.3-70b-versatile'

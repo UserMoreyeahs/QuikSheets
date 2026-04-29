@@ -34,3 +34,16 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local artifacts
+.next-*.log
+.next-*.err.log
+.artifacts-*.png
+.tmp-*
+.playwright-verify.spec.ts
+test-results/
+playwright-report/
+
+# claude worktrees
+.claude/worktrees/
+

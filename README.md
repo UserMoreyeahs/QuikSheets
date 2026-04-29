@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SheetForge
 
-## Getting Started
+AI-native spreadsheet workspace built with Next.js, FortuneSheet, Zustand, Supabase, Groq, ECharts, and SheetJS.
 
-First, run the development server:
+## Local Development
+
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
+2. Copy `.env.example` to `.env.local` and fill in the local values.
+3. Start the dev server:
+   ```bash
+   npm run dev
+   ```
+4. Open `http://localhost:3000`.
+
+## Scripts
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run build
+npm run start
+npx tsc --noEmit
+npx eslint src/ --max-warnings 0
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Environment Variables
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Variable | Purpose |
+| --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | Public Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public Supabase anon key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-only Supabase service role key |
+| `AI_PROVIDER` | AI provider label, currently `groq` |
+| `AI_BASE_URL` | OpenAI-compatible AI API base URL |
+| `AI_API_KEY` | Generic server-only AI API key |
+| `GROQ_API_KEY` | Groq server-only API key used by AI routes |
+| `AI_MODEL` | Primary AI model |
+| `AI_FALLBACK_MODEL` | Fallback AI model |
+| `CEREBRAS_BASE_URL` | Optional Cerebras fallback base URL |
+| `CEREBRAS_API_KEY` | Optional Cerebras API key |
+| `NEXT_PUBLIC_APP_URL` | Public app URL |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Build Log
 
-## Learn More
+Session progress is tracked in `CLAUDE.md` and `SESSION_TRACKER.md`.
 
-To learn more about Next.js, take a look at the following resources:
+## Deployment
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+The app is configured for Vercel with `vercel.json`.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run build
+npx vercel --prod --yes
+```
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Production deployment currently requires a valid Vercel CLI token or an authenticated `vercel login` session.
