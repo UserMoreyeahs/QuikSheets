@@ -1,37 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { FileSpreadsheet, Plus, Sparkles, Clock, Layers } from 'lucide-react'
 import { TEMPLATES, TEMPLATE_CATEGORIES, type TemplateCategory, type TemplateDefinition } from '@/lib/templates'
 import type { Sheet } from '@fortune-sheet/core'
-
-interface SavedWorkbook {
-  id: string
-  name: string
-  savedAt?: string
-}
-
-function loadSavedWorkbooks(): SavedWorkbook[] {
-  try {
-    const workbooks: SavedWorkbook[] = []
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i)
-      if (key?.startsWith('quiksheets_workbook_name:')) {
-        const id = key.replace('quiksheets_workbook_name:', '')
-        const name = localStorage.getItem(key) ?? `Workbook ${id.slice(0, 8)}`
-        workbooks.push({ id, name })
-      }
-    }
-    // Also include the default demo workbook if no others exist
-    if (workbooks.length === 0) {
-      workbooks.push({ id: '1', name: 'Demo Spreadsheet' })
-    }
-    return workbooks
-  } catch {
-    return [{ id: '1', name: 'Demo Spreadsheet' }]
-  }
-}
+import { useDashboardWorkbooks } from '@/features/workbook/useDashboardWorkbooks'
+import { createWorkbookAction } from '@/features/workbook/actions'
+import { getBrowserSupabase } from '@/lib/supabase/client'
 
 function formatDate(iso?: string): string {
   if (!iso) return ''
@@ -42,10 +18,26 @@ function formatDate(iso?: string): string {
   }
 }
 
-function createWorkbookFromTemplate(template: TemplateDefinition, workbookName: string): string {
+async function pickPrimaryWorkspaceId(): Promise<string | null> {
+  const supabase = getBrowserSupabase()
+  if (!supabase) return null
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return null
+  const { data } = await supabase
+    .from('workspace_members')
+    .select('workspace_id')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  return (data?.workspace_id as string | undefined) ?? null
+}
+
+function createLocalWorkbookFromTemplate(template: TemplateDefinition, workbookName: string): string {
   const id = `template_${Date.now()}`
   try {
-    // Store template sheet data for the sheet page to pick up on load
     const sheetsWithNewId: Sheet[] = template.sheets.map((sheet, index) => ({
       ...sheet,
       id: index === 0 ? 'sheet1' : `sheet${index + 1}`,
@@ -62,16 +54,55 @@ function createWorkbookFromTemplate(template: TemplateDefinition, workbookName: 
 
 interface UseTemplateDialogProps {
   template: TemplateDefinition
+  hasAuth: boolean
   onClose: () => void
 }
 
-function UseTemplateDialog({ template, onClose }: UseTemplateDialogProps) {
+function UseTemplateDialog({ template, hasAuth, onClose }: UseTemplateDialogProps) {
   const router = useRouter()
   const [name, setName] = useState(template.name)
+  const [pending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
 
   const handleCreate = () => {
-    const id = createWorkbookFromTemplate(template, name.trim() || template.name)
-    router.push(`/sheet/${id}`)
+    setError(null)
+    const finalName = name.trim() || template.name
+
+    if (!hasAuth) {
+      const id = createLocalWorkbookFromTemplate(template, finalName)
+      router.push(`/sheet/${id}`)
+      return
+    }
+
+    startTransition(async () => {
+      const workspaceId = await pickPrimaryWorkspaceId()
+      if (!workspaceId) {
+        const id = createLocalWorkbookFromTemplate(template, finalName)
+        router.push(`/sheet/${id}`)
+        return
+      }
+      const result = await createWorkbookAction({ name: finalName, workspaceId })
+      if (!result.ok || !result.id) {
+        setError(result.error ?? 'Failed to create workbook')
+        return
+      }
+      // Stash the template payload locally for the sheet page to hydrate from.
+      try {
+        const sheetsWithNewId: Sheet[] = template.sheets.map((sheet, index) => ({
+          ...sheet,
+          id: index === 0 ? 'sheet1' : `sheet${index + 1}`,
+          status: index === 0 ? (1 as const) : (0 as const),
+          order: index,
+        }))
+        localStorage.setItem(
+          `quiksheets_template_data:${result.id}`,
+          JSON.stringify(sheetsWithNewId)
+        )
+      } catch {
+        // ignore
+      }
+      router.push(`/sheet/${result.id}`)
+    })
   }
 
   return (
@@ -91,10 +122,15 @@ function UseTemplateDialog({ template, onClose }: UseTemplateDialogProps) {
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); if (e.key === 'Escape') onClose() }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleCreate()
+            if (e.key === 'Escape') onClose()
+          }}
           autoFocus
           className="mb-5 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
         />
+
+        {error ? <p className="mb-3 text-sm text-red-600">{error}</p> : null}
 
         <div className="flex justify-end gap-2">
           <button
@@ -105,9 +141,10 @@ function UseTemplateDialog({ template, onClose }: UseTemplateDialogProps) {
           </button>
           <button
             onClick={handleCreate}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            disabled={pending}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
           >
-            Create workbook
+            {pending ? 'Creating…' : 'Create workbook'}
           </button>
         </div>
       </div>
@@ -128,24 +165,53 @@ export default function DashboardPage() {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<'workbooks' | 'templates'>('workbooks')
   const [selectedCategory, setSelectedCategory] = useState<TemplateCategory>('All')
-  const [savedWorkbooks, setSavedWorkbooks] = useState<SavedWorkbook[]>([])
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateDefinition | null>(null)
-
-  useEffect(() => {
-    setSavedWorkbooks(loadSavedWorkbooks())
-  }, [])
+  const [pending, startTransition] = useTransition()
+  const { workbooks, isLoading, hasAuth } = useDashboardWorkbooks()
 
   const filteredTemplates =
     selectedCategory === 'All' ? TEMPLATES : TEMPLATES.filter((t) => t.category === selectedCategory)
 
   const handleNewWorkbook = () => {
-    const id = `wb_${Date.now()}`
-    try {
-      localStorage.setItem(`quiksheets_workbook_name:${id}`, 'Untitled Workbook')
-    } catch {
-      // ignore
+    if (!hasAuth) {
+      const id = `wb_${Date.now()}`
+      try {
+        localStorage.setItem(`quiksheets_workbook_name:${id}`, 'Untitled Workbook')
+      } catch {
+        // ignore
+      }
+      router.push(`/sheet/${id}`)
+      return
     }
-    router.push(`/sheet/${id}`)
+
+    startTransition(async () => {
+      const workspaceId = await pickPrimaryWorkspaceId()
+      if (!workspaceId) {
+        const id = `wb_${Date.now()}`
+        try {
+          localStorage.setItem(`quiksheets_workbook_name:${id}`, 'Untitled Workbook')
+        } catch {
+          // ignore
+        }
+        router.push(`/sheet/${id}`)
+        return
+      }
+      const result = await createWorkbookAction({
+        name: 'Untitled Workbook',
+        workspaceId,
+      })
+      if (result.ok && result.id) {
+        router.push(`/sheet/${result.id}`)
+      } else {
+        const id = `wb_${Date.now()}`
+        try {
+          localStorage.setItem(`quiksheets_workbook_name:${id}`, 'Untitled Workbook')
+        } catch {
+          // ignore
+        }
+        router.push(`/sheet/${id}`)
+      }
+    })
   }
 
   return (
@@ -159,10 +225,11 @@ export default function DashboardPage() {
           </div>
           <button
             onClick={handleNewWorkbook}
-            className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            disabled={pending}
+            className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
           >
             <Plus className="h-4 w-4" />
-            New workbook
+            {pending ? 'Creating…' : 'New workbook'}
           </button>
         </div>
       </header>
@@ -201,39 +268,54 @@ export default function DashboardPage() {
           <div>
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-base font-semibold text-zinc-800 dark:text-zinc-200">Recent workbooks</h2>
+              {!hasAuth ? (
+                <p className="text-xs text-zinc-500">Sign in to sync workbooks across devices.</p>
+              ) : null}
             </div>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
               {/* New workbook card */}
               <button
                 onClick={handleNewWorkbook}
-                className="flex h-36 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-zinc-300 text-zinc-400 transition-colors hover:border-blue-400 hover:text-blue-500 dark:border-zinc-700 dark:hover:border-blue-600 dark:hover:text-blue-400"
+                disabled={pending}
+                className="flex h-36 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-zinc-300 text-zinc-400 transition-colors hover:border-blue-400 hover:text-blue-500 disabled:opacity-60 dark:border-zinc-700 dark:hover:border-blue-600 dark:hover:text-blue-400"
               >
                 <Plus className="h-7 w-7" />
                 <span className="text-sm font-medium">New workbook</span>
               </button>
 
-              {savedWorkbooks.map((wb) => (
-                <button
-                  key={wb.id}
-                  onClick={() => router.push(`/sheet/${wb.id}`)}
-                  className="group flex h-36 flex-col justify-between rounded-xl border border-zinc-200 bg-white p-4 text-left shadow-sm transition-all hover:border-blue-300 hover:shadow-md dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-blue-600"
-                >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-900/20">
-                    <FileSpreadsheet className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div>
-                    <p className="truncate text-sm font-medium text-zinc-800 group-hover:text-blue-700 dark:text-zinc-200 dark:group-hover:text-blue-300">
-                      {wb.name}
-                    </p>
-                    {wb.savedAt && (
-                      <p className="mt-0.5 flex items-center gap-1 text-xs text-zinc-400">
-                        <Clock className="h-3 w-3" />
-                        {formatDate(wb.savedAt)}
+              {isLoading && workbooks.length === 0 ? (
+                <p className="col-span-full text-sm text-zinc-500">Loading workbooks…</p>
+              ) : (
+                workbooks.map((wb) => (
+                  <button
+                    key={wb.id}
+                    onClick={() => router.push(`/sheet/${wb.id}`)}
+                    className="group flex h-36 flex-col justify-between rounded-xl border border-zinc-200 bg-white p-4 text-left shadow-sm transition-all hover:border-blue-300 hover:shadow-md dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-blue-600"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-900/20">
+                        <FileSpreadsheet className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      {wb.source === 'local' ? (
+                        <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-500 dark:bg-zinc-800">
+                          Local
+                        </span>
+                      ) : null}
+                    </div>
+                    <div>
+                      <p className="truncate text-sm font-medium text-zinc-800 group-hover:text-blue-700 dark:text-zinc-200 dark:group-hover:text-blue-300">
+                        {wb.name}
                       </p>
-                    )}
-                  </div>
-                </button>
-              ))}
+                      {wb.updatedAt && (
+                        <p className="mt-0.5 flex items-center gap-1 text-xs text-zinc-400">
+                          <Clock className="h-3 w-3" />
+                          {formatDate(wb.updatedAt)}
+                        </p>
+                      )}
+                    </div>
+                  </button>
+                ))
+              )}
             </div>
           </div>
         )}
@@ -319,6 +401,7 @@ export default function DashboardPage() {
       {selectedTemplate && (
         <UseTemplateDialog
           template={selectedTemplate}
+          hasAuth={hasAuth}
           onClose={() => setSelectedTemplate(null)}
         />
       )}

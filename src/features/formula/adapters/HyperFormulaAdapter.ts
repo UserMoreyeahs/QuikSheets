@@ -58,14 +58,15 @@ export class HyperFormulaAdapter implements FormulaEngineAdapter {
 
   validateFormula(formula: string): { ok: boolean; error?: string } {
     if (!formula.startsWith('=')) return { ok: true }
+    const body = formula.slice(1).trim()
+    if (body.length === 0) return { ok: false, error: 'EMPTY' }
     let hf: HyperFormula | null = null
     try {
-      hf = HyperFormula.buildFromSheets({ Probe: [[formula]] }, HYPERFORMULA_CONFIG)
-      const value = hf.getCellValue({ sheet: 0, row: 0, col: 0 })
-      if (value && typeof value === 'object' && 'type' in value) {
-        return { ok: false, error: String(value.type ?? 'ERROR') }
-      }
-      return { ok: true }
+      // hf.validateFormula is a syntax-only check that ignores evaluation
+      // errors like CYCLE; building an empty instance is enough.
+      hf = HyperFormula.buildEmpty(HYPERFORMULA_CONFIG)
+      const ok = hf.validateFormula(formula)
+      return ok ? { ok: true } : { ok: false, error: 'INVALID' }
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : 'Invalid formula' }
     } finally {
