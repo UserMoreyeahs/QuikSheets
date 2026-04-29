@@ -1,0 +1,99 @@
+'use server'
+
+import { z } from 'zod'
+import { revalidatePath } from 'next/cache'
+import { getServerSupabase, getServiceRoleSupabase } from '@/lib/supabase/server'
+import { assertCanManage } from '@/lib/permissions'
+
+const createSchema = z.object({
+  workbookId: z.string().uuid(),
+  role: z.enum(['viewer', 'editor']),
+  expiresAt: z.string().datetime().optional(),
+})
+
+const tokenSchema = z.object({ token: z.string().min(1).max(80) })
+
+function randomToken(length = 24): string {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  let out = ''
+  for (let i = 0; i < length; i++) out += chars[Math.floor(Math.random() * chars.length)]!
+  return out
+}
+
+export async function createShareLinkAction(input: z.input<typeof createSchema>) {
+  const parsed = createSchema.safeParse(input)
+  if (!parsed.success) return { ok: false as const, error: 'Invalid input' }
+
+  const ctx = await assertCanManage(parsed.data.workbookId).catch(() => null)
+  if (!ctx) return { ok: false as const, error: 'Forbidden' }
+
+  const supabase = await getServerSupabase()
+  if (!supabase) return { ok: false as const, error: 'Supabase not configured' }
+
+  const insertPayload: Record<string, unknown> = {
+    workbook_id: parsed.data.workbookId,
+    token: randomToken(),
+    role: parsed.data.role,
+    created_by: ctx.userId,
+  }
+  if (parsed.data.expiresAt) insertPayload.expires_at = parsed.data.expiresAt
+
+  const { data, error } = await supabase
+    .from('share_links')
+    .insert(insertPayload)
+    .select('token')
+    .single()
+
+  if (error || !data) return { ok: false as const, error: error?.message ?? 'Insert failed' }
+
+  revalidatePath(`/sheet/${parsed.data.workbookId}`)
+  return { ok: true as const, token: data.token as string }
+}
+
+export interface ShareLinkResolution {
+  ok: boolean
+  workbookId?: string
+  role?: 'viewer' | 'editor'
+  reason?: 'not_found' | 'expired' | 'inactive'
+}
+
+export async function resolveShareTokenAction(
+  input: z.input<typeof tokenSchema>
+): Promise<ShareLinkResolution> {
+  const parsed = tokenSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, reason: 'not_found' }
+
+  const service = getServiceRoleSupabase()
+  if (!service) return { ok: false, reason: 'not_found' }
+  const { data } = await service
+    .from('share_links')
+    .select('workbook_id, role, expires_at, is_active')
+    .eq('token', parsed.data.token)
+    .maybeSingle()
+  if (!data) return { ok: false, reason: 'not_found' }
+  if (!data.is_active) return { ok: false, reason: 'inactive' }
+  if (data.expires_at) {
+    const exp = new Date(String(data.expires_at)).getTime()
+    if (Number.isFinite(exp) && exp < Date.now()) return { ok: false, reason: 'expired' }
+  }
+  return {
+    ok: true,
+    workbookId: data.workbook_id as string,
+    role: data.role as 'viewer' | 'editor',
+  }
+}
+
+export async function revokeShareLinkAction(input: { workbookId: string; token: string }) {
+  const ctx = await assertCanManage(input.workbookId).catch(() => null)
+  if (!ctx) return { ok: false as const, error: 'Forbidden' }
+  const supabase = await getServerSupabase()
+  if (!supabase) return { ok: false as const, error: 'Supabase not configured' }
+  const { error } = await supabase
+    .from('share_links')
+    .update({ is_active: false })
+    .eq('workbook_id', input.workbookId)
+    .eq('token', input.token)
+  if (error) return { ok: false as const, error: error.message }
+  revalidatePath(`/sheet/${input.workbookId}`)
+  return { ok: true as const }
+}
