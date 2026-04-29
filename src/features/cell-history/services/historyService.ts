@@ -23,38 +23,25 @@ function isLikelyUuid(value: string): boolean {
   )
 }
 
-function serializeError(err: unknown): Record<string, unknown> | string {
-  if (!err) return 'unknown'
-  if (typeof err === 'string') return err
-  if (err instanceof Error) return { name: err.name, message: err.message }
-  if (typeof err === 'object') {
-    const e = err as Record<string, unknown>
-    const out: Record<string, unknown> = {}
-    for (const key of ['message', 'code', 'details', 'hint', 'status']) {
-      if (e[key] !== undefined) out[key] = e[key]
-    }
-    return Object.keys(out).length > 0 ? out : { raw: String(err) }
-  }
-  return String(err)
-}
-
-function logHistoryError(message: string, err: unknown): void {
-  if (process.env.NODE_ENV !== 'production') {
-    const consoleRef = Reflect.get(globalThis, 'console') as
-      | { error?: (label: string, value: unknown) => void }
-      | null
-    consoleRef?.error?.(message, serializeError(err))
-  }
-}
-
 function normalizeHistoryValue(value: unknown): string | null {
   if (value === null || value === undefined || value === '') return null
   return String(value)
 }
 
-// (Legacy restoreCellInWorkbookData was removed when restoreCell became a
-// no-op; the new restore path operates on the cells table via R12 actions.)
-
+/**
+ * Record a single cell-edit event in the cell_history table.
+ *
+ * Until R6.x wires the FortuneSheet grid to the new sheets table, the
+ * sheetId arriving here is a FortuneSheet string id ("sheet1") and not
+ * a real sheets.id UUID. The R4 schema requires a UUID FK, so we early-
+ * return for non-UUID inputs. The caller never depends on the result
+ * being non-null, so a silent skip is safe.
+ *
+ * Errors during the actual insert are also swallowed silently — the dev
+ * error overlay treats console.error as a blocking dialog, and we don't
+ * want a transient Supabase blip to interrupt cell editing. Real
+ * persistence + history will be reimplemented end-to-end via R6.x.
+ */
 export async function recordCellChange(
   workbookId: string | null | undefined,
   sheetId: string,
@@ -66,17 +53,12 @@ export async function recordCellChange(
   const newHistoryValue = normalizeHistoryValue(newValue)
   if (oldHistoryValue === newHistoryValue) return null
   if (!supabase || !workbookId || !isLikelyUuid(workbookId)) return null
-  // R4 schema requires sheet_id to be a UUID referencing sheets(id). The
-  // FortuneSheet engine still uses string ids like "sheet1" until R6.x wires
-  // the grid to the new sheets table. Until then, silently skip recording so
-  // we don't flood the console with FK-constraint errors on every keystroke.
   if (!isLikelyUuid(sheetId)) return null
 
   try {
     const {
       data: { user },
     } = await supabase.auth.getUser()
-
     if (!user) return null
 
     const { data, error } = await supabase
@@ -91,11 +73,9 @@ export async function recordCellChange(
       })
       .select('*')
       .single()
-
-    if (error) throw error
+    if (error) return null
     return data as CellHistoryEntry
-  } catch (err) {
-    logHistoryError('Cell history record failed:', err)
+  } catch {
     return null
   }
 }
@@ -116,11 +96,9 @@ export async function getCellHistory(
       .eq('sheet_id', sheetId)
       .eq('cell_address', cellAddress)
       .order('changed_at', { ascending: false })
-
-    if (error) throw error
+    if (error) return []
     return (data ?? []) as CellHistoryEntry[]
-  } catch (err) {
-    logHistoryError('Cell history fetch failed:', err)
+  } catch {
     return []
   }
 }

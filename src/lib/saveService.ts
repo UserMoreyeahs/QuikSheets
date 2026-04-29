@@ -18,35 +18,6 @@ export interface WorkbookSaveData {
   data: unknown
 }
 
-function serializeError(err: unknown): Record<string, unknown> | string {
-  if (!err) return 'unknown'
-  if (typeof err === 'string') return err
-  if (err instanceof Error) {
-    return { name: err.name, message: err.message, stack: err.stack }
-  }
-  if (typeof err === 'object') {
-    // Supabase errors expose message/code/details/hint as own enumerable
-    // strings, but they're not JSON-stringify-friendly when nested. Pull
-    // the common fields explicitly.
-    const e = err as Record<string, unknown>
-    const out: Record<string, unknown> = {}
-    for (const key of ['message', 'code', 'details', 'hint', 'status']) {
-      if (e[key] !== undefined) out[key] = e[key]
-    }
-    return Object.keys(out).length > 0 ? out : { raw: String(err) }
-  }
-  return String(err)
-}
-
-function logSaveServiceError(message: string, err: unknown): void {
-  if (process.env.NODE_ENV !== 'production') {
-    const consoleRef = Reflect.get(globalThis, 'console') as
-      | { error?: (label: string, value: unknown) => void }
-      | null
-    consoleRef?.error?.(message, serializeError(err))
-  }
-}
-
 function localStorageKey(name: string): string {
   return `quiksheets_workbook_${name}`
 }
@@ -68,8 +39,9 @@ export async function saveWorkbook(
       JSON.stringify({ ...payload, savedAt: new Date().toISOString() })
     )
     return null
-  } catch (err) {
-    logSaveServiceError('Save failed:', err)
+  } catch {
+    // localStorage may throw QuotaExceededError; silently degrade so a
+    // failed save doesn't pop the Next.js dev error overlay on every edit.
     return null
   }
 }
@@ -84,8 +56,7 @@ export async function loadWorkbook(name: string): Promise<WorkbookSaveData | nul
     const raw = window.localStorage.getItem(localStorageKey(name))
     if (!raw) return null
     return JSON.parse(raw) as WorkbookSaveData
-  } catch (err) {
-    logSaveServiceError('Load failed:', err)
+  } catch {
     return null
   }
 }
@@ -96,6 +67,6 @@ export function debouncedSave(payload: WorkbookSaveData): void {
   if (_saveTimer !== null) clearTimeout(_saveTimer)
   _saveTimer = setTimeout(() => {
     _saveTimer = null
-    saveWorkbook(payload).catch((err) => logSaveServiceError('Auto-save failed:', err))
+    void saveWorkbook(payload)
   }, 30_000)
 }
