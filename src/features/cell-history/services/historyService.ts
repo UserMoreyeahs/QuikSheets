@@ -1,7 +1,4 @@
-import { createCell, getCellFormulaBarValue, getSheetMatrix } from '@/lib/fortuneSheet'
-import { fromCellNotation } from '@/lib/cellAddress'
 import { supabase } from '@/lib/supabase'
-import type { CellMatrix, Sheet } from '@fortune-sheet/core'
 
 export interface CellHistoryEntry {
   id: string
@@ -26,12 +23,27 @@ function isLikelyUuid(value: string): boolean {
   )
 }
 
+function serializeError(err: unknown): Record<string, unknown> | string {
+  if (!err) return 'unknown'
+  if (typeof err === 'string') return err
+  if (err instanceof Error) return { name: err.name, message: err.message }
+  if (typeof err === 'object') {
+    const e = err as Record<string, unknown>
+    const out: Record<string, unknown> = {}
+    for (const key of ['message', 'code', 'details', 'hint', 'status']) {
+      if (e[key] !== undefined) out[key] = e[key]
+    }
+    return Object.keys(out).length > 0 ? out : { raw: String(err) }
+  }
+  return String(err)
+}
+
 function logHistoryError(message: string, err: unknown): void {
   if (process.env.NODE_ENV !== 'production') {
     const consoleRef = Reflect.get(globalThis, 'console') as
       | { error?: (label: string, value: unknown) => void }
       | null
-    consoleRef?.error?.(message, err)
+    consoleRef?.error?.(message, serializeError(err))
   }
 }
 
@@ -40,51 +52,8 @@ function normalizeHistoryValue(value: unknown): string | null {
   return String(value)
 }
 
-function cloneWorkbookData(data: unknown): unknown {
-  if (typeof globalThis.structuredClone === 'function') {
-    return globalThis.structuredClone(data)
-  }
-
-  return JSON.parse(JSON.stringify(data)) as unknown
-}
-
-function getWorkbookSheets(data: unknown): Sheet[] {
-  if (!Array.isArray(data)) return []
-  return data as Sheet[]
-}
-
-function restoreCellInWorkbookData(
-  workbookData: unknown,
-  sheetId: string,
-  cellAddress: string,
-  value: string | null
-): { data: unknown; previousValue: string | null } {
-  const nextData = cloneWorkbookData(workbookData)
-  const sheets = getWorkbookSheets(nextData)
-  const sheetIndex = sheets.findIndex((sheet) => sheet.id === sheetId)
-  const sheet = sheets[sheetIndex]
-  if (!sheet) return { data: nextData, previousValue: null }
-
-  const { row, col } = fromCellNotation(cellAddress)
-  const matrix = getSheetMatrix(sheet).map((sheetRow) => [...(sheetRow ?? [])]) as CellMatrix
-  const previousValue = normalizeHistoryValue(getCellFormulaBarValue(matrix[row]?.[col] ?? null))
-
-  if (!matrix[row]) {
-    matrix[row] = []
-  }
-  matrix[row]![col] = createCell(value)
-
-  const maxColumns = matrix.reduce((max, sheetRow) => Math.max(max, sheetRow?.length ?? 0), 0)
-  sheets[sheetIndex] = {
-    ...sheet,
-    data: matrix,
-    row: Math.max(sheet.row ?? 0, matrix.length, 1),
-    column: Math.max(sheet.column ?? 0, maxColumns, 1),
-  }
-  delete sheets[sheetIndex].celldata
-
-  return { data: nextData, previousValue }
-}
+// (Legacy restoreCellInWorkbookData was removed when restoreCell became a
+// no-op; the new restore path operates on the cells table via R12 actions.)
 
 export async function recordCellChange(
   workbookId: string | null | undefined,
@@ -97,6 +66,11 @@ export async function recordCellChange(
   const newHistoryValue = normalizeHistoryValue(newValue)
   if (oldHistoryValue === newHistoryValue) return null
   if (!supabase || !workbookId || !isLikelyUuid(workbookId)) return null
+  // R4 schema requires sheet_id to be a UUID referencing sheets(id). The
+  // FortuneSheet engine still uses string ids like "sheet1" until R6.x wires
+  // the grid to the new sheets table. Until then, silently skip recording so
+  // we don't flood the console with FK-constraint errors on every keystroke.
+  if (!isLikelyUuid(sheetId)) return null
 
   try {
     const {
@@ -132,6 +106,7 @@ export async function getCellHistory(
   cellAddress: string
 ): Promise<CellHistoryEntry[]> {
   if (!supabase || !workbookId || !isLikelyUuid(workbookId)) return []
+  if (!isLikelyUuid(sheetId)) return []
 
   try {
     const { data, error } = await supabase
@@ -150,62 +125,11 @@ export async function getCellHistory(
   }
 }
 
-export async function restoreCell(historyId: string): Promise<RestoredCellResult | null> {
-  if (!supabase) return null
-
-  try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) return null
-
-    const { data: entryData, error: entryError } = await supabase
-      .from('cell_history')
-      .select('*')
-      .eq('id', historyId)
-      .single()
-
-    if (entryError) throw entryError
-    const historyEntry = entryData as CellHistoryEntry
-
-    const { data: workbookData, error: workbookError } = await supabase
-      .from('workbooks')
-      .select('data')
-      .eq('id', historyEntry.workbook_id)
-      .single()
-
-    if (workbookError) throw workbookError
-
-    const { data: restoredWorkbookData, previousValue } = restoreCellInWorkbookData(
-      (workbookData as { data: unknown }).data,
-      historyEntry.sheet_id,
-      historyEntry.cell_address,
-      historyEntry.old_value
-    )
-
-    const { error: updateError } = await supabase
-      .from('workbooks')
-      .update({ data: restoredWorkbookData })
-      .eq('id', historyEntry.workbook_id)
-
-    if (updateError) throw updateError
-
-    await recordCellChange(
-      historyEntry.workbook_id,
-      historyEntry.sheet_id,
-      historyEntry.cell_address,
-      previousValue,
-      historyEntry.old_value
-    )
-
-    return {
-      historyEntry,
-      previousValue,
-      restoredValue: historyEntry.old_value,
-    }
-  } catch (err) {
-    logHistoryError('Cell history restore failed:', err)
-    return null
-  }
+export async function restoreCell(_historyId: string): Promise<RestoredCellResult | null> {
+  // The legacy restore path read `workbooks.data` which the R4 normalized
+  // schema no longer has; the new restore flow lives in
+  // src/features/version-history/actions.ts and operates on rows in the
+  // `cells` table. Until the grid is migrated to that path (R6.x), surface
+  // null instead of error-ing.
+  return null
 }
