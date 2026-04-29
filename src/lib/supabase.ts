@@ -1,13 +1,12 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
 /**
- * Supabase client — null when env vars are not configured.
- * All consumers must null-check before calling methods.
+ * Back-compat shim. New code should import from:
+ *   - '@/lib/supabase/client' for the browser client
+ *   - '@/lib/supabase/server' for the server / service-role client
+ *
+ * This file retains a `supabase` export so existing legacy callers keep
+ * working until they are migrated session by session.
  */
-export const supabase: SupabaseClient | null =
-  supabaseUrl && supabaseAnonKey
-    ? createClient(supabaseUrl, supabaseAnonKey)
-    : null
+import { getBrowserSupabase } from './supabase/client'
+import type { SupabaseClient } from '@supabase/supabase-js'
+
+export const supabase: SupabaseClient | null = getBrowserSupabase()
