@@ -12,6 +12,7 @@ import {
 } from '@xyflow/react'
 import { X } from 'lucide-react'
 import { useCallback, useMemo } from 'react'
+import type { Node } from '@xyflow/react'
 import { MapNode } from '@/features/dependency-map/components/MapNode'
 import {
   buildDependencyGraph,
@@ -27,8 +28,18 @@ interface DependencyMapProps {
   onExit: () => void
 }
 
+// Module-scope constants — referencing these stays stable across renders so
+// ReactFlow doesn't see "props changed" on every parent render and trigger an
+// internal setState loop (Maximum update depth exceeded).
 const nodeTypes = {
   dependencyMapNode: MapNode,
+} as const
+
+const FIT_VIEW_OPTIONS = { padding: 0.24 }
+const PRO_OPTIONS = { hideAttribution: true }
+
+function getNodeColor(node: Node): string {
+  return (node.data as DependencyMapNodeData).color
 }
 
 const legendItems = [
@@ -63,10 +74,10 @@ export function DependencyMap({ sheetData, onCellSelect, onExit }: DependencyMap
         nodeTypes={nodeTypes}
         onNodeClick={handleNodeClick}
         fitView
-        fitViewOptions={{ padding: 0.24 }}
+        fitViewOptions={FIT_VIEW_OPTIONS}
         minZoom={0.12}
         maxZoom={1.8}
-        proOptions={{ hideAttribution: true }}
+        proOptions={PRO_OPTIONS}
       >
         <Background variant={BackgroundVariant.Dots} gap={18} size={1} color="#3f3f46" />
         <Controls position="bottom-left" showInteractive={false} />
@@ -74,7 +85,7 @@ export function DependencyMap({ sheetData, onCellSelect, onExit }: DependencyMap
           position="bottom-right"
           pannable
           zoomable
-          nodeColor={(node) => (node.data as DependencyMapNodeData).color}
+          nodeColor={getNodeColor}
           nodeStrokeWidth={3}
           maskColor="rgba(9, 9, 11, 0.72)"
           className="!bg-zinc-900"
