@@ -1,4 +1,4 @@
-export const APP_NAME = 'SheetForge'
+export const APP_NAME = 'Quiksheets'
 export const DEFAULT_ROWS = 100
 export const DEFAULT_COLS = 26
 export const DEFAULT_CELL_WIDTH = 100

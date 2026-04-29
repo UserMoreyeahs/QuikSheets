@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { ThemeProvider } from '@/components/ThemeProvider'
+import { LegacyStorageMigration } from '@/components/LegacyStorageMigration'
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -11,8 +12,8 @@ const removeExtensionHydrationAttrs = `
 `
 
 export const metadata: Metadata = {
-  title: 'SheetForge',
-  description: 'A powerful spreadsheet application',
+  title: 'Quiksheets',
+  description: 'AI-native browser spreadsheet for analysts, founders, and SMB teams.',
 }
 
 export default function RootLayout({
@@ -25,6 +26,7 @@ export default function RootLayout({
       <body className={`${inter.className} bg-background text-foreground`} suppressHydrationWarning>
         <script dangerouslySetInnerHTML={{ __html: removeExtensionHydrationAttrs }} />
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          <LegacyStorageMigration />
           {children}
         </ThemeProvider>
       </body>

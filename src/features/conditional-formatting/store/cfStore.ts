@@ -8,7 +8,7 @@ import { useSheetStore } from '@/store/sheetStore'
 import { useWorkbookStore } from '@/store/workbookStore'
 import type { Sheet } from '@fortune-sheet/core'
 
-const STORAGE_KEY_PREFIX = 'sheetforge_cf_rules:'
+const STORAGE_KEY_PREFIX = 'quiksheets_cf_rules:'
 
 function loadFromStorage(workbookId: string): Record<string, CFRule[]> {
   try {

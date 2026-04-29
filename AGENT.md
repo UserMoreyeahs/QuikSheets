@@ -1,10 +1,10 @@
-# SheetForge Agent Context
+# Quiksheets Agent Context (legacy)
 
-This file is the working memory for future AI agents on this project. Read this before making changes.
+> The canonical agent contract is now [`AGENTS.md`](AGENTS.md) (plural). This file is preserved as legacy context describing the SheetForge → Quiksheets rebrand baseline.
 
 ## Product
 
-SheetForge is a spreadsheet web app built as a custom Excel/Google Sheets-like experience with AI helpers. The app owns its own toolbar, formula bar, sheet tabs, import/export, validation, sorting, filtering, and AI surfaces while using FortuneSheet only for the grid canvas/editor.
+Quiksheets (formerly SheetForge) is a spreadsheet web app built as a custom Excel/Google Sheets-like experience with AI helpers. The app owns its own toolbar, formula bar, sheet tabs, import/export, validation, sorting, filtering, and AI surfaces while using FortuneSheet only for the grid canvas/editor (target: behind SpreadsheetEngineAdapter, with Univer as primary engine — see R3).
 
 Current app folder:
 

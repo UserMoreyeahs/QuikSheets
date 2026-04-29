@@ -28,7 +28,7 @@ export async function saveWorkbook(
     // No Supabase client — save to localStorage
     if (!supabase) {
       localStorage.setItem(
-        `sheetforge_workbook_${payload.name}`,
+        `quiksheets_workbook_${payload.name}`,
         JSON.stringify({ ...payload, savedAt: new Date().toISOString() })
       )
       return null
@@ -41,7 +41,7 @@ export async function saveWorkbook(
     // No authenticated user — fall back to localStorage
     if (!user) {
       localStorage.setItem(
-        `sheetforge_workbook_${payload.name}`,
+        `quiksheets_workbook_${payload.name}`,
         JSON.stringify({ ...payload, savedAt: new Date().toISOString() })
       )
       return null

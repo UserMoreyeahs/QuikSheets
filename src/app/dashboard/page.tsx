@@ -17,8 +17,8 @@ function loadSavedWorkbooks(): SavedWorkbook[] {
     const workbooks: SavedWorkbook[] = []
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)
-      if (key?.startsWith('sheetforge_workbook_name:')) {
-        const id = key.replace('sheetforge_workbook_name:', '')
+      if (key?.startsWith('quiksheets_workbook_name:')) {
+        const id = key.replace('quiksheets_workbook_name:', '')
         const name = localStorage.getItem(key) ?? `Workbook ${id.slice(0, 8)}`
         workbooks.push({ id, name })
       }
@@ -52,8 +52,8 @@ function createWorkbookFromTemplate(template: TemplateDefinition, workbookName: 
       status: index === 0 ? (1 as const) : (0 as const),
       order: index,
     }))
-    localStorage.setItem(`sheetforge_template_data:${id}`, JSON.stringify(sheetsWithNewId))
-    localStorage.setItem(`sheetforge_workbook_name:${id}`, workbookName)
+    localStorage.setItem(`quiksheets_template_data:${id}`, JSON.stringify(sheetsWithNewId))
+    localStorage.setItem(`quiksheets_workbook_name:${id}`, workbookName)
   } catch {
     // localStorage unavailable; sheet page will show default empty sheet
   }
@@ -141,7 +141,7 @@ export default function DashboardPage() {
   const handleNewWorkbook = () => {
     const id = `wb_${Date.now()}`
     try {
-      localStorage.setItem(`sheetforge_workbook_name:${id}`, 'Untitled Workbook')
+      localStorage.setItem(`quiksheets_workbook_name:${id}`, 'Untitled Workbook')
     } catch {
       // ignore
     }
@@ -155,7 +155,7 @@ export default function DashboardPage() {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-2">
             <FileSpreadsheet className="h-6 w-6 text-blue-600" />
-            <span className="text-lg font-bold text-zinc-900 dark:text-zinc-50">SheetForge</span>
+            <span className="text-lg font-bold text-zinc-900 dark:text-zinc-50">Quiksheets</span>
           </div>
           <button
             onClick={handleNewWorkbook}

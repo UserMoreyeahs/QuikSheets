@@ -1,4 +1,6 @@
-# SheetForge Session Tracker
+# Quiksheets Session Tracker
+
+> Renamed from SheetForge during R1. New sessions follow the remediation plan in `docs/REMEDIATION_CODEX_PROMPTS.md`.
 
 ## Sessions
 
@@ -36,8 +38,8 @@
 
 - Dashboard redesigned with "My Workbooks" + "Templates" tabs; workbooks loaded from localStorage keys.
 - 8 templates: Sales Pipeline, Monthly Budget, Employee Directory, Project Task Tracker, Invoice Tracker, Content Calendar, OKR Tracker, Personal Finance — all with pre-filled data, header colors, and status badges.
-- Template creation stores sheet data in `sheetforge_template_data:<id>` (localStorage); the sheet page picks it up on first mount and removes the key.
-- Conditional formatting rules stored in `sheetforge_cf_rules:<workbookId>` (localStorage), keyed by sheetId.
+- Template creation stores sheet data in `quiksheets_template_data:<id>` (localStorage); the sheet page picks it up on first mount and removes the key.
+- Conditional formatting rules stored in `quiksheets_cf_rules:<workbookId>` (localStorage), keyed by sheetId.
 - CF dialog accessible via "Cond. Format" button in the sheet header.
 - CF evaluator supports: cell value (all operators), text contains/starts/ends, cell empty/not empty, duplicate/unique, top N, bottom N, above/below average.
 - CF styles applied directly to FortuneSheet gridSheets cells; original styles backed up per cell so delete/update can restore them.
@@ -59,4 +61,4 @@
 
 - Production deployment and deployed-site verification require a valid Vercel token or fresh `vercel login`.
 - `npm run analyze` is not configured because no bundle analyzer script is installed.
-- The master QuikSheets prompt files reference Univer; this SheetForge repo is locked to FortuneSheet by `CLAUDE.md`.
+- The Quiksheets remediation plan introduces a SpreadsheetEngineAdapter (R3) so Univer can be the primary engine while FortuneSheet stays as the fallback.

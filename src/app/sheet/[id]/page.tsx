@@ -169,19 +169,19 @@ export default function SheetPage() {
     if (!isLocalDebugSession) return
 
     const debugWindow = window as Window & {
-      __sheetforgeDebug?: {
+      __quiksheetsDebug?: {
         getSheetState: typeof useSheetStore.getState
         getWorkbookState: typeof useWorkbookStore.getState
       }
     }
 
-    debugWindow.__sheetforgeDebug = {
+    debugWindow.__quiksheetsDebug = {
       getSheetState: useSheetStore.getState,
       getWorkbookState: useWorkbookStore.getState,
     }
 
     return () => {
-      delete debugWindow.__sheetforgeDebug
+      delete debugWindow.__quiksheetsDebug
     }
   }, [])
 
@@ -204,7 +204,7 @@ export default function SheetPage() {
 
   useEffect(() => {
     try {
-      const storedName = window.localStorage.getItem(`sheetforge_workbook_name:${workbookId}`)
+      const storedName = window.localStorage.getItem(`quiksheets_workbook_name:${workbookId}`)
       if (storedName?.trim()) {
         setWorkbookName(storedName)
       }
@@ -215,7 +215,7 @@ export default function SheetPage() {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(`sheetforge_workbook_name:${workbookId}`, workbookName)
+      window.localStorage.setItem(`quiksheets_workbook_name:${workbookId}`, workbookName)
     } catch {
       // Local storage is optional; saves still proceed through SaveStatus.
     }
@@ -224,7 +224,7 @@ export default function SheetPage() {
   // Load template data if this workbook was created from a template
   useEffect(() => {
     try {
-      const templateKey = `sheetforge_template_data:${workbookId}`
+      const templateKey = `quiksheets_template_data:${workbookId}`
       const raw = window.localStorage.getItem(templateKey)
       if (!raw) return
 
@@ -554,7 +554,7 @@ export default function SheetPage() {
     <main className="flex h-screen w-screen flex-col overflow-hidden bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
       <header className="flex h-12 w-full shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-4 dark:border-zinc-800 dark:bg-zinc-900">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-bold text-zinc-900 dark:text-zinc-50">SheetForge</span>
+          <span className="text-sm font-bold text-zinc-900 dark:text-zinc-50">Quiksheets</span>
           <span className="text-zinc-200 dark:text-zinc-700">|</span>
 
           {isEditingName ? (

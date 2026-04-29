@@ -1,8 +1,12 @@
-# SheetForge — AI Session State
+# Quiksheets — AI Session State
 
-## Stack (LOCKED — never change without explicit instruction)
-- Next.js 14, TypeScript strict, App Router
-- FortuneSheet (grid), HyperFormula (formulas)
+> Renamed from SheetForge during R1 of `docs/REMEDIATION_CODEX_PROMPTS.md`. The legacy session notes below still describe what is on disk; new work follows the Quiksheets target stack documented in `AGENTS.md` and `docs/02_TECH_STACK_AND_DEPENDENCIES.md`.
+
+## Stack (legacy — being migrated; new code must follow AGENTS.md)
+- Next.js 14 → **target Next.js 15.x** (R2)
+- TypeScript strict, App Router
+- FortuneSheet (grid) — **target: behind SpreadsheetEngineAdapter, Univer primary** (R3)
+- HyperFormula (formulas) — **target: behind FormulaEngineAdapter, Univer formula primary** (R3)
 - Supabase (DB + Auth), Groq API (AI — free)
 - Zustand (state), Tailwind + shadcn/ui (styling)
 - ECharts (charts), SheetJS (import/export)
@@ -236,7 +240,7 @@
 - ColumnDNAPanel is a fixed 320px right slide-in panel with distribution chart, health metrics, type analysis, anomalies, and text top values.
 - DistributionChart uses echarts-for-react for number histograms, text bars, and date density scatter plots.
 - Session 18 Private Scratchpad is localStorage-only and is not included in import/export flows.
-- Scratchpad data is keyed per active sheet using `sheetforge_scratchpad:<sheetId>`.
+- Scratchpad data is keyed per active sheet using `quiksheets_scratchpad:<sheetId>`.
 - Scratchpad opens from the floating bottom-right button or Ctrl+`.
 - Scratchpad uses a mini FortuneSheet workbook with 100 rows x 20 columns, toolbar off, formula bar on, and sheet tabs off.
 - Scratchpad MAIN! references like `=MAIN!A1` resolve against the active main sheet when entered and store the resolved value.
@@ -252,8 +256,8 @@
 - Session 20 merge cells are wired through FortuneSheet `mergeCells` / `cancelMerge` for Merge all, Merge horizontally, Merge vertically, and Unmerge.
 - Ctrl+Shift+M merges the selected range; Ctrl+Shift+U unmerges the active merged cell.
 - Session 21 templates are hardcoded in `src/lib/templates/index.ts`; no Supabase required.
-- Session 21 template load: data stored at `sheetforge_template_data:<id>` in localStorage; sheet page reads + deletes it on first mount.
-- Session 21 CF rules stored at `sheetforge_cf_rules:<workbookId>` in localStorage, keyed by sheetId.
+- Session 21 template load: data stored at `quiksheets_template_data:<id>` in localStorage; sheet page reads + deletes it on first mount.
+- Session 21 CF rules stored at `quiksheets_cf_rules:<workbookId>` in localStorage, keyed by sheetId.
 - Session 21 CF styles applied directly to FortuneSheet gridSheets via `cloneSheetWithData`; backups tracked per cell.
 - Session 21 CF re-applied on sheet page load after 500ms delay to allow grid hydration.
 - Dashboard redesigned as client component with My Workbooks + Templates tabs.

@@ -10,7 +10,7 @@ export interface ExportSheet {
 
 export function exportToExcel(
   sheets: ExportSheet[],
-  fileName: string = 'SheetForge Export'
+  fileName: string = 'Quiksheets Export'
 ): void {
   const workbook = XLSX.utils.book_new()
 
@@ -29,7 +29,7 @@ export function exportToExcel(
 
 export function exportToCSV(
   sheet: ExportSheet,
-  fileName: string = 'SheetForge Export'
+  fileName: string = 'Quiksheets Export'
 ): void {
   const worksheet = XLSX.utils.aoa_to_sheet(sheet.data)
   const csv = XLSX.utils.sheet_to_csv(worksheet)
@@ -39,7 +39,7 @@ export function exportToCSV(
 
 export function exportToPDF(
   sheet: ExportSheet,
-  fileName: string = 'SheetForge Export'
+  fileName: string = 'Quiksheets Export'
 ): void {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
 
@@ -49,7 +49,7 @@ export function exportToPDF(
 
   doc.setFontSize(9)
   doc.setTextColor(120, 120, 120)
-  doc.text(`Exported from SheetForge - ${new Date().toLocaleDateString()}`, 14, 22)
+  doc.text(`Exported from Quiksheets - ${new Date().toLocaleDateString()}`, 14, 22)
 
   if (sheet.data.length === 0) {
     doc.setFontSize(11)

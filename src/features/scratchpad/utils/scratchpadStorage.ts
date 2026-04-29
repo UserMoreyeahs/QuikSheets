@@ -1,4 +1,4 @@
-export const STORAGE_KEY = 'sheetforge_scratchpad'
+export const STORAGE_KEY = 'quiksheets_scratchpad'
 
 function getStorage(): Storage | null {
   if (typeof window === 'undefined') return null

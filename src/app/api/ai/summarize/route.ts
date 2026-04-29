@@ -15,7 +15,7 @@ interface SummaryResult {
   dataCharacterization: string
 }
 
-const SYSTEM_PROMPT = `You are a data analyst assistant for SheetForge spreadsheet application.
+const SYSTEM_PROMPT = `You are a data analyst assistant for the Quiksheets spreadsheet application.
 You will receive spreadsheet rows with column headers and pre-computed statistics.
 Your job is to provide a meaningful, actionable summary of what this data represents.
 
