@@ -2,11 +2,16 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "SheetForge Dev",
+      "name": "Quiksheets Next.js dev",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
-      "port": 3000,
-      "autoPort": true
+      "port": 3000
+    },
+    {
+      "name": "Vitest UI",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vitest", "--ui", "--api.port", "51204"],
+      "port": 51204
     }
   ]
 }

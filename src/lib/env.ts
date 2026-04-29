@@ -66,11 +66,15 @@ const publicSchema = z.object({
 })
 
 function readPublicEnv() {
+  // Supabase recently renamed NEXT_PUBLIC_SUPABASE_ANON_KEY to
+  // NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY. Accept either; prefer the new name.
+  const supabasePublicKey =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   return publicSchema.parse({
     NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: supabasePublicKey,
     NEXT_PUBLIC_ENGINE: process.env.NEXT_PUBLIC_ENGINE,
     NEXT_PUBLIC_FF_PIVOT: process.env.NEXT_PUBLIC_FF_PIVOT,
     NEXT_PUBLIC_FF_DASHBOARDS: process.env.NEXT_PUBLIC_FF_DASHBOARDS,
