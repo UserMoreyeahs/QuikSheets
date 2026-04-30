@@ -8,7 +8,6 @@ import { toast } from 'sonner'
 import { CommandPalette, type CommandPaletteItem } from '@/components/CommandPalette'
 import { KeyboardShortcuts } from '@/components/KeyboardShortcuts'
 import { ThemeToggle } from '@/components/ThemeToggle'
-import { MenuBar } from '@/features/menu-bar/components/MenuBar'
 import { WorkbookSidebar } from '@/features/workbook/components/WorkbookSidebar'
 import { createWorkbookAction } from '@/features/workbook/actions'
 import { getBrowserSupabase } from '@/lib/supabase/client'
@@ -23,7 +22,8 @@ import {
 import { createDefaultSheet } from '@/lib/defaultSheet'
 import { SpreadsheetGrid } from '@/features/grid'
 import { FormulaBar } from '@/features/formula-bar'
-import { FormattingToolbar, useFormattingShortcuts } from '@/features/toolbar'
+import { useFormattingShortcuts } from '@/features/toolbar'
+import { Ribbon } from '@/features/ribbon/components/Ribbon'
 import { SheetTabsBar } from '@/features/sheets'
 import { SortPanel } from '@/features/grid/components/SortPanel'
 import { FilterPanel } from '@/features/grid/components/FilterPanel'
@@ -597,46 +597,6 @@ export default function SheetPage() {
     })()
   }, [router])
 
-  const menuHandlers = useMemo(
-    () => ({
-      onNewWorkbook: handleNewWorkbookFromMenu,
-      onOpenDashboard: () => router.push('/dashboard'),
-      onSaveNow: () => {
-        toast.success('Saved')
-      },
-      onImport: () => setShowImport(true),
-      onExportCSV: () => exportToCSV(getActiveSheetData(), workbookName),
-      onExportXLSX: () => exportToExcel(getAllSheetsData(), workbookName),
-      onExportPDF: () => exportToPDF(getActiveSheetData(), workbookName),
-      onFind: () => setShowFindReplace(true),
-      onFindReplace: () => setShowFindReplace(true),
-      onMapView: toggleMap,
-      onInsertSheet: () => addSheet(),
-      onClearFormatting: () => toast.message('Coming soon', { description: 'Tracked in rebuild plan.' }),
-      onConditionalFormatting: () => setShowCF(true),
-      onMergeCells: () => toast.message('Use Ctrl+Shift+M on a selected range'),
-      onUnmergeCells: () => toast.message('Use Ctrl+Shift+U on a merged cell'),
-      onSort: () => setShowSort(true),
-      onFilter: () => setShowFilter(true),
-      onValidation: () => setShowValidation(true),
-      onAIAssistant: handleAiFormulaCommand,
-      onScratchpad: () => toast.message('Click the scratchpad button (bottom-right) or press Ctrl+`'),
-      onShortcuts: () => setShowShortcuts(true),
-      onCommandPalette: () => setShowCommandPalette(true),
-    }),
-    [
-      addSheet,
-      getActiveSheetData,
-      getAllSheetsData,
-      handleAiFormulaCommand,
-      handleNewWorkbookFromMenu,
-      router,
-      setShowFindReplace,
-      toggleMap,
-      workbookName,
-    ]
-  )
-
   return (
     <main className="flex h-screen w-screen overflow-hidden bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
       <WorkbookSidebar
@@ -718,12 +678,33 @@ export default function SheetPage() {
           </div>
         </header>
 
-        <MenuBar handlers={menuHandlers} />
-
-        <FormattingToolbar
-          onSortAsc={() => handleQuickSort('asc')}
-          onSortDesc={() => handleQuickSort('desc')}
-          onFilter={() => setShowFilter(true)}
+        <Ribbon
+          handlers={{
+            onNewWorkbook: handleNewWorkbookFromMenu,
+            onOpenDashboard: () => router.push('/dashboard'),
+            onSaveNow: () => toast.success('Saved'),
+            onImport: () => setShowImport(true),
+            onExportCSV: () => exportToCSV(getActiveSheetData(), workbookName),
+            onExportXLSX: () => exportToExcel(getAllSheetsData(), workbookName),
+            onExportPDF: () => exportToPDF(getActiveSheetData(), workbookName),
+            onSortAsc: () => handleQuickSort('asc'),
+            onSortDesc: () => handleQuickSort('desc'),
+            onFilter: () => setShowFilter(true),
+            onFind: () => setShowFindReplace(true),
+            onConditionalFormatting: () => setShowCF(true),
+            onMergeCells: () => toast.message('Use Ctrl+Shift+M on a selected range'),
+            onUnmergeCells: () => toast.message('Use Ctrl+Shift+U on a merged cell'),
+            onClearFormatting: () => toast.message('Coming soon'),
+            onValidation: () => setShowValidation(true),
+            onInsertSheet: () => addSheet(),
+            onInsertChart: () =>
+              toast.message('Charts builder coming in R12 — see docs/MASTER_REBUILD_PROMPT.md'),
+            onInsertForm: () =>
+              toast.message('Form builder coming in R9.x — only the public submission route is wired today'),
+            onAIAssistant: handleAiFormulaCommand,
+            onMapView: toggleMap,
+            onShortcuts: () => setShowShortcuts(true),
+          }}
         />
 
       <FormulaBar />
