@@ -2,11 +2,11 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { FileSpreadsheet, Plus, Sparkles, Clock, Layers } from 'lucide-react'
+import { FileSpreadsheet, Plus, Sparkles, Clock, Layers, Trash2 } from 'lucide-react'
 import { TEMPLATES, TEMPLATE_CATEGORIES, type TemplateCategory, type TemplateDefinition } from '@/lib/templates'
 import type { Sheet } from '@fortune-sheet/core'
-import { useDashboardWorkbooks } from '@/features/workbook/useDashboardWorkbooks'
-import { createWorkbookAction } from '@/features/workbook/actions'
+import { useDashboardWorkbooks, type DashboardWorkbook } from '@/features/workbook/useDashboardWorkbooks'
+import { createWorkbookAction, deleteWorkbookAction } from '@/features/workbook/actions'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 
 function formatDate(iso?: string): string {
@@ -167,7 +167,36 @@ export default function DashboardPage() {
   const [selectedCategory, setSelectedCategory] = useState<TemplateCategory>('All')
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateDefinition | null>(null)
   const [pending, startTransition] = useTransition()
-  const { workbooks, isLoading, hasAuth } = useDashboardWorkbooks()
+  const [deleteTarget, setDeleteTarget] = useState<DashboardWorkbook | null>(null)
+  const [deletePending, startDeleteTransition] = useTransition()
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const { workbooks, isLoading, hasAuth, refreshLocal, refreshRemote } = useDashboardWorkbooks()
+
+  const performDelete = (wb: DashboardWorkbook) => {
+    setDeleteError(null)
+    startDeleteTransition(async () => {
+      if (wb.source === 'supabase') {
+        const result = await deleteWorkbookAction({ id: wb.id })
+        if (!result.ok) {
+          setDeleteError(result.error ?? 'Delete failed')
+          return
+        }
+        refreshRemote()
+      } else {
+        try {
+          localStorage.removeItem(`quiksheets_workbook_name:${wb.id}`)
+          localStorage.removeItem(`quiksheets_template_data:${wb.id}`)
+          localStorage.removeItem(`quiksheets_workbook_${wb.name}`)
+          localStorage.removeItem(`quiksheets_cf_rules:${wb.id}`)
+          localStorage.removeItem(`quiksheets_scratchpad:${wb.id}`)
+        } catch {
+          // ignore
+        }
+        refreshLocal()
+      }
+      setDeleteTarget(null)
+    })
+  }
 
   const filteredTemplates =
     selectedCategory === 'All' ? TEMPLATES : TEMPLATES.filter((t) => t.category === selectedCategory)
@@ -287,11 +316,31 @@ export default function DashboardPage() {
                 <p className="col-span-full text-sm text-zinc-500">Loading workbooks…</p>
               ) : (
                 workbooks.map((wb) => (
-                  <button
+                  <div
                     key={wb.id}
                     onClick={() => router.push(`/sheet/${wb.id}`)}
-                    className="group flex h-36 flex-col justify-between rounded-xl border border-zinc-200 bg-white p-4 text-left shadow-sm transition-all hover:border-blue-300 hover:shadow-md dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-blue-600"
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        router.push(`/sheet/${wb.id}`)
+                      }
+                    }}
+                    className="group relative flex h-36 cursor-pointer flex-col justify-between rounded-xl border border-zinc-200 bg-white p-4 text-left shadow-sm transition-all hover:border-blue-300 hover:shadow-md focus-visible:border-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-blue-600"
                   >
+                    <button
+                      type="button"
+                      aria-label={`Delete ${wb.name}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setDeleteTarget(wb)
+                      }}
+                      className="absolute right-2 top-2 rounded-md p-1.5 text-zinc-400 opacity-0 transition-all hover:bg-red-50 hover:text-red-600 focus:opacity-100 group-hover:opacity-100 dark:hover:bg-red-900/30"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+
                     <div className="flex items-center gap-2">
                       <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-900/20">
                         <FileSpreadsheet className="h-6 w-6 text-blue-600 dark:text-blue-400" />
@@ -313,7 +362,7 @@ export default function DashboardPage() {
                         </p>
                       )}
                     </div>
-                  </button>
+                  </div>
                 ))
               )}
             </div>
@@ -404,6 +453,70 @@ export default function DashboardPage() {
           hasAuth={hasAuth}
           onClose={() => setSelectedTemplate(null)}
         />
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {deleteTarget && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-workbook-title"
+          className="fixed inset-0 z-[400] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          onClick={() => {
+            if (!deletePending) {
+              setDeleteTarget(null)
+              setDeleteError(null)
+            }
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-[420px] rounded-xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-700 dark:bg-zinc-900"
+          >
+            <div className="mb-3 flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
+                <Trash2 className="h-5 w-5 text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <h3 id="delete-workbook-title" className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
+                  Delete workbook?
+                </h3>
+                <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                  &ldquo;<span className="font-medium text-zinc-700 dark:text-zinc-200">{deleteTarget.name}</span>&rdquo; will be permanently deleted
+                  {deleteTarget.source === 'supabase' ? ' from your Supabase workspace' : ' from this browser'}. This cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            {deleteError ? (
+              <p className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">
+                {deleteError}
+              </p>
+            ) : null}
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteTarget(null)
+                  setDeleteError(null)
+                }}
+                disabled={deletePending}
+                className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => performDelete(deleteTarget)}
+                disabled={deletePending}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-60"
+              >
+                {deletePending ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   )

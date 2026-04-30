@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useCallback, useEffect, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 import { listWorkbooksAction, type WorkbookSummary } from './actions'
 
@@ -52,6 +52,7 @@ function toDashboardRow(row: WorkbookSummary): DashboardWorkbook {
 export function useDashboardWorkbooks() {
   const [hasAuth, setHasAuth] = useState<boolean | null>(null)
   const [localRows, setLocalRows] = useState<DashboardWorkbook[]>([])
+  const qc = useQueryClient()
 
   useEffect(() => {
     setLocalRows(readLocalWorkbooks())
@@ -82,9 +83,19 @@ export function useDashboardWorkbooks() {
     unique.push(row)
   }
 
+  const refreshLocal = useCallback(() => {
+    setLocalRows(readLocalWorkbooks())
+  }, [])
+
+  const refreshRemote = useCallback(() => {
+    void qc.invalidateQueries({ queryKey: SUPABASE_KEY })
+  }, [qc])
+
   return {
     workbooks: unique,
     isLoading: hasAuth === null || remote.isLoading,
     hasAuth: hasAuth === true,
+    refreshLocal,
+    refreshRemote,
   }
 }
