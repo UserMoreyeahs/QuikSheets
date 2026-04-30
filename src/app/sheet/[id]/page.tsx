@@ -2,11 +2,16 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Network } from 'lucide-react'
+import { Network, Upload, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useTheme } from 'next-themes'
+import { toast } from 'sonner'
 import { CommandPalette, type CommandPaletteItem } from '@/components/CommandPalette'
 import { KeyboardShortcuts } from '@/components/KeyboardShortcuts'
 import { ThemeToggle } from '@/components/ThemeToggle'
+import { MenuBar } from '@/features/menu-bar/components/MenuBar'
+import { WorkbookSidebar } from '@/features/workbook/components/WorkbookSidebar'
+import { createWorkbookAction } from '@/features/workbook/actions'
+import { getBrowserSupabase } from '@/lib/supabase/client'
 import {
   createSheetFromImportedData,
   getCellFormulaBarValue,
@@ -104,6 +109,7 @@ export default function SheetPage() {
   const [showCommandPalette, setShowCommandPalette] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [showCF, setShowCF] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [workbookName, setWorkbookName] = useState(() =>
     workbookId === 'demo' ? 'Demo Spreadsheet' : `Workbook ${workbookId.slice(0, 8)}`
   )
@@ -550,97 +556,175 @@ export default function SheetPage() {
     [replaceGridSheets, replaceSheets, setSkipNextTabSync]
   )
 
+  const handleNewWorkbookFromMenu = useCallback(() => {
+    void (async () => {
+      const supabase = getBrowserSupabase()
+      if (!supabase) {
+        const id = `wb_${Date.now()}`
+        try {
+          localStorage.setItem(`quiksheets_workbook_name:${id}`, 'Untitled Workbook')
+        } catch {
+          /* ignore */
+        }
+        router.push(`/sheet/${id}`)
+        return
+      }
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) {
+        router.push('/dashboard')
+        return
+      }
+      const { data: ws } = await supabase
+        .from('workspace_members')
+        .select('workspace_id')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      const workspaceId = ws?.workspace_id as string | undefined
+      if (!workspaceId) {
+        router.push('/dashboard')
+        return
+      }
+      const result = await createWorkbookAction({ name: 'Untitled Workbook', workspaceId })
+      if (result.ok && result.id) {
+        router.push(`/sheet/${result.id}`)
+      } else {
+        toast.error(result.error ?? 'Could not create workbook')
+      }
+    })()
+  }, [router])
+
+  const menuHandlers = useMemo(
+    () => ({
+      onNewWorkbook: handleNewWorkbookFromMenu,
+      onOpenDashboard: () => router.push('/dashboard'),
+      onSaveNow: () => {
+        toast.success('Saved')
+      },
+      onImport: () => setShowImport(true),
+      onExportCSV: () => exportToCSV(getActiveSheetData(), workbookName),
+      onExportXLSX: () => exportToExcel(getAllSheetsData(), workbookName),
+      onExportPDF: () => exportToPDF(getActiveSheetData(), workbookName),
+      onFind: () => setShowFindReplace(true),
+      onFindReplace: () => setShowFindReplace(true),
+      onMapView: toggleMap,
+      onInsertSheet: () => addSheet(),
+      onClearFormatting: () => toast.message('Coming soon', { description: 'Tracked in rebuild plan.' }),
+      onConditionalFormatting: () => setShowCF(true),
+      onMergeCells: () => toast.message('Use Ctrl+Shift+M on a selected range'),
+      onUnmergeCells: () => toast.message('Use Ctrl+Shift+U on a merged cell'),
+      onSort: () => setShowSort(true),
+      onFilter: () => setShowFilter(true),
+      onValidation: () => setShowValidation(true),
+      onAIAssistant: handleAiFormulaCommand,
+      onScratchpad: () => toast.message('Click the scratchpad button (bottom-right) or press Ctrl+`'),
+      onShortcuts: () => setShowShortcuts(true),
+      onCommandPalette: () => setShowCommandPalette(true),
+    }),
+    [
+      addSheet,
+      getActiveSheetData,
+      getAllSheetsData,
+      handleAiFormulaCommand,
+      handleNewWorkbookFromMenu,
+      router,
+      setShowFindReplace,
+      toggleMap,
+      workbookName,
+    ]
+  )
+
   return (
-    <main className="flex h-screen w-screen flex-col overflow-hidden bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
-      <header className="flex h-12 w-full shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-4 dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-bold text-zinc-900 dark:text-zinc-50">Quiksheets</span>
-          <span className="text-zinc-200 dark:text-zinc-700">|</span>
-
-          {isEditingName ? (
-            <input
-              type="text"
-              value={workbookName}
-              onChange={(e) => setWorkbookName(e.target.value)}
-              onBlur={() => setIsEditingName(false)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === 'Escape') setIsEditingName(false)
-              }}
-              autoFocus
-              className="w-[200px] rounded border border-blue-400 bg-blue-50 px-2 py-0.5 text-sm text-zinc-800 outline-none dark:bg-blue-500/15 dark:text-blue-100"
-            />
-          ) : (
-            <button
-              onClick={() => setIsEditingName(true)}
-              title="Click to rename"
-              className="rounded px-1 py-0.5 text-sm text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-50"
-            >
-              {workbookName}
-            </button>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <SaveStatus workbookName={workbookName} workbookData={gridSheets} />
-
-          <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-700" />
-
-          <button
-            onClick={() => setShowImport(true)}
-            className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs text-zinc-600 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="17 8 12 3 7 8" />
-              <line x1="12" y1="3" x2="12" y2="15" />
-            </svg>
-            Import
-          </button>
-
-          <ExportMenu
-            workbookName={workbookName}
-            getActiveSheetData={getActiveSheetData}
-            getAllSheetsData={getAllSheetsData}
-          />
-
-          <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-700" />
-
-          <button
-            onClick={toggleMap}
-            className={[
-              'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition-colors',
-              showMap
-                ? 'border-green-300 bg-green-50 text-green-700'
-                : 'border-zinc-200 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800',
-            ].join(' ')}
-          >
-            <Network className="h-3 w-3" aria-hidden="true" />
-            Map View
-          </button>
-
-          <button
-            onClick={() => setShowValidation(true)}
-            className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs text-zinc-600 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-          >
-            Validation
-          </button>
-
-          <button
-            onClick={() => setShowCF(true)}
-            className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs text-zinc-600 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-          >
-            Cond. Format
-          </button>
-
-          <ThemeToggle />
-        </div>
-      </header>
-
-      <FormattingToolbar
-        onSortAsc={() => handleQuickSort('asc')}
-        onSortDesc={() => handleQuickSort('desc')}
-        onFilter={() => setShowFilter(true)}
+    <main className="flex h-screen w-screen overflow-hidden bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
+      <WorkbookSidebar
+        activeWorkbookId={workbookId}
+        collapsed={sidebarCollapsed}
+        onNewWorkbook={handleNewWorkbookFromMenu}
       />
+
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Workbook header — slim title bar above the menu bar */}
+        <header className="flex h-10 w-full shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-3 dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="flex min-w-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed((v) => !v)}
+              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              className="flex h-6 w-6 items-center justify-center rounded text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-50"
+            >
+              {sidebarCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
+            </button>
+
+            {isEditingName ? (
+              <input
+                type="text"
+                value={workbookName}
+                onChange={(e) => setWorkbookName(e.target.value)}
+                onBlur={() => setIsEditingName(false)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === 'Escape') setIsEditingName(false)
+                }}
+                autoFocus
+                className="w-[260px] rounded border border-blue-400 bg-blue-50 px-2 py-0.5 text-sm text-zinc-800 outline-none dark:bg-blue-500/15 dark:text-blue-100"
+              />
+            ) : (
+              <button
+                onClick={() => setIsEditingName(true)}
+                title="Click to rename"
+                className="max-w-[360px] truncate rounded px-1.5 py-0.5 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-800"
+              >
+                {workbookName}
+              </button>
+            )}
+
+            <SaveStatus workbookName={workbookName} workbookData={gridSheets} />
+          </div>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setShowImport(true)}
+              className="flex items-center gap-1 rounded-md px-2.5 py-1 text-xs text-zinc-600 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              <Upload className="h-3 w-3" aria-hidden="true" />
+              Import
+            </button>
+
+            <ExportMenu
+              workbookName={workbookName}
+              getActiveSheetData={getActiveSheetData}
+              getAllSheetsData={getAllSheetsData}
+            />
+
+            <div className="mx-1 h-4 w-px bg-zinc-200 dark:bg-zinc-700" />
+
+            <button
+              onClick={toggleMap}
+              title="Dependency map (Ctrl+M)"
+              className={[
+                'flex items-center gap-1 rounded-md px-2.5 py-1 text-xs transition-colors',
+                showMap
+                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                  : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800',
+              ].join(' ')}
+            >
+              <Network className="h-3 w-3" aria-hidden="true" />
+              Map
+            </button>
+
+            <ThemeToggle />
+          </div>
+        </header>
+
+        <MenuBar handlers={menuHandlers} />
+
+        <FormattingToolbar
+          onSortAsc={() => handleQuickSort('asc')}
+          onSortDesc={() => handleQuickSort('desc')}
+          onFilter={() => setShowFilter(true)}
+        />
 
       <FormulaBar />
 
@@ -720,6 +804,7 @@ export default function SheetPage() {
       />
       <KeyboardShortcuts isOpen={showShortcuts} onOpenChange={setShowShortcuts} />
       <ConditionalFormatting isOpen={showCF} onClose={() => setShowCF(false)} />
+      </div>
     </main>
   )
 }
