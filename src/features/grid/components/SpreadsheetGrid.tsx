@@ -3,6 +3,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { setAutoFreeze } from 'immer'
 import { BarChart3, Sparkles } from 'lucide-react'
+import { toast } from 'sonner'
+import { isCellProtected } from '@/features/protected-ranges/storage/localProtectedRanges'
 import {
   cloneFortuneData,
   getCellFormulaBarValue,
@@ -12,7 +14,7 @@ import {
 } from '@/lib/fortuneSheet'
 import { isValidValue } from '@/lib/validation'
 import { createDefaultSheet } from '@/lib/defaultSheet'
-import { DEFAULT_CELL_HEIGHT, DEFAULT_CELL_WIDTH, DEFAULT_COLS } from '@/lib/constants'
+import { DEFAULT_CELL_HEIGHT, DEFAULT_CELL_WIDTH, DEFAULT_COLS, DEFAULT_ROWS } from '@/lib/constants'
 import { colIndexToLetter, fromCellNotation, toCellNotation } from '@/lib/cellAddress'
 import { useSheetStore } from '@/store/sheetStore'
 import { useWorkbookStore } from '@/store/workbookStore'
@@ -57,6 +59,7 @@ interface SpreadsheetGridProps {
   onOpenColumnDNA?: (columnIndex: number) => void
   onSummarizeRows?: (selection: RowSummarySelection) => void
   onViewCellHistory?: () => void
+  onAddComment?: (target: { sheetId: string; cellAddress: string }) => void
 }
 
 function GridSkeleton() {
@@ -185,6 +188,7 @@ export function SpreadsheetGrid({
   onOpenColumnDNA,
   onSummarizeRows,
   onViewCellHistory,
+  onAddComment,
 }: SpreadsheetGridProps) {
   const {
     gridSheets,
@@ -207,6 +211,7 @@ export function SpreadsheetGrid({
   const contextMenuRef = useRef<HTMLDivElement>(null)
   const gridSheetsRef = useRef(gridSheets)
   const validationRulesRef = useRef(validationRules)
+  const lastProtectedToastRef = useRef<string>('')
   const hoverCellKeyRef = useRef<string | null>(null)
   const pendingHydrationRef = useRef(true)
   const isApplyingWorkbookChangeRef = useRef(false)
@@ -410,6 +415,19 @@ export function SpreadsheetGrid({
     () => ({
       beforeUpdateCell: (row: number, col: number, value: unknown) => {
         const currentSheetId = useWorkbookStore.getState().activeSheetId
+
+        // ── Protected ranges check ────────────────────────────────────
+        if (workbookId && currentSheetId && isCellProtected(workbookId, currentSheetId, row, col)) {
+          // single toast per attempt — and dedupe by stamping a ref so a
+          // single keystroke doesn't fire 3 toasts.
+          const stamp = `${currentSheetId}:${row}:${col}:${Date.now() >> 11}` // ~2s window
+          if (lastProtectedToastRef.current !== stamp) {
+            lastProtectedToastRef.current = stamp
+            toast.error(`${toCellNotation(row, col)} is in a protected range and can't be edited.`)
+          }
+          return false
+        }
+
         const key = `${currentSheetId}:${row}:${col}`
         const validation = validationRulesRef.current[key]
         const sheetIndex = gridSheetsRef.current.findIndex((sheet) => sheet.id === currentSheetId)
@@ -468,12 +486,13 @@ export function SpreadsheetGrid({
           selection.row_select === true ||
           (colStart === 0 && normalizedColEnd >= sheetColumnCount - 1)
 
-        if (isCompleteRowSelection && normalizedRowEnd > rowStart) {
+        const selectedRowCount = normalizedRowEnd - rowStart + 1
+        if (isCompleteRowSelection && normalizedRowEnd > rowStart && selectedRowCount < DEFAULT_ROWS) {
           setSelectedRowRange({
             sheetIndex: resolvedSheetIndex,
             startRow: rowStart,
             endRow: normalizedRowEnd,
-            rowCount: normalizedRowEnd - rowStart + 1,
+            rowCount: selectedRowCount,
             left: GRID_ROW_HEADER_WIDTH + 8,
             top: Math.max(4, GRID_COLUMN_HEADER_HEIGHT + rowStart * DEFAULT_CELL_HEIGHT - 38),
           })
@@ -512,7 +531,7 @@ export function SpreadsheetGrid({
         setIfChanged(sheetState.activeFormatting, nextFormatting, sheetState.setActiveFormatting)
       },
     }),
-    [resetFormatting, setSelectedCell, setSelectedRange]
+    [resetFormatting, setSelectedCell, setSelectedRange, workbookId]
   )
 
   const getCellAddressFromPointer = useCallback(
@@ -957,6 +976,24 @@ export function SpreadsheetGrid({
             >
               <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
               Summarize selected rows
+            </button>
+          )}
+          {onAddComment && (
+            <button
+              type="button"
+              onClick={() => {
+                const target = contextMenu
+                setContextMenu(null)
+                if (target && activeSheetId) {
+                  onAddComment({
+                    sheetId: activeSheetId,
+                    cellAddress: toCellNotation(target.row, target.col),
+                  })
+                }
+              }}
+              className="flex w-full items-center px-3 py-2 text-left text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-700"
+            >
+              Add comment
             </button>
           )}
           <button

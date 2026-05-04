@@ -49,6 +49,9 @@ interface HomeTabProps {
   onUnmergeCells: () => void
   onClearFormatting: () => void
   onValidation: () => void
+  onAutoSum: () => void
+  onInsertRow: () => void
+  onDeleteRow: () => void
 }
 
 export function HomeTab(props: HomeTabProps) {
@@ -190,8 +193,8 @@ export function HomeTab(props: HomeTabProps) {
       {/* Cells */}
       <RibbonGroup label="Cells" className="min-w-[140px]">
         <div className="flex flex-col gap-0.5">
-          <RibbonButton label="Insert row" icon={<Plus className="h-3.5 w-3.5" />} />
-          <RibbonButton label="Delete row" icon={<Minus className="h-3.5 w-3.5" />} />
+          <RibbonButton label="Insert row below" icon={<Plus className="h-3.5 w-3.5" />} onClick={props.onInsertRow} />
+          <RibbonButton label="Delete row" icon={<Minus className="h-3.5 w-3.5" />} onClick={props.onDeleteRow} />
           <button
             type="button"
             onClick={props.onClearFormatting}
@@ -208,6 +211,7 @@ export function HomeTab(props: HomeTabProps) {
         <RibbonLargeButton
           label="AutoSum"
           icon={<Sigma className="text-orange-500" />}
+          onClick={props.onAutoSum}
           showCaret
         />
         <div className="flex flex-col gap-0.5">

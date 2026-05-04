@@ -52,16 +52,31 @@ export function evaluateCell(
   return value
 }
 
+/**
+ * Extract cell references from a formula. Supports:
+ *   – plain cell refs:    A1, B12
+ *   – ranges:             A1:C10
+ *   – cross-sheet refs:   Sheet2!A1, 'My Sheet'!B5:D20
+ *
+ * The returned array preserves the original textual form (sheet prefix included
+ * when present) so the caller can render highlight overlays on the right sheet.
+ */
 export function extractCellReferences(formula: string): string[] {
-  const pattern = /\b([A-Z]+\d+)(?::([A-Z]+\d+))?\b/g
+  // Optional sheet prefix:  Name!  or  'Quoted Name'!
+  // Cell:                   $? COL+ $? ROW+
+  // Optional range tail:    : <cell> (sheet prefix not repeated by convention)
+  const pattern =
+    /(?:('([^']|'')+'|[A-Za-z_][\w.]*)!)?(\$?[A-Z]+\$?\d+)(?::(\$?[A-Z]+\$?\d+))?/g
+
   const refs: string[] = []
   let match: RegExpExecArray | null
 
   while ((match = pattern.exec(formula)) !== null) {
-    const start = match[1]
-    const end = match[2]
-    if (start) refs.push(start)
-    if (end) refs.push(end)
+    const sheetPrefix = match[1] ? `${match[1]}!` : ''
+    const start = match[3]
+    const end = match[4]
+    if (start) refs.push(`${sheetPrefix}${start}`)
+    if (end) refs.push(`${sheetPrefix}${end}`)
   }
 
   return Array.from(new Set(refs))

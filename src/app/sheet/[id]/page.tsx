@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Network, Upload, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import { CommandPalette, type CommandPaletteItem } from '@/components/CommandPalette'
@@ -24,6 +25,7 @@ import { SpreadsheetGrid } from '@/features/grid'
 import { FormulaBar } from '@/features/formula-bar'
 import { useFormattingShortcuts } from '@/features/toolbar'
 import { Ribbon } from '@/features/ribbon/components/Ribbon'
+import { StatusBar } from '@/features/ribbon/components/StatusBar'
 import { SheetTabsBar } from '@/features/sheets'
 import { SortPanel } from '@/features/grid/components/SortPanel'
 import { FilterPanel } from '@/features/grid/components/FilterPanel'
@@ -40,6 +42,31 @@ import { ColumnDNAPanel, useColumnDNA } from '@/features/column-dna'
 import { ScratchpadPanel, ScratchpadToggle, useScratchpad } from '@/features/scratchpad'
 import { RowSummarizer, useRowSummarizer } from '@/features/row-summarizer'
 import { ConditionalFormatting, applyAllCFRules } from '@/features/conditional-formatting'
+import { CleanDataPanel } from '@/features/data-cleaning/components/CleanDataPanel'
+import { useCleanDataStore } from '@/features/data-cleaning/store/cleanDataStore'
+import { ChartBuilder } from '@/features/charts/components/ChartBuilder'
+import { ChartsLayer } from '@/features/charts/components/ChartsLayer'
+import { useChartPanelStore } from '@/features/charts/store/chartPanelStore'
+import { FormBuilder } from '@/features/forms/components/FormBuilder'
+import { useFormBuilderStore } from '@/features/forms/store/formBuilderStore'
+import { PivotBuilder } from '@/features/pivot/components/PivotBuilder'
+import { PivotsLayer } from '@/features/pivot/components/PivotsLayer'
+import { usePivotUiStore } from '@/features/pivot/store/pivotUiStore'
+import { SlicersLayer } from '@/features/slicers/components/SlicersLayer'
+import { FillHandle } from '@/features/drag-fill/components/FillHandle'
+import { RemoteCursors, PresenceAvatars } from '@/features/collab/components/RemoteCursors'
+import { useRealtimeCollab } from '@/features/collab/hooks/useRealtimeCollab'
+import { ForecastPanel } from '@/features/forecasting/components/ForecastPanel'
+import { useForecastStore } from '@/features/forecasting/store/forecastStore'
+import { CommentsPanel } from '@/features/comments/components/CommentsPanel'
+import { CommentComposer } from '@/features/comments/components/CommentComposer'
+import { useCommentsUiStore } from '@/features/comments/store/commentsUiStore'
+import { LocalVersionHistoryPanel } from '@/features/version-history/components/LocalVersionHistoryPanel'
+import { useVersionUiStore } from '@/features/version-history/store/versionUiStore'
+import { ShareDialog } from '@/features/share-links/components/ShareDialog'
+import { useShareDialogStore } from '@/features/share-links/store/shareDialogStore'
+import { ProtectedRangesDialog } from '@/features/protected-ranges/components/ProtectedRangesDialog'
+import { useProtectedRangesUiStore } from '@/features/protected-ranges/store/protectedRangesUiStore'
 import { useSheetStore } from '@/store/sheetStore'
 import { useWorkbookStore } from '@/store/workbookStore'
 import { DEFAULT_COLS } from '@/lib/constants'
@@ -88,8 +115,10 @@ export default function SheetPage() {
     gridInstance,
     replaceGridSheets,
     selectedCell,
+    selectedRange,
     applySort,
     clearFilters,
+    clearFormatOnSelection,
     setEditingCell,
     setFormulaBarValue,
     setSelectedCell,
@@ -101,6 +130,17 @@ export default function SheetPage() {
     useWorkbookStore()
   const { showMap, setShowMap, toggleMap } = useDependencyMap()
   const cellHistory = useCellHistory(workbookId)
+  const collab = useRealtimeCollab(workbookId)
+
+  // Broadcast cursor position to other users via Realtime.
+  // Use collab.broadcastCursor directly (stable useCallback ref) — do NOT
+  // include the whole `collab` object (recreated every render → infinite loop).
+  const { broadcastCursor } = collab
+  useEffect(() => {
+    if (selectedCell && activeSheetId) {
+      broadcastCursor(activeSheetId, selectedCell.row, selectedCell.col)
+    }
+  }, [selectedCell, activeSheetId, broadcastCursor])
 
   const [showSort, setShowSort] = useState(false)
   const [showFilter, setShowFilter] = useState(false)
@@ -110,6 +150,9 @@ export default function SheetPage() {
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [showCF, setShowCF] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [showFormulaBarUI, setShowFormulaBarUI] = useState(true)
+  const [showGridlines, setShowGridlines] = useState(true)
+  const [zoomLevel, setZoomLevel] = useState(1.0)
   const [workbookName, setWorkbookName] = useState(() =>
     workbookId === 'demo' ? 'Demo Spreadsheet' : `Workbook ${workbookId.slice(0, 8)}`
   )
@@ -178,12 +221,59 @@ export default function SheetPage() {
       __quiksheetsDebug?: {
         getSheetState: typeof useSheetStore.getState
         getWorkbookState: typeof useWorkbookStore.getState
+        // feature panel stores — exposed for headless smoke testing
+        chartBuilder: { open: () => void; close: () => void }
+        pivotBuilder: { open: () => void; close: () => void }
+        formBuilder:  { open: () => void; close: () => void }
+        cleanData:    { open: () => void; close: () => void }
+        forecast:     { open: () => void; close: () => void }
+        comments:     { openPanel: () => void; closePanel: () => void; openComposer: (t: { sheetId: string; cellAddress: string }) => void }
+        versionHistory: { open: () => void; close: () => void }
+        share:        { open: () => void; close: () => void }
+        protectedRanges: { open: () => void; close: () => void }
       }
     }
 
     debugWindow.__quiksheetsDebug = {
       getSheetState: useSheetStore.getState,
       getWorkbookState: useWorkbookStore.getState,
+      chartBuilder: {
+        open:  () => useChartPanelStore.getState().openBuilder(),
+        close: () => useChartPanelStore.getState().closeBuilder(),
+      },
+      pivotBuilder: {
+        open:  () => usePivotUiStore.getState().openBuilder(),
+        close: () => usePivotUiStore.getState().closeBuilder(),
+      },
+      formBuilder: {
+        open:  () => useFormBuilderStore.getState().open(),
+        close: () => useFormBuilderStore.getState().close(),
+      },
+      cleanData: {
+        open:  () => useCleanDataStore.getState().open(),
+        close: () => useCleanDataStore.getState().close(),
+      },
+      forecast: {
+        open:  () => useForecastStore.getState().open(),
+        close: () => useForecastStore.getState().close(),
+      },
+      comments: {
+        openPanel:    () => useCommentsUiStore.getState().openPanel(),
+        closePanel:   () => useCommentsUiStore.getState().closePanel(),
+        openComposer: (t) => useCommentsUiStore.getState().openComposer(t),
+      },
+      versionHistory: {
+        open:  () => useVersionUiStore.getState().open(),
+        close: () => useVersionUiStore.getState().close(),
+      },
+      share: {
+        open:  () => useShareDialogStore.getState().open(),
+        close: () => useShareDialogStore.getState().close(),
+      },
+      protectedRanges: {
+        open:  () => useProtectedRangesUiStore.getState().open(),
+        close: () => useProtectedRangesUiStore.getState().close(),
+      },
     }
 
     return () => {
@@ -261,6 +351,58 @@ export default function SheetPage() {
       applyAllCFRules(workbookId)
     }, 500)
     return () => window.clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Merge pending form submissions into the workbook on mount
+  useEffect(() => {
+    void (async () => {
+      const { listFormsForWorkbook, takeSubmissions } = await import(
+        '@/features/forms/storage/localFormStore'
+      )
+      const { cloneSheetWithData, getSheetMatrix } = await import('@/lib/fortuneSheet')
+      const forms = listFormsForWorkbook(workbookId)
+      if (forms.length === 0) return
+
+      const state = useSheetStore.getState()
+      let nextSheets = state.gridSheets
+      let didChange = false
+
+      for (const form of forms) {
+        const subs = takeSubmissions(form.id)
+        if (subs.length === 0) continue
+        const sheetIdx = nextSheets.findIndex((s) => s.id === form.sheetId)
+        if (sheetIdx < 0) continue
+        const sheet = nextSheets[sheetIdx]
+        if (!sheet) continue
+        const matrix = getSheetMatrix(sheet)
+        const next = matrix.map((row) => [...(row ?? [])])
+        // start writing at the first empty row at the bottom
+        let writeRow = next.length
+        for (const sub of subs) {
+          let row = next[writeRow]
+          if (!row) {
+            row = []
+            next[writeRow] = row
+          }
+          for (const field of form.fields) {
+            const raw = sub.values[field.id]
+            const display = raw === undefined || raw === null ? '' : String(raw)
+            row[field.columnIndex] = { v: display, m: display }
+          }
+          writeRow++
+        }
+        nextSheets = nextSheets.map((s, i) =>
+          i === sheetIdx ? cloneSheetWithData(s, next) : s
+        )
+        didChange = true
+      }
+
+      if (didChange) {
+        useSheetStore.getState().replaceGridSheets(nextSheets)
+        toast.success('Form submissions added to the sheet.')
+      }
+    })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -556,6 +698,221 @@ export default function SheetPage() {
     [replaceGridSheets, replaceSheets, setSkipNextTabSync]
   )
 
+  // ── AutoSum ──────────────────────────────────────────────────────────────
+  const handleAutoSum = useCallback(() => {
+    if (!selectedCell) {
+      toast.message('Select a cell first, then click AutoSum')
+      return
+    }
+    const { row, col } = selectedCell
+    const colLetter = colIndexToLetter(col)
+    // Walk upward from the selected cell to find a contiguous numeric range
+    let topRow = row - 1
+    while (topRow >= 0) {
+      const cellVal = getCellDisplayValue(activeSheetMatrix[topRow]?.[col] ?? null)
+      if (cellVal === null || cellVal === '') break
+      if (typeof cellVal === 'string' && isNaN(Number(cellVal))) break
+      topRow--
+    }
+    topRow++ // advance back to last valid row
+    const formula =
+      topRow < row
+        ? `=SUM(${colLetter}${topRow + 1}:${colLetter}${row})`
+        : `=SUM(${colLetter}1:${colLetter}${Math.max(1, row)})`
+    setFormulaBarValue(formula)
+    setEditingCell(selectedCell)
+  }, [selectedCell, activeSheetMatrix, setFormulaBarValue, setEditingCell])
+
+  // ── Insert / Delete Row ──────────────────────────────────────────────────
+  const handleInsertRow = useCallback(() => {
+    if (!selectedCell) {
+      toast.message('Select a cell to insert a row below it')
+      return
+    }
+    const insertAfter = selectedCell.row
+    const updatedSheets = gridSheets.map((s) => {
+      if (s.id !== activeSheetId) return s
+      const newCelldata = (s.celldata ?? []).map((cell) =>
+        cell.r > insertAfter ? { ...cell, r: cell.r + 1 } : cell
+      )
+      return { ...s, celldata: newCelldata }
+    })
+    replaceGridSheets(updatedSheets)
+    toast.success(`Row ${insertAfter + 2} inserted`)
+  }, [selectedCell, gridSheets, activeSheetId, replaceGridSheets])
+
+  const handleDeleteRow = useCallback(() => {
+    if (!selectedCell) {
+      toast.message('Select a cell to delete its row')
+      return
+    }
+    const deleteAt = selectedCell.row
+    const updatedSheets = gridSheets.map((s) => {
+      if (s.id !== activeSheetId) return s
+      const newCelldata = (s.celldata ?? [])
+        .filter((cell) => cell.r !== deleteAt)
+        .map((cell) => (cell.r > deleteAt ? { ...cell, r: cell.r - 1 } : cell))
+      return { ...s, celldata: newCelldata }
+    })
+    replaceGridSheets(updatedSheets)
+    toast.success(`Row ${deleteAt + 1} deleted`)
+  }, [selectedCell, gridSheets, activeSheetId, replaceGridSheets])
+
+  // ── Merge / Unmerge cells ────────────────────────────────────────────────
+  type MergeCapable = {
+    mergeCells?: (ranges: unknown[], type: string, opts?: { id?: string }) => void
+    cancelMerge?: (ranges: unknown[], opts?: { id?: string }) => void
+  }
+
+  const handleMergeCells = useCallback(() => {
+    if (!selectedRange || !gridInstance) {
+      toast.message('Select a range of cells to merge')
+      return
+    }
+    const startRow = Math.min(selectedRange.start.row, selectedRange.end.row)
+    const endRow = Math.max(selectedRange.start.row, selectedRange.end.row)
+    const startCol = Math.min(selectedRange.start.col, selectedRange.end.col)
+    const endCol = Math.max(selectedRange.start.col, selectedRange.end.col)
+    if (startRow === endRow && startCol === endCol) {
+      toast.message('Select multiple cells to merge')
+      return
+    }
+    ;(gridInstance as unknown as MergeCapable).mergeCells?.(
+      [{ row: [startRow, endRow], column: [startCol, endCol] }],
+      'merge-all',
+      { id: activeSheetId }
+    )
+  }, [selectedRange, gridInstance, activeSheetId])
+
+  const handleUnmergeCells = useCallback(() => {
+    if (!selectedRange || !gridInstance) return
+    ;(gridInstance as unknown as MergeCapable).cancelMerge?.(
+      [
+        {
+          row: [selectedRange.start.row, selectedRange.end.row],
+          column: [selectedRange.start.col, selectedRange.end.col],
+        },
+      ],
+      { id: activeSheetId }
+    )
+  }, [selectedRange, gridInstance, activeSheetId])
+
+  // ── Clear formatting ─────────────────────────────────────────────────────
+  const handleClearFormatting = useCallback(() => {
+    clearFormatOnSelection()
+    toast.success('Formatting cleared')
+  }, [clearFormatOnSelection])
+
+  // ── Deduplicate rows ─────────────────────────────────────────────────────
+  const handleDedupe = useCallback(() => {
+    const activeSheet = gridSheets.find((s) => s.id === activeSheetId) ?? gridSheets[0]
+    if (!activeSheet) return
+    const matrix = getSheetMatrix(activeSheet)
+    const seenKeys = new Set<string>()
+    const keepRows = new Set<number>()
+    keepRows.add(0) // always keep header row
+    let duplicateCount = 0
+
+    for (let r = 1; r < matrix.length; r++) {
+      const row = matrix[r] ?? []
+      const isEmpty = row.every((cell) => {
+        const v = getCellDisplayValue(cell)
+        return v === null || v === ''
+      })
+      if (isEmpty) {
+        keepRows.add(r)
+        continue
+      }
+      const key = row.map((cell) => String(getCellDisplayValue(cell) ?? '')).join('\x00')
+      if (seenKeys.has(key)) {
+        duplicateCount++
+      } else {
+        seenKeys.add(key)
+        keepRows.add(r)
+      }
+    }
+
+    if (duplicateCount === 0) {
+      toast.success('No duplicate rows found')
+      return
+    }
+
+    const sortedKeepRows = [...keepRows].sort((a, b) => a - b)
+    const rowMap = new Map(sortedKeepRows.map((oldR, newR) => [oldR, newR]))
+    const newCelldata = (activeSheet.celldata ?? [])
+      .filter((cell) => keepRows.has(cell.r))
+      .map((cell) => ({ ...cell, r: rowMap.get(cell.r) ?? cell.r }))
+
+    const updatedSheets = gridSheets.map((s) =>
+      s.id === activeSheet.id ? { ...s, celldata: newCelldata } : s
+    )
+    replaceGridSheets(updatedSheets)
+    toast.success(`Removed ${duplicateCount} duplicate row${duplicateCount === 1 ? '' : 's'}`)
+  }, [gridSheets, activeSheetId, replaceGridSheets])
+
+  // ── Row Summarizer shortcut ──────────────────────────────────────────────
+  const handleRowSummarizer = useCallback(() => {
+    if (!selectedRange) {
+      toast.message('Select one or more rows, then click AI Summarise')
+      return
+    }
+    const sheetIdx = gridSheets.findIndex((s) => s.id === activeSheetId)
+    rowSummarizer.open({
+      sheetIndex: Math.max(0, sheetIdx),
+      startRow: Math.min(selectedRange.start.row, selectedRange.end.row),
+      endRow: Math.max(selectedRange.start.row, selectedRange.end.row),
+    })
+  }, [selectedRange, gridSheets, activeSheetId, rowSummarizer])
+
+  // ── Column DNA shortcut ──────────────────────────────────────────────────
+  const handleColumnDNA = useCallback(() => {
+    if (!selectedCell) {
+      toast.message('Select a cell in the column you want to analyse')
+      return
+    }
+    columnDNA.openPanel(selectedCell.col)
+  }, [selectedCell, columnDNA])
+
+  // ── View toggles ─────────────────────────────────────────────────────────
+  const handleToggleFormulaBar = useCallback(() => {
+    setShowFormulaBarUI((v) => !v)
+  }, [])
+
+  const handleToggleGridlines = useCallback(() => {
+    setShowGridlines((v) => {
+      const next = !v
+      const updatedSheets = gridSheets.map((s) =>
+        s.id === activeSheetId ? { ...s, showGridLines: next ? 1 : 0 } : s
+      )
+      replaceGridSheets(updatedSheets)
+      return next
+    })
+  }, [gridSheets, activeSheetId, replaceGridSheets])
+
+  // ── Zoom controls ────────────────────────────────────────────────────────
+  const applyZoom = useCallback(
+    (nextZoom: number) => {
+      setZoomLevel(nextZoom)
+      const updatedSheets = gridSheets.map((s) =>
+        s.id === activeSheetId ? { ...s, zoomRatio: nextZoom } : s
+      )
+      replaceGridSheets(updatedSheets)
+    },
+    [gridSheets, activeSheetId, replaceGridSheets]
+  )
+
+  const handleZoomIn = useCallback(() => {
+    applyZoom(Math.min(parseFloat((zoomLevel + 0.1).toFixed(1)), 2.0))
+  }, [zoomLevel, applyZoom])
+
+  const handleZoomOut = useCallback(() => {
+    applyZoom(Math.max(parseFloat((zoomLevel - 0.1).toFixed(1)), 0.5))
+  }, [zoomLevel, applyZoom])
+
+  const handleZoomReset = useCallback(() => {
+    applyZoom(1.0)
+  }, [applyZoom])
+
   const handleNewWorkbookFromMenu = useCallback(() => {
     void (async () => {
       const supabase = getBrowserSupabase()
@@ -596,6 +953,18 @@ export default function SheetPage() {
       }
     })()
   }, [router])
+
+  // ── New feature stubs (Charts, Forms, Clean Data, Pivot, Forecasting,
+  //    Comments, Version History, Share Link, Protected Ranges) ─────────
+  const openCleanData = useCleanDataStore((s) => s.open)
+  const openChartBuilder = useChartPanelStore((s) => s.openBuilder)
+  const openFormBuilder = useFormBuilderStore((s) => s.open)
+  const openPivotBuilder = usePivotUiStore((s) => s.openBuilder)
+  const openForecast = useForecastStore((s) => s.open)
+  const openCommentsPanel = useCommentsUiStore((s) => s.openPanel)
+  const openVersionHistory = useVersionUiStore((s) => s.open)
+  const openShareDialog = useShareDialogStore((s) => s.open)
+  const openProtectedRanges = useProtectedRangesUiStore((s) => s.open)
 
   return (
     <main className="flex h-screen w-screen overflow-hidden bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
@@ -674,12 +1043,14 @@ export default function SheetPage() {
               Map
             </button>
 
+            <PresenceAvatars />
             <ThemeToggle />
           </div>
         </header>
 
         <Ribbon
           handlers={{
+            // File
             onNewWorkbook: handleNewWorkbookFromMenu,
             onOpenDashboard: () => router.push('/dashboard'),
             onSaveNow: () => toast.success('Saved'),
@@ -687,27 +1058,50 @@ export default function SheetPage() {
             onExportCSV: () => exportToCSV(getActiveSheetData(), workbookName),
             onExportXLSX: () => exportToExcel(getAllSheetsData(), workbookName),
             onExportPDF: () => exportToPDF(getActiveSheetData(), workbookName),
+            // Home
             onSortAsc: () => handleQuickSort('asc'),
             onSortDesc: () => handleQuickSort('desc'),
             onFilter: () => setShowFilter(true),
             onFind: () => setShowFindReplace(true),
             onConditionalFormatting: () => setShowCF(true),
-            onMergeCells: () => toast.message('Use Ctrl+Shift+M on a selected range'),
-            onUnmergeCells: () => toast.message('Use Ctrl+Shift+U on a merged cell'),
-            onClearFormatting: () => toast.message('Coming soon'),
+            onMergeCells: handleMergeCells,
+            onUnmergeCells: handleUnmergeCells,
+            onClearFormatting: handleClearFormatting,
             onValidation: () => setShowValidation(true),
+            onAutoSum: handleAutoSum,
+            onInsertRow: handleInsertRow,
+            onDeleteRow: handleDeleteRow,
+            // Insert
             onInsertSheet: () => addSheet(),
-            onInsertChart: () =>
-              toast.message('Charts builder coming in R12 — see docs/MASTER_REBUILD_PROMPT.md'),
-            onInsertForm: () =>
-              toast.message('Form builder coming in R9.x — only the public submission route is wired today'),
             onAIAssistant: handleAiFormulaCommand,
+            onRowSummarizer: handleRowSummarizer,
+            onColumnDNA: handleColumnDNA,
+            onInsertChart: openChartBuilder,
+            onInsertForm: openFormBuilder,
+            onInsertPivot: openPivotBuilder,
+            onCleanData: openCleanData,
+            onForecast: openForecast,
+            // Formulas / Data
             onMapView: toggleMap,
+            onDedupe: handleDedupe,
+            // Review / Collab
+            onComments: openCommentsPanel,
+            onShareLink: openShareDialog,
+            onProtectedRanges: openProtectedRanges,
+            onVersionHistory: openVersionHistory,
+            // Review / View
             onShortcuts: () => setShowShortcuts(true),
+            formulaBarVisible: showFormulaBarUI,
+            gridlinesVisible: showGridlines,
+            onToggleFormulaBar: handleToggleFormulaBar,
+            onToggleGridlines: handleToggleGridlines,
+            onZoomIn: handleZoomIn,
+            onZoomOut: handleZoomOut,
+            onZoomReset: handleZoomReset,
           }}
         />
 
-      <FormulaBar />
+      {showFormulaBarUI && <FormulaBar />}
 
       <NLFilterBar columnSchema={nlFilterColumnSchema} sampleData={nlFilterSampleData} />
 
@@ -717,16 +1111,29 @@ export default function SheetPage() {
           onOpenColumnDNA={columnDNA.openPanel}
           onSummarizeRows={rowSummarizer.open}
           onViewCellHistory={cellHistory.openHistory}
+          onAddComment={(target) => useCommentsUiStore.getState().openComposer(target)}
         />
+        {/* Excel-style embedded objects — sit above the grid canvas, bounded
+            to the sheet view area (not the whole viewport).
+            Each wrapped in a silent ErrorBoundary so a crash in one overlay
+            (e.g. chart render, pivot aggregation) doesn't freeze the grid. */}
+        <ErrorBoundary silent><ChartsLayer /></ErrorBoundary>
+        <ErrorBoundary silent><PivotsLayer /></ErrorBoundary>
+        <ErrorBoundary silent><SlicersLayer /></ErrorBoundary>
+        <ErrorBoundary silent><FillHandle /></ErrorBoundary>
+        <ErrorBoundary silent><RemoteCursors /></ErrorBoundary>
         {showMap && (
-          <DependencyMap
-            sheetData={gridSheets}
-            onCellSelect={handleDependencyCellSelect}
-            onExit={() => setShowMap(false)}
-          />
+          <ErrorBoundary fallback={<div className="absolute inset-0 z-40 flex items-center justify-center bg-white/80 text-sm text-red-600 dark:bg-zinc-900/80">Dependency map failed to render.</div>}>
+            <DependencyMap
+              sheetData={gridSheets}
+              onCellSelect={handleDependencyCellSelect}
+              onExit={() => setShowMap(false)}
+            />
+          </ErrorBoundary>
         )}
       </div>
 
+      <StatusBar />
       <SheetTabsBar />
 
       <SortPanel isOpen={showSort} onClose={() => setShowSort(false)} totalColumns={DEFAULT_COLS} />
@@ -785,6 +1192,16 @@ export default function SheetPage() {
       />
       <KeyboardShortcuts isOpen={showShortcuts} onOpenChange={setShowShortcuts} />
       <ConditionalFormatting isOpen={showCF} onClose={() => setShowCF(false)} />
+      <ErrorBoundary silent><CleanDataPanel /></ErrorBoundary>
+      <ErrorBoundary silent><ChartBuilder /></ErrorBoundary>
+      <ErrorBoundary silent><FormBuilder workbookId={workbookId} /></ErrorBoundary>
+      <ErrorBoundary silent><PivotBuilder /></ErrorBoundary>
+      <ErrorBoundary silent><ForecastPanel /></ErrorBoundary>
+      <ErrorBoundary silent><CommentsPanel workbookId={workbookId} /></ErrorBoundary>
+      <ErrorBoundary silent><CommentComposer workbookId={workbookId} /></ErrorBoundary>
+      <ErrorBoundary silent><LocalVersionHistoryPanel workbookId={workbookId} /></ErrorBoundary>
+      <ErrorBoundary silent><ShareDialog workbookId={workbookId} workbookName={workbookName} /></ErrorBoundary>
+      <ErrorBoundary silent><ProtectedRangesDialog workbookId={workbookId} /></ErrorBoundary>
       </div>
     </main>
   )

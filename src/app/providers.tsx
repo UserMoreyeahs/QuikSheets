@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 import { ThemeProvider } from '@/components/ThemeProvider'
 import { LegacyStorageMigration } from '@/components/LegacyStorageMigration'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -23,6 +24,7 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+        <TooltipProvider delayDuration={500}>
         <LegacyStorageMigration />
         {children}
         <Toaster
@@ -36,6 +38,7 @@ export function Providers({ children }: { children: ReactNode }) {
             },
           }}
         />
+        </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>
   )
