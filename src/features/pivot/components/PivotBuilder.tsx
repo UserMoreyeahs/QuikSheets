@@ -188,7 +188,11 @@ export function PivotBuilder() {
   const result = useMemo(() => {
     if (!rangeIsValid) return null
     if (rowsZ.length + colsZ.length === 0 || valuesZ.length === 0) return null
-    try { return pivot(dataRows, config) } catch { return null }
+    try {
+      return pivot(dataRows, config)
+    } catch {
+      return null
+    }
   }, [rangeIsValid, rowsZ.length, colsZ.length, valuesZ.length, dataRows, config])
 
   // ── distinct values per column (for filter pickers) ──────────────────
@@ -252,21 +256,25 @@ export function PivotBuilder() {
     if (!rangeIsValid) { toast.error('Enter a valid range like A1:D20.'); return }
     if (rowsZ.length + colsZ.length === 0) { toast.error('Drag at least one field into Rows or Columns.'); return }
     if (valuesZ.length === 0) { toast.error('Drag at least one field into Values.'); return }
-    if (!result) { toast.error('Could not compute pivot.'); return }
-    addPivot({
-      name: name.trim() || 'Pivot table',
-      sourceRange: rangeText.trim().toUpperCase(),
-      hasHeader,
-      config,
-      result,
-      headerLabels: headers,
-      anchorRow: 0,
-      anchorCol: columnCount > 0 ? columnCount + 1 : 4,
-      offsetX: 120,
-      offsetY: 120,
-    })
-    toast.success('Pivot inserted.')
-    closeBuilder()
+    if (!result) { toast.error('Could not compute pivot — check your data has numeric values.'); return }
+    try {
+      addPivot({
+        name: name.trim() || 'Pivot table',
+        sourceRange: rangeText.trim().toUpperCase(),
+        hasHeader,
+        config,
+        result,
+        headerLabels: headers,
+        anchorRow: 0,
+        anchorCol: columnCount > 0 ? columnCount + 1 : 4,
+        offsetX: 120,
+        offsetY: 120,
+      })
+      toast.success('Pivot table inserted! It appears as a floating panel on the grid.')
+      closeBuilder()
+    } catch {
+      toast.error('Failed to insert pivot table.')
+    }
   }
 
   // helper to render a field chip

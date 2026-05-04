@@ -1192,16 +1192,16 @@ export default function SheetPage() {
       />
       <KeyboardShortcuts isOpen={showShortcuts} onOpenChange={setShowShortcuts} />
       <ConditionalFormatting isOpen={showCF} onClose={() => setShowCF(false)} />
-      <ErrorBoundary silent><CleanDataPanel /></ErrorBoundary>
-      <ErrorBoundary silent><ChartBuilder /></ErrorBoundary>
-      <ErrorBoundary silent><FormBuilder workbookId={workbookId} /></ErrorBoundary>
-      <ErrorBoundary silent><PivotBuilder /></ErrorBoundary>
-      <ErrorBoundary silent><ForecastPanel /></ErrorBoundary>
-      <ErrorBoundary silent><CommentsPanel workbookId={workbookId} /></ErrorBoundary>
-      <ErrorBoundary silent><CommentComposer workbookId={workbookId} /></ErrorBoundary>
-      <ErrorBoundary silent><LocalVersionHistoryPanel workbookId={workbookId} /></ErrorBoundary>
-      <ErrorBoundary silent><ShareDialog workbookId={workbookId} workbookName={workbookName} /></ErrorBoundary>
-      <ErrorBoundary silent><ProtectedRangesDialog workbookId={workbookId} /></ErrorBoundary>
+      <ErrorBoundary><CleanDataPanel /></ErrorBoundary>
+      <ErrorBoundary><ChartBuilder /></ErrorBoundary>
+      <ErrorBoundary><FormBuilder workbookId={workbookId} /></ErrorBoundary>
+      <ErrorBoundary><PivotBuilder /></ErrorBoundary>
+      <ErrorBoundary><ForecastPanel /></ErrorBoundary>
+      <ErrorBoundary><CommentsPanel workbookId={workbookId} /></ErrorBoundary>
+      <ErrorBoundary><CommentComposer workbookId={workbookId} /></ErrorBoundary>
+      <ErrorBoundary><LocalVersionHistoryPanel workbookId={workbookId} /></ErrorBoundary>
+      <ErrorBoundary><ShareDialog workbookId={workbookId} workbookName={workbookName} /></ErrorBoundary>
+      <ErrorBoundary><ProtectedRangesDialog workbookId={workbookId} /></ErrorBoundary>
       </div>
     </main>
   )

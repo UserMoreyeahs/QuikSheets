@@ -21,6 +21,7 @@ import {
   AlignLeft,
   AlignRight,
   ArrowDownUp,
+  BarChart3,
   Bold,
   ChevronDown,
   DollarSign,
@@ -35,6 +36,7 @@ import {
   SortAsc,
   Sparkles,
   Strikethrough,
+  Table as TableIcon,
   Table2,
   Underline,
   Undo2,
@@ -414,6 +416,22 @@ export function QuickToolbar({ handlers }: { handlers: RibbonHandlers }) {
           icon={<Table2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />}
           label="Format"
           onClick={() => handlers.onConditionalFormatting()}
+        />
+      </ToolGroup>
+
+      {/* ── Insert ──────────────────────────────────────────────────────────── */}
+      <ToolGroup label="Insert">
+        <BigBtn
+          tip="Insert Chart"
+          icon={<BarChart3 className="h-4 w-4 text-blue-500" />}
+          label="Chart"
+          onClick={() => handlers.onInsertChart?.()}
+        />
+        <BigBtn
+          tip="Insert Pivot Table"
+          icon={<TableIcon className="h-4 w-4 text-violet-500" />}
+          label="Pivot"
+          onClick={() => handlers.onInsertPivot?.()}
         />
       </ToolGroup>
 
