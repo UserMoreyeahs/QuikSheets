@@ -84,21 +84,38 @@
   }
 }
 
-.dark .fortune-container,
-.dark .fortune-sheet-container,
-.dark .fortune-workarea,
-.dark .fortune-sheet-area,
-.dark .fortune-cell-area,
-.dark .fortune-sheet-canvas-placeholder {
+/* Outermost wrapper — dark fill so margins/gaps don't flash white. */
+.dark .fortune-container {
   background-color: rgb(24 24 27);
   color: rgb(228 228 231);
 }
 
-.dark .fortune-left-top,
+/* FortuneSheet renders its grid (cells, text, borders) on a <canvas>.
+   CSS cannot change what is drawn on a canvas, so we invert the entire
+   canvas in dark mode and rotate the hue back to preserve colour balance.
+   IMPORTANT: the elements *behind* the canvas (workarea, cell-area,
+   canvas-placeholder) must keep their default white background — if they
+   are dark, the inverted white cells (~rgb 31) become invisible against
+   them.  Only .fortune-container (outermost) is dark.  */
+.dark .fortune-sheet-container canvas {
+  filter: invert(0.88) hue-rotate(180deg);
+}
+
+/* Row/column headers: FortuneSheet draws the header labels (A,B,C / 1,2,3)
+   on the MAIN canvas, which sits behind these DOM overlays. Use a
+   semi-transparent dark tint so the inverted header text shows through. */
+.dark .fortune-left-top {
+  background-color: rgb(39 39 42);
+}
 .dark .fortune-row-header,
 .dark .fortune-col-header {
-  background-color: rgb(39 39 42);
+  background-color: rgba(39, 39, 42, 0.65);
   color: rgb(212 212 216);
+}
+
+/* The selection overlay sits on top of the canvas — keep it un-inverted. */
+.dark .fortune-sheet-overlay {
+  filter: none;
 }
 
 .dark .fortune-add-row-button {
