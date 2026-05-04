@@ -21,18 +21,27 @@ function formatDate(iso?: string): string {
 async function pickPrimaryWorkspaceId(): Promise<string | null> {
   const supabase = getBrowserSupabase()
   if (!supabase) return null
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return null
-  const { data } = await supabase
-    .from('workspace_members')
-    .select('workspace_id')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle()
-  return (data?.workspace_id as string | undefined) ?? null
+
+  // Race the Supabase query against a 5-second timeout so the "New
+  // workbook" button never hangs when the backend is unreachable.
+  const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 5_000))
+
+  const query = (async (): Promise<string | null> => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return null
+    const { data } = await supabase
+      .from('workspace_members')
+      .select('workspace_id')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+    return (data?.workspace_id as string | undefined) ?? null
+  })()
+
+  return Promise.race([query, timeout])
 }
 
 function createLocalWorkbookFromTemplate(template: TemplateDefinition, workbookName: string): string {
