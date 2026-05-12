@@ -18,7 +18,7 @@ export function RibbonGroup({
   className?: string
 }) {
   return (
-    <div className={cn('relative flex h-[88px] flex-col items-stretch px-2', className)}>
+    <div className={cn('relative flex h-full flex-col items-stretch px-2', className)}>
       <div className="flex flex-1 items-center gap-0.5">{children}</div>
       <div className="pt-0.5 text-center text-[10px] font-medium leading-tight text-zinc-500 dark:text-zinc-400">
         {label}
@@ -41,7 +41,7 @@ export function RibbonButton({
   icon: ReactNode
   active?: boolean
   disabled?: boolean
-  onClick?: () => void
+  onClick?: (() => void) | undefined
   shortcut?: string
 }) {
   return (
@@ -78,7 +78,7 @@ export function RibbonLargeButton({
   icon: ReactNode
   active?: boolean
   disabled?: boolean
-  onClick?: () => void
+  onClick?: (() => void) | undefined
   showCaret?: boolean
 }) {
   return (

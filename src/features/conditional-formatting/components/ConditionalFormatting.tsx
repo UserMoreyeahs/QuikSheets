@@ -5,7 +5,7 @@ import { X, Plus, Trash2, GripVertical, ChevronDown, ChevronUp } from 'lucide-re
 import { useCFStore } from '../store/cfStore'
 import { validateRange } from '../utils/cfEvaluator'
 import { useWorkbookStore } from '@/store/workbookStore'
-import type { CFRule, CFCondition, CFConditionType, CFFormat, CFOperator } from '../types'
+import type { CFRule, CFCondition, CFConditionType, CFFormat, CFOperator, CFDatePeriod } from '../types'
 
 interface ConditionalFormattingProps {
   isOpen: boolean
@@ -23,6 +23,9 @@ const CONDITION_LABELS: Record<CFConditionType, string> = {
   bottom_n: 'Bottom N items',
   above_average: 'Above average',
   below_average: 'Below average',
+  top_n_percent: 'Top N percent',
+  bottom_n_percent: 'Bottom N percent',
+  date_occurring: 'Date occurring',
   custom_formula: 'Custom formula',
 }
 
@@ -46,6 +49,19 @@ const VALUE_OPERATORS: CFOperator[] = [
 ]
 const TEXT_OPERATORS: CFOperator[] = ['contains', 'not_contains', 'starts_with', 'ends_with']
 
+const DATE_PERIOD_LABELS: Record<CFDatePeriod, string> = {
+  yesterday: 'Yesterday',
+  today: 'Today',
+  tomorrow: 'Tomorrow',
+  last7Days: 'Last 7 Days',
+  lastWeek: 'Last Week',
+  thisWeek: 'This Week',
+  nextWeek: 'Next Week',
+  lastMonth: 'Last Month',
+  thisMonth: 'This Month',
+  nextMonth: 'Next Month',
+}
+
 function defaultCondition(type: CFConditionType): CFCondition {
   switch (type) {
     case 'cell_value':
@@ -54,13 +70,24 @@ function defaultCondition(type: CFConditionType): CFCondition {
       return { type, operator: 'contains', value: '' }
     case 'top_n':
     case 'bottom_n':
+    case 'top_n_percent':
+    case 'bottom_n_percent':
       return { type, n: 10 }
+    case 'date_occurring':
+      return { type, datePeriod: 'today' }
+    case 'custom_formula':
+      return { type, value: '' }
     default:
       return { type }
   }
 }
 
 function describeRule(rule: CFRule): string {
+  // Visual CF types
+  if (rule.kind === 'data_bar') return `Data Bar (${rule.dataBar?.color ?? 'blue'})`
+  if (rule.kind === 'color_scale') return 'Color Scale'
+  if (rule.kind === 'icon_set') return `Icon Set (${rule.iconSet?.name ?? ''})`
+
   const { condition } = rule
   switch (condition.type) {
     case 'cell_value':
@@ -71,6 +98,14 @@ function describeRule(rule: CFRule): string {
       return `Top ${condition.n ?? 10} items`
     case 'bottom_n':
       return `Bottom ${condition.n ?? 10} items`
+    case 'top_n_percent':
+      return `Top ${condition.n ?? 10}%`
+    case 'bottom_n_percent':
+      return `Bottom ${condition.n ?? 10}%`
+    case 'date_occurring':
+      return `Date occurring ${DATE_PERIOD_LABELS[condition.datePeriod ?? 'today']}`
+    case 'custom_formula':
+      return `Custom formula: ${condition.value ?? ''}`
     default:
       return CONDITION_LABELS[condition.type]
   }
@@ -114,6 +149,7 @@ function RuleEditor({ initialRule, onSave, onCancel }: RuleEditorProps) {
   const [value, setValue] = useState(initialRule?.condition.value ?? '0')
   const [value2, setValue2] = useState(initialRule?.condition.value2 ?? '')
   const [nVal, setNVal] = useState(String(initialRule?.condition.n ?? 10))
+  const [datePeriod, setDatePeriod] = useState<CFDatePeriod>(initialRule?.condition.datePeriod ?? 'today')
   const [format, setFormat] = useState<CFFormat>(initialRule?.format ?? { fill: '#DBEAFE', bold: false, italic: false })
   const [rangeError, setRangeError] = useState('')
 
@@ -137,7 +173,15 @@ function RuleEditor({ initialRule, onSave, onCancel }: RuleEditorProps) {
       condition.value = value
       if (operator === 'between' || operator === 'not_between') condition.value2 = value2
     }
-    if (condType === 'top_n' || condType === 'bottom_n') condition.n = parseInt(nVal) || 10
+    if (condType === 'top_n' || condType === 'bottom_n' || condType === 'top_n_percent' || condType === 'bottom_n_percent') {
+      condition.n = parseInt(nVal) || 10
+    }
+    if (condType === 'date_occurring') {
+      condition.datePeriod = datePeriod
+    }
+    if (condType === 'custom_formula') {
+      condition.value = value
+    }
     onSave({ range, condition, format, priority: initialRule?.priority ?? Date.now() })
   }
 
@@ -202,13 +246,41 @@ function RuleEditor({ initialRule, onSave, onCancel }: RuleEditorProps) {
         </div>
       )}
 
-      {(condType === 'top_n' || condType === 'bottom_n') && (
-        <input
-          type="number"
-          min="1"
-          value={nVal}
-          onChange={(e) => setNVal(e.target.value)}
+      {(condType === 'top_n' || condType === 'bottom_n' || condType === 'top_n_percent' || condType === 'bottom_n_percent') && (
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min="1"
+            max={condType === 'top_n_percent' || condType === 'bottom_n_percent' ? 100 : undefined}
+            value={nVal}
+            onChange={(e) => setNVal(e.target.value)}
+            className="w-24 rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+          />
+          {(condType === 'top_n_percent' || condType === 'bottom_n_percent') && (
+            <span className="text-sm text-zinc-500 dark:text-zinc-400">%</span>
+          )}
+        </div>
+      )}
+
+      {condType === 'date_occurring' && (
+        <select
+          value={datePeriod}
+          onChange={(e) => setDatePeriod(e.target.value as CFDatePeriod)}
           className="rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+        >
+          {(Object.keys(DATE_PERIOD_LABELS) as CFDatePeriod[]).map((dp) => (
+            <option key={dp} value={dp}>{DATE_PERIOD_LABELS[dp]}</option>
+          ))}
+        </select>
+      )}
+
+      {condType === 'custom_formula' && (
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="e.g. =A1>100"
+          className="rounded border border-zinc-300 px-2 py-1.5 text-sm font-mono dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
         />
       )}
 

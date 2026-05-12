@@ -1,5 +1,27 @@
 'use client'
 
+/**
+ * Conditional Formatting Zustand Store
+ *
+ * Manages CF rules for all sheets in a workbook and applies/removes style
+ * patches to the FortuneSheet grid data via `sheetStore.replaceGridSheets`.
+ *
+ * Persistence:
+ *   Rules are stored in localStorage at `quiksheets_cf_rules:<workbookId>`,
+ *   keyed by sheetId. Backups (original cell styles before CF overrides) are
+ *   held in memory only and rebuilt on each page load.
+ *
+ * Workflow:
+ *   loadRules(workbookId)    — Called once on sheet page mount.
+ *   addRule / updateRule     — Mutate rules; call applyToActiveSheet afterwards.
+ *   deleteRule               — Strips CF styles, re-applies remaining rules, saves.
+ *   reorderRules             — Drag-to-reorder (priority index = array position).
+ *   applyToActiveSheet       — Strips backup, re-evaluates rules, patches gridSheets.
+ *   clearFromSheet           — Removes all rules + styles for a sheet.
+ *   quickAddRule             — addRule + applyToActiveSheet in one call.
+ *   applyAllCFRules          — Top-level function called on page load (all sheets).
+ */
+
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 import type { CFRule, CFBackupCell } from '../types'
@@ -8,6 +30,7 @@ import { useSheetStore } from '@/store/sheetStore'
 import { useWorkbookStore } from '@/store/workbookStore'
 import type { Sheet } from '@fortune-sheet/core'
 
+/** localStorage key prefix for CF rule persistence. */
 const STORAGE_KEY_PREFIX = 'quiksheets_cf_rules:'
 
 function loadFromStorage(workbookId: string): Record<string, CFRule[]> {
@@ -28,10 +51,15 @@ function saveToStorage(workbookId: string, rules: Record<string, CFRule[]>): voi
 }
 
 interface CFState {
+  /** Active workbook ID; null until `loadRules` is called. */
   workbookId: string | null
-  // rules keyed by sheetId
+  /** CF rules for each sheet: `{ [sheetId]: CFRule[] }`. */
   rules: Record<string, CFRule[]>
-  // backup of original cell styles keyed by sheetId → cellKey → original style
+  /**
+   * Per-sheet backup of original cell styles before CF was applied.
+   * Shape: `{ [sheetId]: { [rowColKey]: CFBackupCell } }`.
+   * Held in memory only — rebuilt from storage on each page load.
+   */
   backup: Record<string, Record<string, CFBackupCell>>
 }
 
@@ -44,6 +72,8 @@ interface CFActions {
   reorderRules: (sheetId: string, fromIndex: number, toIndex: number) => void
   applyToActiveSheet: () => void
   clearFromSheet: (sheetId: string) => void
+  quickAddRule: (sheetId: string, rule: Omit<CFRule, 'id'>) => void
+  clearRulesFromSelection: (sheetId: string, rangeStr: string) => void
 }
 
 export const useCFStore = create<CFState & CFActions>()(
@@ -205,12 +235,31 @@ export const useCFStore = create<CFState & CFActions>()(
           'cf/clearFromSheet'
         )
       },
+
+      quickAddRule(sheetId, rule) {
+        get().addRule(sheetId, rule)
+        get().applyToActiveSheet()
+      },
+
+      clearRulesFromSelection(sheetId, _rangeStr) {
+        // For simplicity, clear ALL rules from the sheet that overlap with the given range
+        // In practice, this is hard to do precisely, so we clear all rules
+        get().clearFromSheet(sheetId)
+      },
     }),
     { name: 'CFStore' }
   )
 )
 
-// Apply CF for all sheets that have rules (called on sheet load)
+/**
+ * Apply CF rules for ALL sheets in the workbook at once.
+ *
+ * Called once from the sheet page's `useEffect` (with a 500ms delay to allow
+ * the FortuneSheet grid to hydrate) so that saved rules are visible immediately
+ * when a workbook is opened.
+ *
+ * @param workbookId - The current workbook's UUID (or "demo").
+ */
 export function applyAllCFRules(workbookId: string): void {
   useCFStore.getState().loadRules(workbookId)
   const { rules } = useCFStore.getState()

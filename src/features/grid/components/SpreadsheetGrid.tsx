@@ -22,6 +22,7 @@ import { FormulaTooltip, useFormulaExplainer } from '@/features/formula-explaine
 import { SmartPasteBanner, useSmartPaste } from '@/features/smart-paste'
 import { PreviewOverlay, RangeHighlight, ResultBadge, useLivePreview } from '@/features/live-preview'
 import { ColumnIntentBanner, useColumnIntent } from '@/features/intent-columns'
+import { useInlineEditSync } from '../hooks/useInlineEditSync'
 import type { RowSummarySelection } from '@/features/row-summarizer'
 import type { Cell, Sheet, Selection } from '@fortune-sheet/core'
 import type { WorkbookInstance } from '@fortune-sheet/react'
@@ -226,6 +227,7 @@ export function SpreadsheetGrid({
   const smartPaste = useSmartPaste()
   const livePreview = useLivePreview()
   const columnIntent = useColumnIntent(gridSheets)
+  useInlineEditSync(gridContainerRef)
 
   useEffect(() => {
     gridSheetsRef.current = gridSheets

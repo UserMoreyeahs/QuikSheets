@@ -8,6 +8,38 @@
   .text-balance {
     text-wrap: balance;
   }
+
+  /* Slim scrollbar for ribbon tab bar overflow on narrow viewports */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    height: 4px;
+    width: 4px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: rgb(161 161 170 / 0.4);
+    border-radius: 2px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* Format Painter armed — show paintbrush cursor + subtle blue tint over the grid */
+  body.quiksheets-format-painter-active,
+  body.quiksheets-format-painter-active .luckysheet,
+  body.quiksheets-format-painter-active .luckysheet-cell-main,
+  body.quiksheets-format-painter-active * {
+    cursor: copy !important;
+  }
+  body.quiksheets-format-painter-active .luckysheet-cell-main::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: rgba(59, 130, 246, 0.04);
+    z-index: 1;
+  }
 }
 
 @layer base {

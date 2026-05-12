@@ -8,27 +8,26 @@ import {
   AlignVerticalJustifyEnd,
   AlignVerticalJustifyStart,
   ArrowDownAZ,
-  ArrowUpAZ,
+  ArrowDownNarrowWide,
+  ArrowUpDown,
   Bold,
   ChevronDown,
-  Clipboard,
-  ClipboardCopy,
   ClipboardPaste,
   Copy,
   DollarSign,
   Eraser,
-  Filter,
+  Filter as FilterIcon,
   Italic,
-  Minus,
-  Palette,
+  Merge as MergeIcon,
+  Paintbrush,
   Percent,
-  Plus,
+  Redo2,
+  Scissors,
   Search,
   Sigma,
   Strikethrough,
-  Table,
-  Type,
   Underline,
+  Undo2,
   WrapText,
 } from 'lucide-react'
 import { useSheetStore } from '@/store/sheetStore'
@@ -36,8 +35,50 @@ import { FontFamilySelector } from '@/features/toolbar/components/FontFamilySele
 import { FontSizeSelector } from '@/features/toolbar/components/FontSizeSelector'
 import { NumberFormatSelector } from '@/features/toolbar/components/NumberFormatSelector'
 import { ColorPicker } from '@/features/toolbar/components/ColorPicker'
+import { CFDropdownMenu } from '@/features/conditional-formatting/components/CFDropdownMenu'
+import { CellStylesDropdown } from '@/features/conditional-formatting/components/CellStylesDropdown'
+import { FormatAsTableDropdown } from './FormatAsTableDropdown'
+import { CellsGroup } from './CellsGroup'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import type { FontFamily, NumberFormat } from '@/types/sheet.types'
-import { RibbonGroup, RibbonButton, RibbonLargeButton } from './RibbonPrimitives'
+import { RibbonGroup, RibbonButton } from './RibbonPrimitives'
+import { ribbonStub } from '../utils/ribbonStub'
+import {
+  applyAutoSumOp,
+  applyBorder,
+  applyOrientation,
+  clearAll,
+  clearComments,
+  clearContents,
+  clearFilter,
+  clearHyperlinks,
+  decreaseDecimal,
+  decreaseIndent,
+  fillDown,
+  fillLeft,
+  fillRight,
+  fillSeries,
+  fillUp,
+  goToDialog,
+  increaseDecimal,
+  increaseIndent,
+  reapplyFilter,
+  selectCellsWithCF,
+  selectCellsWithComments,
+  selectCellsWithConstants,
+  selectCellsWithFormulas,
+  selectCellsWithValidation,
+  startFormatPainter,
+  type BorderPreset,
+  type OrientationPreset,
+} from '../utils/cellOps'
+import { toast } from 'sonner'
 
 interface HomeTabProps {
   onSortAsc: () => void
@@ -48,14 +89,28 @@ interface HomeTabProps {
   onMergeCells: () => void
   onUnmergeCells: () => void
   onClearFormatting: () => void
-  onValidation: () => void
-  onAutoSum: () => void
-  onInsertRow: () => void
-  onDeleteRow: () => void
+  onAutoSum?: (() => void) | undefined
+  onInsertRow?: (() => void) | undefined
+  onDeleteRow?: (() => void) | undefined
+  onInsertSheet?: (() => void) | undefined
+  onProtectedRanges?: (() => void) | undefined
+  onCustomSort?: (() => void) | undefined
+  onAIAssistant: () => void
 }
 
+const BORDER_PRESETS: { label: string; value: BorderPreset }[] = [
+  { label: 'Bottom Border',     value: 'bottom' },
+  { label: 'Top Border',        value: 'top' },
+  { label: 'Left Border',       value: 'left' },
+  { label: 'Right Border',      value: 'right' },
+  { label: 'No Border',         value: 'none' },
+  { label: 'All Borders',       value: 'all' },
+  { label: 'Outside Borders',   value: 'outside' },
+  { label: 'Thick Box Border',  value: 'thick' },
+]
+
 export function HomeTab(props: HomeTabProps) {
-  const { activeFormatting, applyFormatToSelection } = useSheetStore()
+  const { gridInstance, activeFormatting, applyFormatToSelection } = useSheetStore()
 
   const toggle = (key: 'bold' | 'italic' | 'underline' | 'strikethrough' | 'wrapText') =>
     applyFormatToSelection({ [key]: !activeFormatting[key] })
@@ -70,63 +125,115 @@ export function HomeTab(props: HomeTabProps) {
   const setFontFamily = (fontFamily: FontFamily) => applyFormatToSelection({ fontFamily })
   const setFontSize = (fontSize: number) => applyFormatToSelection({ fontSize })
   const setTextColor = (textColor: string) => applyFormatToSelection({ textColor })
-  const setBgColor = (backgroundColor: string) => applyFormatToSelection({ backgroundColor })
+  const setBgColor = (backgroundColor: string) =>
+    applyFormatToSelection({ backgroundColor })
+
+  const bumpFont = (delta: number) => {
+    const next = Math.max(8, Math.min(72, (activeFormatting.fontSize ?? 11) + delta))
+    setFontSize(next)
+  }
+
+  // Clipboard handlers (best-effort browser clipboard)
+  const handleCopy = () => {
+    try {
+      document.execCommand('copy')
+      toast.success('Copied')
+    } catch {
+      toast.error('Copy failed — use Ctrl+C')
+    }
+  }
+  const handleCut = () => {
+    try {
+      document.execCommand('cut')
+      toast.success('Cut')
+    } catch {
+      toast.error('Cut failed — use Ctrl+X')
+    }
+  }
+  const handlePaste = () => {
+    toast('Use Ctrl+V to paste', { description: 'Browser security blocks programmatic paste.' })
+  }
 
   return (
-    <div className="flex h-full items-stretch overflow-x-auto px-1 py-1.5">
-      {/* Clipboard */}
+    <div className="flex h-full items-stretch overflow-x-auto">
+      {/* ── 1. Clipboard ─────────────────────────────────────── */}
       <RibbonGroup label="Clipboard">
-        <RibbonLargeButton
-          label="Paste"
-          icon={<ClipboardPaste />}
-          onClick={() => {
-            // Paste handled by FortuneSheet's native Ctrl+V; this caret stub
-            // surfaces a hint for future "Paste special" submenu.
-          }}
-          showCaret
-        />
+        {/* Large Paste button */}
+        <button
+          type="button"
+          title="Paste (Ctrl+V)"
+          onClick={handlePaste}
+          className="flex h-[68px] w-[60px] flex-col items-center justify-center gap-1 rounded px-1 py-1 text-[11px] text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+        >
+          <ClipboardPaste className="h-6 w-6 text-zinc-700 dark:text-zinc-200" />
+          <span className="flex items-center gap-0.5 leading-tight">
+            Paste <ChevronDown className="h-3 w-3 text-zinc-400" />
+          </span>
+        </button>
         <div className="flex flex-col gap-0.5">
-          <RibbonButton label="Cut" icon={<Clipboard className="h-3.5 w-3.5" />} shortcut="Ctrl+X" />
-          <RibbonButton label="Copy" icon={<Copy className="h-3.5 w-3.5" />} shortcut="Ctrl+C" onClick={() => document.execCommand('copy')} />
-          <RibbonButton label="Format painter" icon={<ClipboardCopy className="h-3.5 w-3.5" />} />
+          <RibbonButton label="Cut"             shortcut="Ctrl+X" icon={<Scissors className="h-3.5 w-3.5" />}      onClick={handleCut} />
+          <RibbonButton label="Copy"            shortcut="Ctrl+C" icon={<Copy className="h-3.5 w-3.5" />}          onClick={handleCopy} />
+          <RibbonButton label="Format Painter"  icon={<Paintbrush className="h-3.5 w-3.5" />} onClick={startFormatPainter} />
         </div>
       </RibbonGroup>
 
-      {/* Font */}
-      <RibbonGroup label="Font" className="min-w-[280px]">
+      {/* ── 2. Font ───────────────────────────────────────────── */}
+      <RibbonGroup label="Font">
         <div className="flex flex-col gap-0.5">
           <div className="flex items-center gap-1">
             <FontFamilySelector value={activeFormatting.fontFamily} onChange={setFontFamily} />
             <FontSizeSelector value={activeFormatting.fontSize} onChange={setFontSize} />
+            <RibbonButton label="Increase Font Size" icon={<span className="text-[10px] font-bold leading-none">A▴</span>} onClick={() => bumpFont(1)} />
+            <RibbonButton label="Decrease Font Size" icon={<span className="text-[9px] font-bold leading-none">A▾</span>}  onClick={() => bumpFont(-1)} />
           </div>
           <div className="flex items-center gap-0.5">
             <RibbonButton label="Bold" shortcut="Ctrl+B" icon={<Bold className="h-3.5 w-3.5" />} active={activeFormatting.bold} onClick={() => toggle('bold')} />
             <RibbonButton label="Italic" shortcut="Ctrl+I" icon={<Italic className="h-3.5 w-3.5" />} active={activeFormatting.italic} onClick={() => toggle('italic')} />
             <RibbonButton label="Underline" shortcut="Ctrl+U" icon={<Underline className="h-3.5 w-3.5" />} active={activeFormatting.underline} onClick={() => toggle('underline')} />
             <RibbonButton label="Strikethrough" icon={<Strikethrough className="h-3.5 w-3.5" />} active={activeFormatting.strikethrough} onClick={() => toggle('strikethrough')} />
-            <div className="mx-0.5 h-4 w-px bg-zinc-200 dark:bg-zinc-700" />
+            {/* Borders dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  title="Borders"
+                  className="flex h-[26px] items-center gap-0.5 rounded px-1 text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                >
+                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="18" height="18" />
+                    <line x1="3" y1="12" x2="21" y2="12" />
+                    <line x1="12" y1="3" x2="12" y2="21" />
+                  </svg>
+                  <ChevronDown className="h-2.5 w-2.5 text-zinc-400" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {BORDER_PRESETS.map((b) => (
+                  <DropdownMenuItem key={b.value} onSelect={() => applyBorder(b.value)}>{b.label}</DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={ribbonStub('More Borders…')}>More Borders…</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <ColorPicker
               value={activeFormatting.backgroundColor ?? '#ffff00'}
               onChange={setBgColor}
               label="Fill color"
               trigger={
-                <Palette
-                  className="h-3.5 w-3.5"
-                  style={{ color: activeFormatting.backgroundColor ?? '#ffff00' }}
-                />
+                <span className="flex flex-col items-center">
+                  <span className="text-[10px] font-bold leading-none text-zinc-700 dark:text-zinc-300">▣</span>
+                  <span className="mt-[1px] block h-[3px] w-[12px] rounded-[1px]" style={{ backgroundColor: activeFormatting.backgroundColor ?? '#ffff00' }} />
+                </span>
               }
             />
             <ColorPicker
-              value={activeFormatting.textColor ?? '#000000'}
+              value={activeFormatting.textColor ?? '#FF0000'}
               onChange={setTextColor}
               label="Text color"
               trigger={
-                <span className="flex h-3.5 w-3.5 flex-col items-center">
-                  <Type className="h-3 w-3" />
-                  <span
-                    className="mt-0.5 block h-0.5 w-3"
-                    style={{ backgroundColor: activeFormatting.textColor ?? '#000000' }}
-                  />
+                <span className="flex flex-col items-center">
+                  <span className="text-[10px] font-bold leading-none" style={{ color: activeFormatting.textColor ?? '#000000' }}>A</span>
+                  <span className="mt-[1px] block h-[3px] w-[12px] rounded-[1px]" style={{ backgroundColor: activeFormatting.textColor ?? '#FF0000' }} />
                 </span>
               }
             />
@@ -134,123 +241,222 @@ export function HomeTab(props: HomeTabProps) {
         </div>
       </RibbonGroup>
 
-      {/* Alignment */}
-      <RibbonGroup label="Alignment" className="min-w-[200px]">
+      {/* ── 3. Alignment ──────────────────────────────────────── */}
+      <RibbonGroup label="Alignment">
         <div className="flex flex-col gap-0.5">
           <div className="flex items-center gap-0.5">
-            <RibbonButton label="Top align" icon={<AlignVerticalJustifyStart className="h-3.5 w-3.5" />} active={activeFormatting.verticalAlign === 'top'} onClick={() => setVAlign('top')} />
+            <RibbonButton label="Top align"    icon={<AlignVerticalJustifyStart  className="h-3.5 w-3.5" />} active={activeFormatting.verticalAlign === 'top'}    onClick={() => setVAlign('top')} />
             <RibbonButton label="Middle align" icon={<AlignVerticalJustifyCenter className="h-3.5 w-3.5" />} active={activeFormatting.verticalAlign === 'middle'} onClick={() => setVAlign('middle')} />
-            <RibbonButton label="Bottom align" icon={<AlignVerticalJustifyEnd className="h-3.5 w-3.5" />} active={activeFormatting.verticalAlign === 'bottom'} onClick={() => setVAlign('bottom')} />
+            <RibbonButton label="Bottom align" icon={<AlignVerticalJustifyEnd    className="h-3.5 w-3.5" />} active={activeFormatting.verticalAlign === 'bottom'} onClick={() => setVAlign('bottom')} />
             <div className="mx-0.5 h-4 w-px bg-zinc-200 dark:bg-zinc-700" />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  title="Orientation"
+                  className="flex h-[26px] items-center gap-0.5 rounded px-1.5 text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                >
+                  <span className="text-[10px] italic leading-none">↻ab</span>
+                  <ChevronDown className="h-2.5 w-2.5 text-zinc-400" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem onSelect={() => applyOrientation(0)}>Horizontal</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => applyOrientation(45 as OrientationPreset)}>Angle Counterclockwise (45°)</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => applyOrientation(-45 as OrientationPreset)}>Angle Clockwise (-45°)</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => applyOrientation('vertical')}>Vertical Text</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => applyOrientation(90 as OrientationPreset)}>Rotate Up (90°)</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => applyOrientation(-90 as OrientationPreset)}>Rotate Down (-90°)</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <RibbonButton label="Wrap text" icon={<WrapText className="h-3.5 w-3.5" />} active={activeFormatting.wrapText} onClick={() => toggle('wrapText')} />
           </div>
           <div className="flex items-center gap-0.5">
-            <RibbonButton label="Align left" icon={<AlignLeft className="h-3.5 w-3.5" />} active={activeFormatting.textAlign === 'left'} onClick={() => setAlign('left')} />
+            <RibbonButton label="Align left"   icon={<AlignLeft   className="h-3.5 w-3.5" />} active={activeFormatting.textAlign === 'left'}   onClick={() => setAlign('left')} />
             <RibbonButton label="Align center" icon={<AlignCenter className="h-3.5 w-3.5" />} active={activeFormatting.textAlign === 'center'} onClick={() => setAlign('center')} />
-            <RibbonButton label="Align right" icon={<AlignRight className="h-3.5 w-3.5" />} active={activeFormatting.textAlign === 'right'} onClick={() => setAlign('right')} />
+            <RibbonButton label="Align right"  icon={<AlignRight  className="h-3.5 w-3.5" />} active={activeFormatting.textAlign === 'right'}  onClick={() => setAlign('right')} />
             <div className="mx-0.5 h-4 w-px bg-zinc-200 dark:bg-zinc-700" />
-            <button
-              type="button"
-              onClick={props.onMergeCells}
-              title="Merge cells (Ctrl+Shift+M)"
-              className="flex h-[26px] items-center gap-1 rounded px-2 text-[11px] text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
-            >
-              Merge
-              <ChevronDown className="h-3 w-3 text-zinc-400" />
-            </button>
+            <RibbonButton label="Decrease Indent" icon={<span className="text-[12px] leading-none">←|</span>} onClick={decreaseIndent} />
+            <RibbonButton label="Increase Indent" icon={<span className="text-[12px] leading-none">|→</span>} onClick={increaseIndent} />
+            <div className="mx-0.5 h-4 w-px bg-zinc-200 dark:bg-zinc-700" />
+            {/* Merge & Center dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  title="Merge & Center"
+                  className="flex h-[26px] items-center gap-0.5 rounded px-1.5 text-[11px] text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                >
+                  <MergeIcon className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Merge</span>
+                  <ChevronDown className="h-2.5 w-2.5 text-zinc-400" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem onSelect={() => { props.onMergeCells(); setAlign('center') }}>Merge &amp; Center</DropdownMenuItem>
+                <DropdownMenuItem onSelect={ribbonStub('Merge Across')}>Merge Across</DropdownMenuItem>
+                <DropdownMenuItem onSelect={props.onMergeCells}>Merge Cells</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={props.onUnmergeCells}>Unmerge Cells</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </RibbonGroup>
 
-      {/* Number */}
-      <RibbonGroup label="Number" className="min-w-[180px]">
+      {/* ── 4. Number ─────────────────────────────────────────── */}
+      <RibbonGroup label="Number">
         <div className="flex flex-col gap-0.5">
           <NumberFormatSelector value={activeFormatting.numberFormat} onChange={setNumberFormat} />
           <div className="flex items-center gap-0.5">
-            <RibbonButton label="Currency" icon={<DollarSign className="h-3.5 w-3.5" />} onClick={() => setNumberFormat('currency')} />
-            <RibbonButton label="Percent" icon={<Percent className="h-3.5 w-3.5" />} onClick={() => setNumberFormat('percentage')} />
-            <RibbonButton label="Comma style" icon={<span className="text-[10px] font-semibold">,</span>} onClick={() => setNumberFormat('number')} />
+            <RibbonButton label="Accounting Format"  icon={<DollarSign className="h-3.5 w-3.5" />} active={activeFormatting.numberFormat === 'currency' || activeFormatting.numberFormat === 'accounting'} onClick={() => setNumberFormat('accounting')} />
+            <RibbonButton label="Percent Style"       shortcut="Ctrl+Shift+%" icon={<Percent className="h-3.5 w-3.5" />} active={activeFormatting.numberFormat === 'percentage'} onClick={() => setNumberFormat('percentage')} />
+            <RibbonButton label="Comma Style"          icon={<span className="text-[12px] font-semibold leading-none">,</span>} active={activeFormatting.numberFormat === 'number'} onClick={() => setNumberFormat('number')} />
+            <RibbonButton label="Increase Decimal"    icon={<span className="text-[10px] leading-none">.0&rarr;.00</span>} onClick={increaseDecimal} />
+            <RibbonButton label="Decrease Decimal"    icon={<span className="text-[10px] leading-none">.00&rarr;.0</span>} onClick={decreaseDecimal} />
           </div>
         </div>
       </RibbonGroup>
 
-      {/* Styles */}
-      <RibbonGroup label="Styles" className="min-w-[160px]">
-        <RibbonLargeButton
-          label="Conditional"
-          icon={<Palette className="text-purple-500" />}
-          onClick={props.onConditionalFormatting}
-          showCaret
-        />
-        <RibbonLargeButton
-          label="Format Table"
-          icon={<Table className="text-blue-500" />}
-          onClick={props.onValidation}
-          showCaret
+      {/* ── 5. Styles ─────────────────────────────────────────── */}
+      <RibbonGroup label="Styles">
+        <CFDropdownMenu onOpenManageRules={props.onConditionalFormatting} />
+        <FormatAsTableDropdown />
+        <CellStylesDropdown />
+      </RibbonGroup>
+
+      {/* ── 6. Cells ──────────────────────────────────────────── */}
+      <RibbonGroup label="Cells">
+        <CellsGroup
+          onInsertRow={props.onInsertRow}
+          onDeleteRow={props.onDeleteRow}
+          onInsertSheet={props.onInsertSheet}
+          onProtectedRanges={props.onProtectedRanges}
         />
       </RibbonGroup>
 
-      {/* Cells */}
-      <RibbonGroup label="Cells" className="min-w-[140px]">
+      {/* ── 7. Editing ────────────────────────────────────────── */}
+      <RibbonGroup label="Editing" className="border-r-0">
+        {/* AutoSum dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              title="AutoSum"
+              className="flex h-[68px] w-[58px] flex-col items-center justify-center gap-0.5 rounded px-1 py-1 text-[11px] text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+              <Sigma className="h-6 w-6 text-orange-500" />
+              <span className="flex items-center gap-0.5 leading-tight">
+                AutoSum <ChevronDown className="h-3 w-3 text-zinc-400" />
+              </span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onSelect={() => props.onAutoSum?.()}>Sum</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => applyAutoSumOp('AVERAGE')}>Average</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => applyAutoSumOp('COUNT')}>Count Numbers</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => applyAutoSumOp('MAX')}>Max</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => applyAutoSumOp('MIN')}>Min</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={ribbonStub('More Functions')}>More Functions…</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <div className="flex flex-col gap-0.5">
-          <RibbonButton label="Insert row below" icon={<Plus className="h-3.5 w-3.5" />} onClick={props.onInsertRow} />
-          <RibbonButton label="Delete row" icon={<Minus className="h-3.5 w-3.5" />} onClick={props.onDeleteRow} />
-          <button
-            type="button"
-            onClick={props.onClearFormatting}
-            className="flex h-[26px] items-center gap-1 rounded px-1.5 text-[11px] text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
-          >
-            <Eraser className="h-3.5 w-3.5" />
-            <span>Clear</span>
-          </button>
+          {/* Fill dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className="flex h-[22px] items-center gap-1 rounded px-1.5 text-[11px] text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800">
+                <ArrowDownNarrowWide className="h-3.5 w-3.5" />
+                Fill
+                <ChevronDown className="h-3 w-3 text-zinc-400" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem onSelect={fillDown}>Down</DropdownMenuItem>
+              <DropdownMenuItem onSelect={fillRight}>Right</DropdownMenuItem>
+              <DropdownMenuItem onSelect={fillUp}>Up</DropdownMenuItem>
+              <DropdownMenuItem onSelect={fillLeft}>Left</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={fillSeries}>Series…</DropdownMenuItem>
+              <DropdownMenuItem onSelect={ribbonStub('Flash Fill')}>Flash Fill</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {/* Clear dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className="flex h-[22px] items-center gap-1 rounded px-1.5 text-[11px] text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800">
+                <Eraser className="h-3.5 w-3.5" />
+                Clear
+                <ChevronDown className="h-3 w-3 text-zinc-400" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem onSelect={clearAll}>Clear All</DropdownMenuItem>
+              <DropdownMenuItem onSelect={props.onClearFormatting}>Clear Formats</DropdownMenuItem>
+              <DropdownMenuItem onSelect={clearContents}>Clear Contents</DropdownMenuItem>
+              <DropdownMenuItem onSelect={clearComments}>Clear Comments</DropdownMenuItem>
+              <DropdownMenuItem onSelect={clearHyperlinks}>Clear Hyperlinks</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
-      </RibbonGroup>
-
-      {/* Editing */}
-      <RibbonGroup label="Editing" className="min-w-[180px] border-r-0">
-        <RibbonLargeButton
-          label="AutoSum"
-          icon={<Sigma className="text-orange-500" />}
-          onClick={props.onAutoSum}
-          showCaret
-        />
-        <div className="flex flex-col gap-0.5">
-          <button
-            type="button"
-            onClick={props.onSortAsc}
-            title="Sort A → Z"
-            className="flex h-[26px] items-center gap-1 rounded px-1.5 text-[11px] text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
-          >
-            <ArrowDownAZ className="h-3.5 w-3.5" />
-            <span>Sort A→Z</span>
-          </button>
-          <button
-            type="button"
-            onClick={props.onSortDesc}
-            title="Sort Z → A"
-            className="flex h-[26px] items-center gap-1 rounded px-1.5 text-[11px] text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
-          >
-            <ArrowUpAZ className="h-3.5 w-3.5" />
-            <span>Sort Z→A</span>
-          </button>
-          <button
-            type="button"
-            onClick={props.onFilter}
-            title="Create filter"
-            className="flex h-[26px] items-center gap-1 rounded px-1.5 text-[11px] text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
-          >
-            <Filter className="h-3.5 w-3.5" />
-            <span>Filter</span>
-          </button>
-          <button
-            type="button"
-            onClick={props.onFind}
-            title="Find & replace (Ctrl+F)"
-            className="flex h-[26px] items-center gap-1 rounded px-1.5 text-[11px] text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
-          >
-            <Search className="h-3.5 w-3.5" />
-            <span>Find</span>
-          </button>
+        {/* Sort & Filter dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              title="Sort & Filter"
+              className="flex h-[68px] w-[60px] flex-col items-center justify-center gap-0.5 rounded px-1 py-1 text-[11px] text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+              <ArrowUpDown className="h-6 w-6" />
+              <span className="flex flex-col items-center leading-[1.05]">
+                <span>Sort &amp;</span>
+                <span className="flex items-center gap-0.5">Filter <ChevronDown className="h-3 w-3 text-zinc-400" /></span>
+              </span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onSelect={props.onSortAsc}>Sort A → Z</DropdownMenuItem>
+            <DropdownMenuItem onSelect={props.onSortDesc}>Sort Z → A</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => props.onCustomSort?.()}>Custom Sort…</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={props.onFilter}>Filter</DropdownMenuItem>
+            <DropdownMenuItem onSelect={clearFilter}>Clear</DropdownMenuItem>
+            <DropdownMenuItem onSelect={reapplyFilter}>Reapply</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        {/* Find & Select dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              title="Find & Select"
+              className="flex h-[68px] w-[60px] flex-col items-center justify-center gap-0.5 rounded px-1 py-1 text-[11px] text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+              <Search className="h-6 w-6" />
+              <span className="flex flex-col items-center leading-[1.05]">
+                <span>Find &amp;</span>
+                <span className="flex items-center gap-0.5">Select <ChevronDown className="h-3 w-3 text-zinc-400" /></span>
+              </span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onSelect={props.onFind}>Find…</DropdownMenuItem>
+            <DropdownMenuItem onSelect={props.onFind}>Replace…</DropdownMenuItem>
+            <DropdownMenuItem onSelect={goToDialog}>Go To…</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={selectCellsWithFormulas}>Formulas</DropdownMenuItem>
+            <DropdownMenuItem onSelect={selectCellsWithComments}>Comments</DropdownMenuItem>
+            <DropdownMenuItem onSelect={selectCellsWithCF}>Conditional Formatting</DropdownMenuItem>
+            <DropdownMenuItem onSelect={selectCellsWithConstants}>Constants</DropdownMenuItem>
+            <DropdownMenuItem onSelect={selectCellsWithValidation}>Data Validation</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        {/* History — Undo/Redo (compact) */}
+        <div className="ml-1 flex flex-col gap-0.5 border-l border-zinc-200 pl-2 dark:border-zinc-700">
+          <RibbonButton label="Undo" shortcut="Ctrl+Z" icon={<Undo2 className="h-3.5 w-3.5" />} disabled={!gridInstance} onClick={() => gridInstance?.handleUndo()} />
+          <RibbonButton label="Redo" shortcut="Ctrl+Y" icon={<Redo2 className="h-3.5 w-3.5" />} disabled={!gridInstance} onClick={() => gridInstance?.handleRedo()} />
+          <RibbonButton label="Sort A→Z" icon={<ArrowDownAZ className="h-3.5 w-3.5" />} onClick={props.onSortAsc} />
+          <RibbonButton label="Filter"   icon={<FilterIcon className="h-3.5 w-3.5" />} onClick={props.onFilter} />
         </div>
       </RibbonGroup>
     </div>

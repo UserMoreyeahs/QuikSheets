@@ -1,5 +1,10 @@
 'use client'
 
+// Patch @formulajs/formulajs with modern Excel functions (XLOOKUP, FILTER, etc.).
+// Must run BEFORE FortuneSheet's dynamic import resolves so its formula parser
+// picks up the new functions.
+import '@/lib/formulajsPatches'
+
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Network, Upload, ChevronLeft, ChevronRight } from 'lucide-react'
@@ -14,6 +19,7 @@ import { createWorkbookAction } from '@/features/workbook/actions'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 import {
   createSheetFromImportedData,
+  createSheetFromImportedDataWithFidelity,
   getCellFormulaBarValue,
   getCellFromSheet,
   getCellDisplayValue,
@@ -24,6 +30,7 @@ import { createDefaultSheet } from '@/lib/defaultSheet'
 import { SpreadsheetGrid } from '@/features/grid'
 import { FormulaBar } from '@/features/formula-bar'
 import { useFormattingShortcuts } from '@/features/toolbar'
+import { useExcelKeyboardShortcuts } from '@/features/toolbar/hooks/useExcelKeyboardShortcuts'
 import { Ribbon } from '@/features/ribbon/components/Ribbon'
 import { StatusBar } from '@/features/ribbon/components/StatusBar'
 import { SheetTabsBar } from '@/features/sheets'
@@ -34,7 +41,7 @@ import { DataValidation } from '@/features/grid/components/DataValidation'
 import { ImportModal } from '@/features/grid/components/ImportModal'
 import { ExportMenu } from '@/features/grid/components/ExportMenu'
 import { SaveStatus } from '@/features/grid/components/SaveStatus'
-import { exportToCSV, exportToExcel, exportToPDF } from '@/features/grid/utils/exportUtils'
+import { exportToCSV, exportToExcelFidelity, exportToPDF } from '@/features/grid/utils/exportUtils'
 import { DependencyMap, useDependencyMap, type DependencyMapCellTarget } from '@/features/dependency-map'
 import { CellHistoryPanel, useCellHistory } from '@/features/cell-history'
 import { NLFilterBar, type NLFilterColumnSchema, type NLFilterSampleRow } from '@/features/nl-filter'
@@ -42,6 +49,15 @@ import { ColumnDNAPanel, useColumnDNA } from '@/features/column-dna'
 import { ScratchpadPanel, ScratchpadToggle, useScratchpad } from '@/features/scratchpad'
 import { RowSummarizer, useRowSummarizer } from '@/features/row-summarizer'
 import { ConditionalFormatting, applyAllCFRules } from '@/features/conditional-formatting'
+import { InsertFunctionDialog } from '@/features/formula-engine/components/InsertFunctionDialog'
+import { useInsertFunctionStore } from '@/features/formula-engine/stores/insertFunctionStore'
+import { NameManagerDialog } from '@/features/named-ranges/NameManagerDialog'
+import { useNamedRangesStore } from '@/features/named-ranges/namedRangesStore'
+import { useCFStore } from '@/features/conditional-formatting/store/cfStore'
+import { applyRulesToSheet, evaluateRules } from '@/features/conditional-formatting/utils/cfEvaluator'
+import * as cellOps from '@/features/ribbon/utils/cellOps'
+import { installHyperlinkFollow } from '@/features/ribbon/utils/cellOps'
+import { usePrintSettingsStore } from '@/features/page-layout/printSettingsStore'
 import { CleanDataPanel } from '@/features/data-cleaning/components/CleanDataPanel'
 import { useCleanDataStore } from '@/features/data-cleaning/store/cleanDataStore'
 import { ChartBuilder } from '@/features/charts/components/ChartBuilder'
@@ -149,7 +165,33 @@ export default function SheetPage() {
   const [showCommandPalette, setShowCommandPalette] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [showCF, setShowCF] = useState(false)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  // Sidebar starts collapsed on small viewports (< 768px) to give the grid more room.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.innerWidth < 768
+  })
+  // Auto-collapse the sidebar on viewport resize crossing the breakpoint.
+  useEffect(() => {
+    function onResize() {
+      if (window.innerWidth < 768) setSidebarCollapsed(true)
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  // Install Ctrl+Click hyperlink-follow on the canvas. Idempotent.
+  useEffect(() => {
+    installHyperlinkFollow()
+  }, [])
+
+  // Listen for quiksheets:toggle-map (fired by Trace Precedents/Dependents).
+  // Routed through a CustomEvent so cellOps doesn't need a direct dependency
+  // on the page-component's state.
+  useEffect(() => {
+    function handle() { toggleMap() }
+    window.addEventListener('quiksheets:toggle-map', handle)
+    return () => window.removeEventListener('quiksheets:toggle-map', handle)
+  }, [toggleMap])
   const [showFormulaBarUI, setShowFormulaBarUI] = useState(true)
   const [showGridlines, setShowGridlines] = useState(true)
   const [zoomLevel, setZoomLevel] = useState(1.0)
@@ -231,6 +273,13 @@ export default function SheetPage() {
         versionHistory: { open: () => void; close: () => void }
         share:        { open: () => void; close: () => void }
         protectedRanges: { open: () => void; close: () => void }
+        cf: typeof useCFStore.getState
+        cfDebug: {
+          evaluateRules: typeof evaluateRules
+          applyRulesToSheet: typeof applyRulesToSheet
+        }
+        cellOps: typeof cellOps
+        printSettings: typeof usePrintSettingsStore.getState
       }
     }
 
@@ -274,6 +323,10 @@ export default function SheetPage() {
         open:  () => useProtectedRangesUiStore.getState().open(),
         close: () => useProtectedRangesUiStore.getState().close(),
       },
+      cf: useCFStore.getState,
+      cfDebug: { evaluateRules, applyRulesToSheet },
+      cellOps,
+      printSettings: usePrintSettingsStore.getState,
     }
 
     return () => {
@@ -469,7 +522,7 @@ export default function SheetPage() {
         id: 'export-excel',
         label: 'Export Excel',
         category: 'Actions',
-        onExecute: () => exportToExcel(getAllSheetsData(), workbookName),
+        onExecute: () => exportToExcelFidelity(gridSheets, workbookName),
       },
       {
         id: 'export-csv',
@@ -521,7 +574,7 @@ export default function SheetPage() {
     addSheet,
     clearFilters,
     getActiveSheetData,
-    getAllSheetsData,
+    gridSheets,
     handleAiFormulaCommand,
     handleQuickSort,
     resolvedTheme,
@@ -634,7 +687,16 @@ export default function SheetPage() {
             })
             importedGridSheets.set(
               firstTab.id,
-              createSheetFromImportedData(sheetName, firstTab.id, firstImportedSheet.data, 0, true)
+              firstImportedSheet.fidelity
+                ? createSheetFromImportedDataWithFidelity(
+                    sheetName,
+                    firstTab.id,
+                    firstImportedSheet.data,
+                    firstImportedSheet.fidelity,
+                    0,
+                    true,
+                  )
+                : createSheetFromImportedData(sheetName, firstTab.id, firstImportedSheet.data, 0, true)
             )
             activeImportedSheetId = firstTab.id
             importIndex = 1
@@ -659,7 +721,16 @@ export default function SheetPage() {
 
         importedGridSheets.set(
           newTab.id,
-          createSheetFromImportedData(newTab.name, newTab.id, importedSheet.data, newTab.order, false)
+          importedSheet.fidelity
+            ? createSheetFromImportedDataWithFidelity(
+                newTab.name,
+                newTab.id,
+                importedSheet.data,
+                importedSheet.fidelity,
+                newTab.order,
+                false,
+              )
+            : createSheetFromImportedData(newTab.name, newTab.id, importedSheet.data, newTab.order, false)
         )
 
         if (!activeImportedSheetId) {
@@ -723,40 +794,59 @@ export default function SheetPage() {
     setEditingCell(selectedCell)
   }, [selectedCell, activeSheetMatrix, setFormulaBarValue, setEditingCell])
 
+  // ── Excel-faithful keyboard shortcuts (F2, Ctrl+;, Ctrl+:, Ctrl+Shift+L, Alt+=, Ctrl+P) ──
+  useExcelKeyboardShortcuts({
+    onToggleFilter: () => setShowFilter(true),
+    onAutoSum: handleAutoSum,
+    onPrint: () => exportToPDF(getActiveSheetData(), workbookName),
+  })
+
   // ── Insert / Delete Row ──────────────────────────────────────────────────
   const handleInsertRow = useCallback(() => {
     if (!selectedCell) {
       toast.message('Select a cell to insert a row below it')
       return
     }
-    const insertAfter = selectedCell.row
-    const updatedSheets = gridSheets.map((s) => {
-      if (s.id !== activeSheetId) return s
-      const newCelldata = (s.celldata ?? []).map((cell) =>
-        cell.r > insertAfter ? { ...cell, r: cell.r + 1 } : cell
-      )
-      return { ...s, celldata: newCelldata }
-    })
-    replaceGridSheets(updatedSheets)
-    toast.success(`Row ${insertAfter + 2} inserted`)
-  }, [selectedCell, gridSheets, activeSheetId, replaceGridSheets])
+    if (gridInstance) {
+      // Use FortuneSheet API for proper undo support
+      gridInstance.insertRowOrColumn('row', selectedCell.row, 1, 'rightbottom')
+      toast.success(`Row ${selectedCell.row + 2} inserted`)
+    } else {
+      const insertAfter = selectedCell.row
+      const updatedSheets = gridSheets.map((s) => {
+        if (s.id !== activeSheetId) return s
+        const newCelldata = (s.celldata ?? []).map((cell) =>
+          cell.r > insertAfter ? { ...cell, r: cell.r + 1 } : cell
+        )
+        return { ...s, celldata: newCelldata }
+      })
+      replaceGridSheets(updatedSheets)
+      toast.success(`Row ${insertAfter + 2} inserted`)
+    }
+  }, [selectedCell, gridInstance, gridSheets, activeSheetId, replaceGridSheets])
 
   const handleDeleteRow = useCallback(() => {
     if (!selectedCell) {
       toast.message('Select a cell to delete its row')
       return
     }
-    const deleteAt = selectedCell.row
-    const updatedSheets = gridSheets.map((s) => {
-      if (s.id !== activeSheetId) return s
-      const newCelldata = (s.celldata ?? [])
-        .filter((cell) => cell.r !== deleteAt)
-        .map((cell) => (cell.r > deleteAt ? { ...cell, r: cell.r - 1 } : cell))
-      return { ...s, celldata: newCelldata }
-    })
-    replaceGridSheets(updatedSheets)
-    toast.success(`Row ${deleteAt + 1} deleted`)
-  }, [selectedCell, gridSheets, activeSheetId, replaceGridSheets])
+    if (gridInstance) {
+      // Use FortuneSheet API for proper undo support
+      gridInstance.deleteRowOrColumn('row', selectedCell.row, selectedCell.row)
+      toast.success(`Row ${selectedCell.row + 1} deleted`)
+    } else {
+      const deleteAt = selectedCell.row
+      const updatedSheets = gridSheets.map((s) => {
+        if (s.id !== activeSheetId) return s
+        const newCelldata = (s.celldata ?? [])
+          .filter((cell) => cell.r !== deleteAt)
+          .map((cell) => (cell.r > deleteAt ? { ...cell, r: cell.r - 1 } : cell))
+        return { ...s, celldata: newCelldata }
+      })
+      replaceGridSheets(updatedSheets)
+      toast.success(`Row ${deleteAt + 1} deleted`)
+    }
+  }, [selectedCell, gridInstance, gridSheets, activeSheetId, replaceGridSheets])
 
   // ── Merge / Unmerge cells ────────────────────────────────────────────────
   type MergeCapable = {
@@ -1003,7 +1093,7 @@ export default function SheetPage() {
               <button
                 onClick={() => setIsEditingName(true)}
                 title="Click to rename"
-                className="max-w-[360px] truncate rounded px-1.5 py-0.5 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                className="max-w-[180px] truncate rounded px-1.5 py-0.5 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-800 sm:max-w-[260px] md:max-w-[360px]"
               >
                 {workbookName}
               </button>
@@ -1012,13 +1102,15 @@ export default function SheetPage() {
             <SaveStatus workbookName={workbookName} workbookData={gridSheets} />
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
             <button
               onClick={() => setShowImport(true)}
-              className="flex items-center gap-1 rounded-md px-2.5 py-1 text-xs text-zinc-600 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              title="Import"
+              aria-label="Import"
+              className="flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-zinc-600 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 sm:px-2.5"
             >
               <Upload className="h-3 w-3" aria-hidden="true" />
-              Import
+              <span className="hidden sm:inline">Import</span>
             </button>
 
             <ExportMenu
@@ -1027,20 +1119,21 @@ export default function SheetPage() {
               getAllSheetsData={getAllSheetsData}
             />
 
-            <div className="mx-1 h-4 w-px bg-zinc-200 dark:bg-zinc-700" />
+            <div className="mx-1 hidden h-4 w-px bg-zinc-200 dark:bg-zinc-700 sm:block" />
 
             <button
               onClick={toggleMap}
               title="Dependency map (Ctrl+M)"
+              aria-label="Dependency Map"
               className={[
-                'flex items-center gap-1 rounded-md px-2.5 py-1 text-xs transition-colors',
+                'flex items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors sm:px-2.5',
                 showMap
                   ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
                   : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800',
               ].join(' ')}
             >
               <Network className="h-3 w-3" aria-hidden="true" />
-              Map
+              <span className="hidden sm:inline">Map</span>
             </button>
 
             <PresenceAvatars />
@@ -1050,17 +1143,20 @@ export default function SheetPage() {
 
         <Ribbon
           handlers={{
+            workbookId,
             // File
             onNewWorkbook: handleNewWorkbookFromMenu,
             onOpenDashboard: () => router.push('/dashboard'),
             onSaveNow: () => toast.success('Saved'),
             onImport: () => setShowImport(true),
             onExportCSV: () => exportToCSV(getActiveSheetData(), workbookName),
-            onExportXLSX: () => exportToExcel(getAllSheetsData(), workbookName),
+            onExportXLSX: () => exportToExcelFidelity(gridSheets, workbookName),
             onExportPDF: () => exportToPDF(getActiveSheetData(), workbookName),
+            onPrint: () => exportToPDF(getActiveSheetData(), workbookName),
             // Home
             onSortAsc: () => handleQuickSort('asc'),
             onSortDesc: () => handleQuickSort('desc'),
+            onCustomSort: () => setShowSort(true),
             onFilter: () => setShowFilter(true),
             onFind: () => setShowFindReplace(true),
             onConditionalFormatting: () => setShowCF(true),
@@ -1192,6 +1288,15 @@ export default function SheetPage() {
       />
       <KeyboardShortcuts isOpen={showShortcuts} onOpenChange={setShowShortcuts} />
       <ConditionalFormatting isOpen={showCF} onClose={() => setShowCF(false)} />
+      <InsertFunctionDialog
+        open={useInsertFunctionStore((s) => s.open)}
+        onOpenChange={(open) => useInsertFunctionStore.getState().setOpen(open)}
+      />
+      <NameManagerDialog
+        open={useNamedRangesStore((s) => s.dialogOpen)}
+        onOpenChange={(open) => useNamedRangesStore.getState().setDialogOpen(open)}
+        workbookId={workbookId}
+      />
       <ErrorBoundary><CleanDataPanel /></ErrorBoundary>
       <ErrorBoundary><ChartBuilder /></ErrorBoundary>
       <ErrorBoundary><FormBuilder workbookId={workbookId} /></ErrorBoundary>

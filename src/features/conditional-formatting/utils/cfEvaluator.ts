@@ -1,7 +1,31 @@
+/**
+ * Conditional Formatting Evaluator
+ *
+ * Evaluates CF rules against a FortuneSheet `Sheet` object and applies
+ * (or removes) cell-level style patches directly on the sheet data.
+ *
+ * Architecture:
+ *  ┌──────────────┐   rules[]   ┌──────────────────┐  CFCellResult[]
+ *  │  cfStore.ts  │ ──────────▶ │  evaluateRules() │ ──────────────▶ style patches
+ *  └──────────────┘             └──────────────────┘
+ *
+ * Key functions:
+ *  - `evaluateRules(sheet, rules)`        — Returns matching {row,col,format} pairs.
+ *  - `applyRulesToSheet(sheet,rules,bak)` — Clones sheet with CF styles applied.
+ *  - `stripRulesFromSheet(sheet, bak)`    — Reverts CF styles using the backup map.
+ *  - `parseRange(range)`                  — Parses "A1:C10", "A:C", "1:5" → ParsedRange.
+ *  - `validateRange(range)`               — Returns true when parseRange succeeds.
+ *
+ * Visual rules (data bars, color scales, icon sets) are delegated to
+ * `visualCFEvaluator.ts` and their results are merged in `applyRulesToSheet`.
+ */
+
 import type { CFCondition, CFFormat, CFRule, CFBackupCell } from '../types'
 import type { Cell, Sheet } from '@fortune-sheet/core'
 import { getSheetMatrix, cloneSheetWithData } from '@/lib/fortuneSheet'
+import { evaluateDataBar, evaluateColorScale, evaluateIconSet } from './visualCFEvaluator'
 
+/** Row/column bounds (0-based) for a parsed A1-notation range string. */
 export interface ParsedRange {
   startRow: number
   endRow: number
@@ -193,23 +217,149 @@ function evaluateCondition(
       return (counts.get(strVal) ?? 0) === 1
     }
 
+    case 'top_n_percent': {
+      const pct = n ?? 10
+      const nums = rangeValues.map(toNumber).filter((v): v is number => v !== null)
+      if (nums.length === 0) return false
+      const cutoffIdx = Math.max(1, Math.ceil(nums.length * (pct / 100)))
+      const sorted = [...nums].sort((a, b) => b - a)
+      const threshold = sorted[cutoffIdx - 1] ?? sorted[sorted.length - 1]
+      const cellNum = toNumber(cellValue)
+      return cellNum !== null && threshold !== undefined && cellNum >= threshold
+    }
+
+    case 'bottom_n_percent': {
+      const pct = n ?? 10
+      const nums = rangeValues.map(toNumber).filter((v): v is number => v !== null)
+      if (nums.length === 0) return false
+      const cutoffIdx = Math.max(1, Math.ceil(nums.length * (pct / 100)))
+      const sorted = [...nums].sort((a, b) => a - b)
+      const threshold = sorted[cutoffIdx - 1] ?? sorted[sorted.length - 1]
+      const cellNum = toNumber(cellValue)
+      return cellNum !== null && threshold !== undefined && cellNum <= threshold
+    }
+
+    case 'date_occurring': {
+      const cellStr = toString(cellValue)
+      if (cellStr === '') return false
+      const cellDate = new Date(cellStr)
+      if (isNaN(cellDate.getTime())) return false
+
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const cellDay = new Date(cellDate)
+      cellDay.setHours(0, 0, 0, 0)
+      const cellTime = cellDay.getTime()
+
+      const period = condition.datePeriod ?? 'today'
+
+      switch (period) {
+        case 'yesterday': {
+          const yesterday = new Date(today)
+          yesterday.setDate(yesterday.getDate() - 1)
+          return cellTime === yesterday.getTime()
+        }
+        case 'today':
+          return cellTime === today.getTime()
+        case 'tomorrow': {
+          const tomorrow = new Date(today)
+          tomorrow.setDate(tomorrow.getDate() + 1)
+          return cellTime === tomorrow.getTime()
+        }
+        case 'last7Days': {
+          const weekAgo = new Date(today)
+          weekAgo.setDate(weekAgo.getDate() - 7)
+          return cellTime >= weekAgo.getTime() && cellTime <= today.getTime()
+        }
+        case 'lastWeek': {
+          const dayOfWeek = today.getDay()
+          const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+          const thisMonday = new Date(today)
+          thisMonday.setDate(thisMonday.getDate() - mondayOffset)
+          const lastMonday = new Date(thisMonday)
+          lastMonday.setDate(lastMonday.getDate() - 7)
+          const lastSunday = new Date(thisMonday)
+          lastSunday.setDate(lastSunday.getDate() - 1)
+          return cellTime >= lastMonday.getTime() && cellTime <= lastSunday.getTime()
+        }
+        case 'thisWeek': {
+          const dayOfWeek = today.getDay()
+          const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+          const thisMonday = new Date(today)
+          thisMonday.setDate(thisMonday.getDate() - mondayOffset)
+          const thisSunday = new Date(thisMonday)
+          thisSunday.setDate(thisSunday.getDate() + 6)
+          return cellTime >= thisMonday.getTime() && cellTime <= thisSunday.getTime()
+        }
+        case 'nextWeek': {
+          const dayOfWeek = today.getDay()
+          const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+          const thisMonday = new Date(today)
+          thisMonday.setDate(thisMonday.getDate() - mondayOffset)
+          const nextMonday = new Date(thisMonday)
+          nextMonday.setDate(nextMonday.getDate() + 7)
+          const nextSunday = new Date(nextMonday)
+          nextSunday.setDate(nextSunday.getDate() + 6)
+          return cellTime >= nextMonday.getTime() && cellTime <= nextSunday.getTime()
+        }
+        case 'lastMonth': {
+          const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+          const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0)
+          return cellTime >= lastMonthStart.getTime() && cellTime <= lastMonthEnd.getTime()
+        }
+        case 'thisMonth': {
+          const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1)
+          const thisMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+          return cellTime >= thisMonthStart.getTime() && cellTime <= thisMonthEnd.getTime()
+        }
+        case 'nextMonth': {
+          const nextMonthStart = new Date(today.getFullYear(), today.getMonth() + 1, 1)
+          const nextMonthEnd = new Date(today.getFullYear(), today.getMonth() + 2, 0)
+          return cellTime >= nextMonthStart.getTime() && cellTime <= nextMonthEnd.getTime()
+        }
+        default:
+          return false
+      }
+    }
+
     default:
       return false
   }
 }
 
+/** A single cell that matched a CF rule, with the format to apply. */
 export interface CFCellResult {
+  /** 0-based row index. */
   row: number
+  /** 0-based column index. */
   col: number
+  /** Formatting to apply (fill colour, text colour, bold, italic). */
   format: CFFormat
 }
 
-// Returns cells that match any CF rule, with the highest-priority rule's format applied
+/**
+ * Evaluate all standard CF rules against the sheet and return cells that match.
+ *
+ * Rules are evaluated in `priority` order (lowest number = highest priority).
+ * Once a cell is matched by a higher-priority rule, lower-priority rules are
+ * skipped for that cell (first-match-wins, mirroring Excel behaviour).
+ *
+ * Visual rules (data_bar / color_scale / icon_set) are intentionally excluded
+ * here; they are handled by `applyRulesToSheet` via `visualCFEvaluator`.
+ *
+ * @param sheet - The FortuneSheet Sheet object to evaluate.
+ * @param rules - The CF rules stored in cfStore for this sheet.
+ * @returns Array of { row, col, format } for all matching cells.
+ */
 export function evaluateRules(sheet: Sheet, rules: CFRule[]): CFCellResult[] {
   if (rules.length === 0) return []
 
+  // Skip visual CF rules (data_bar, color_scale, icon_set) — they are handled separately
+  const standardRules = rules.filter((r) => !r.kind || r.kind === 'standard')
+  if (standardRules.length === 0) return []
+
   const matrix = getSheetMatrix(sheet)
-  const sorted = [...rules].sort((a, b) => a.priority - b.priority)
+  const sorted = [...standardRules].sort((a, b) => a.priority - b.priority)
   const resultMap = new Map<string, CFCellResult>()
 
   sorted.forEach((rule) => {
@@ -243,7 +393,22 @@ export function evaluateRules(sheet: Sheet, rules: CFRule[]): CFCellResult[] {
   return Array.from(resultMap.values())
 }
 
-// Apply CF results to a sheet, backing up original styles
+/**
+ * Apply all CF rules to a sheet, returning a new cloned Sheet with styles patched.
+ *
+ * The function:
+ * 1. Restores any previously backed-up styles from `existingBackup`.
+ * 2. Evaluates all standard rules via `evaluateRules`.
+ * 3. Evaluates visual rules (data_bar, color_scale, icon_set) separately.
+ * 4. Writes the combined style patches into a cloned Sheet matrix.
+ * 5. Returns the new Sheet + a backup map so styles can be restored later.
+ *
+ * @param sheet          - Original FortuneSheet Sheet object.
+ * @param rules          - All CF rules for this sheet.
+ * @param existingBackup - Backup map from the previous `applyRulesToSheet` call
+ *                         (used to restore styles before re-applying).
+ * @returns `{ sheet, backup }` — patched sheet clone and updated backup map.
+ */
 export function applyRulesToSheet(
   sheet: Sheet,
   rules: CFRule[],
@@ -271,6 +436,8 @@ export function applyRulesToSheet(
     else delete restored.bl
     if ('it' in original) restored.it = original.it
     else delete restored.it
+    if ('m' in original) restored.m = original.m
+    else delete restored.m
     restoredMatrix[r]![c] = restored
   })
 
@@ -278,30 +445,75 @@ export function applyRulesToSheet(
   const newBackup: Record<string, CFBackupCell> = {}
   const resultMatrix = restoredMatrix.map((row) => [...(row ?? [])])
 
-  cfResults.forEach(({ row, col, format }) => {
+  // Helper to back up and patch a cell
+  function backupAndPatch(row: number, col: number, patchFn: (patched: Record<string, unknown>) => void) {
     if (!resultMatrix[row]) resultMatrix[row] = []
     const existing = resultMatrix[row]![col] ?? {}
     const key = `${row}:${col}`
 
-    // Save original before applying (use conditional spread to satisfy exactOptionalPropertyTypes)
-    const origBg = (existing as Record<string, unknown>).bg as string | undefined
-    const origFc = (existing as Record<string, unknown>).fc as string | undefined
-    const origBl = (existing as Record<string, unknown>).bl as 0 | 1 | undefined
-    const origIt = (existing as Record<string, unknown>).it as 0 | 1 | undefined
-    newBackup[key] = {
-      ...(origBg !== undefined ? { bg: origBg } : {}),
-      ...(origFc !== undefined ? { fc: origFc } : {}),
-      ...(origBl !== undefined ? { bl: origBl } : {}),
-      ...(origIt !== undefined ? { it: origIt } : {}),
+    // Save original before applying (only if not already backed up)
+    if (!(key in newBackup)) {
+      const origBg = (existing as Record<string, unknown>).bg as string | undefined
+      const origFc = (existing as Record<string, unknown>).fc as string | undefined
+      const origBl = (existing as Record<string, unknown>).bl as 0 | 1 | undefined
+      const origIt = (existing as Record<string, unknown>).it as 0 | 1 | undefined
+      const origM = (existing as Record<string, unknown>).m as string | undefined
+      newBackup[key] = {
+        ...(origBg !== undefined ? { bg: origBg } : {}),
+        ...(origFc !== undefined ? { fc: origFc } : {}),
+        ...(origBl !== undefined ? { bl: origBl } : {}),
+        ...(origIt !== undefined ? { it: origIt } : {}),
+        ...(origM !== undefined ? { m: origM } : {}),
+      }
     }
 
     const patched: Record<string, unknown> = { ...existing }
-    if (format.fill !== undefined) patched.bg = format.fill
-    if (format.color !== undefined) patched.fc = format.color
-    if (format.bold !== undefined) patched.bl = format.bold ? 1 : 0
-    if (format.italic !== undefined) patched.it = format.italic ? 1 : 0
-
+    patchFn(patched)
     resultMatrix[row]![col] = patched
+  }
+
+  // Apply standard CF results
+  cfResults.forEach(({ row, col, format }) => {
+    backupAndPatch(row, col, (patched) => {
+      if (format.fill !== undefined) patched.bg = format.fill
+      if (format.color !== undefined) patched.fc = format.color
+      if (format.bold !== undefined) patched.bl = format.bold ? 1 : 0
+      if (format.italic !== undefined) patched.it = format.italic ? 1 : 0
+    })
+  })
+
+  // Apply visual CF rules (data bars, color scales, icon sets)
+  const visualRules = rules.filter((r) => r.kind && r.kind !== 'standard')
+  visualRules.forEach((rule) => {
+    if (rule.kind === 'data_bar' && rule.dataBar) {
+      const dbResults = evaluateDataBar(sheet, rule.range, rule.dataBar)
+      for (const [key, { bg }] of dbResults) {
+        const [rStr, cStr] = key.split(':')
+        const row = parseInt(rStr ?? '0')
+        const col = parseInt(cStr ?? '0')
+        backupAndPatch(row, col, (patched) => { patched.bg = bg })
+      }
+    } else if (rule.kind === 'color_scale' && rule.colorScale) {
+      const csResults = evaluateColorScale(sheet, rule.range, rule.colorScale)
+      for (const [key, { bg }] of csResults) {
+        const [rStr, cStr] = key.split(':')
+        const row = parseInt(rStr ?? '0')
+        const col = parseInt(cStr ?? '0')
+        backupAndPatch(row, col, (patched) => { patched.bg = bg })
+      }
+    } else if (rule.kind === 'icon_set' && rule.iconSet) {
+      const isResults = evaluateIconSet(sheet, rule.range, rule.iconSet)
+      for (const [key, { icon }] of isResults) {
+        const [rStr, cStr] = key.split(':')
+        const row = parseInt(rStr ?? '0')
+        const col = parseInt(cStr ?? '0')
+        backupAndPatch(row, col, (patched) => {
+          // Prepend icon to display string while preserving value
+          const currentM = String(patched.m ?? patched.v ?? '')
+          patched.m = `${icon} ${currentM}`
+        })
+      }
+    }
   })
 
   const nextSheet = cloneSheetWithData(sheet, resultMatrix as Cell[][])
@@ -309,7 +521,14 @@ export function applyRulesToSheet(
   return { sheet: nextSheet, backup: newBackup }
 }
 
-// Strip CF styles from sheet (restore from backup)
+/**
+ * Restore original cell styles by reverting the CF backup map.
+ * Use this when all CF rules for a sheet are deleted.
+ *
+ * @param sheet  - The sheet that currently has CF styles applied.
+ * @param backup - The backup map produced by the last `applyRulesToSheet` call.
+ * @returns A new cloned Sheet with all CF styles reverted.
+ */
 export function stripRulesFromSheet(sheet: Sheet, backup: Record<string, CFBackupCell>): Sheet {
   if (Object.keys(backup).length === 0) return sheet
 
@@ -333,6 +552,8 @@ export function stripRulesFromSheet(sheet: Sheet, backup: Record<string, CFBacku
     else delete restored.bl
     if ('it' in original) restored.it = original.it
     else delete restored.it
+    if ('m' in original) restored.m = original.m
+    else delete restored.m
 
     resultMatrix[r]![c] = restored
   })
@@ -340,7 +561,12 @@ export function stripRulesFromSheet(sheet: Sheet, backup: Record<string, CFBacku
   return cloneSheetWithData(sheet, resultMatrix as Cell[][])
 }
 
-// Validate that a range string is parseable
+/**
+ * Quick sanity-check for a range string before it is stored in a CF rule.
+ *
+ * @param range - A1-notation string like "A1:C10", "A:C", or "1:5".
+ * @returns `true` if the range can be parsed; `false` otherwise.
+ */
 export function validateRange(range: string): boolean {
   if (!range.trim()) return false
   try {

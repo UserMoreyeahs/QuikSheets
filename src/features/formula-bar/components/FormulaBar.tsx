@@ -118,54 +118,93 @@ export function FormulaBar() {
     setTimeout(() => setShowAutocomplete(false), 150)
   }, [setEditingCell])
 
+  /** Commit the current formula-bar value to the cell and return true on success */
+  const commitValue = useCallback((): boolean => {
+    if (!selectedCell || !gridInstance) return false
+
+    const validationKey = `${activeSheetId}:${selectedCell.row}:${selectedCell.col}`
+    const validation = validationRules[validationKey]
+
+    if (
+      !isValidValue(localValue, validation, {
+        sheets: gridSheets,
+        sheetIndex: selectedCell.sheet,
+        row: selectedCell.row,
+        col: selectedCell.col,
+      })
+    ) {
+      window.alert(validation?.errorMessage || 'The value does not match the validation rule.')
+      return false
+    }
+
+    gridInstance.setCellValue(selectedCell.row, selectedCell.col, localValue, {
+      id: activeSheetId,
+    })
+    setFormulaBarValue(localValue)
+    setIsFocused(false)
+    setEditingCell(null)
+    inputRef.current?.blur()
+    return true
+  }, [
+    activeSheetId,
+    gridSheets,
+    gridInstance,
+    localValue,
+    selectedCell,
+    setFormulaBarValue,
+    setEditingCell,
+    validationRules,
+  ])
+
+  /** Move FortuneSheet selection by delta (Excel navigation after commit) */
+  const moveSelection = useCallback(
+    (dRow: number, dCol: number) => {
+      if (!selectedCell || !gridInstance) return
+      const nextRow = Math.max(0, selectedCell.row + dRow)
+      const nextCol = Math.max(0, selectedCell.col + dCol)
+      gridInstance.setSelection(
+        [{ row: [nextRow, nextRow], column: [nextCol, nextCol] }],
+        { id: activeSheetId }
+      )
+    },
+    [selectedCell, gridInstance, activeSheetId]
+  )
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => {
+      // ── Escape: cancel edit, restore original value ──
       if (e.key === 'Escape') {
         setShowAutocomplete(false)
         setLocalValue(formulaBarValue)
         setIsFocused(false)
         setEditingCell(null)
         inputRef.current?.blur()
+        return
       }
 
-      if (e.key === 'Enter' && !shouldShowAutocomplete) {
-        if (selectedCell && gridInstance) {
-          const validationKey = `${activeSheetId}:${selectedCell.row}:${selectedCell.col}`
-          const validation = validationRules[validationKey]
-
-          if (
-            !isValidValue(localValue, validation, {
-              sheets: gridSheets,
-              sheetIndex: selectedCell.sheet,
-              row: selectedCell.row,
-              col: selectedCell.col,
-            })
-          ) {
-            window.alert(validation?.errorMessage || 'The value does not match the validation rule.')
-            return
-          }
-
-          gridInstance.setCellValue(selectedCell.row, selectedCell.col, localValue, {
-            id: activeSheetId,
-          })
+      // ── Tab / Shift+Tab: commit + move right/left (Excel) ──
+      if (e.key === 'Tab') {
+        e.preventDefault()
+        if (commitValue()) {
+          moveSelection(0, e.shiftKey ? -1 : 1)
         }
-        setFormulaBarValue(localValue)
-        setIsFocused(false)
-        setEditingCell(null)
-        inputRef.current?.blur()
+        return
+      }
+
+      // ── Enter / Shift+Enter: commit + move down/up (Excel) ──
+      if (e.key === 'Enter' && !shouldShowAutocomplete) {
+        e.preventDefault()
+        if (commitValue()) {
+          moveSelection(e.shiftKey ? -1 : 1, 0)
+        }
       }
     },
     [
-      activeSheetId,
+      commitValue,
       formulaBarValue,
-      gridSheets,
-      gridInstance,
-      localValue,
-      selectedCell,
-      setFormulaBarValue,
+      moveSelection,
       setEditingCell,
       shouldShowAutocomplete,
-      validationRules,
     ]
   )
 
@@ -226,7 +265,7 @@ export function FormulaBar() {
         onKeyDown={handleKeyDown}
         placeholder="Enter value or formula..."
         className={cn(
-          'h-full flex-1 bg-white px-3 font-mono text-sm',
+          'formula-bar-input h-full flex-1 bg-white px-3 font-mono text-sm',
           'text-zinc-800 outline-none placeholder:text-zinc-300 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-600',
           'transition-colors duration-100',
           isFocused && 'bg-blue-50 dark:bg-blue-500/10'

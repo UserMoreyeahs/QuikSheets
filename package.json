@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node -e \"require('fs').rmSync(require('path').join(__dirname,'.next'),{recursive:true,force:true});console.log('[predev] cleared .next')\"",
     "dev": "next dev",
+    "dev:fresh": "node -e \"require('fs').rmSync(require('path').join(__dirname,'.next'),{recursive:true,force:true})\" && next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
@@ -50,6 +52,7 @@
     "tailwind-merge": "^3.5.0",
     "tw-animate-css": "^1.4.0",
     "xlsx": "^0.18.5",
+    "xlsx-js-style": "^1.2.0",
     "zod": "^3.23.8",
     "zustand": "^5.0.12"
   },

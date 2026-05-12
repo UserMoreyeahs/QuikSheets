@@ -157,3 +157,84 @@ export function createSheetFromImportedData(
     data,
   }
 }
+
+/** Per-cell metadata captured by the xlsx importer. Mirrors ImportFidelity. */
+export interface SheetFidelity {
+  formulas: Record<string, string>
+  numberFormats: Record<string, string>
+  merges: Array<{ r: number; c: number; rs: number; cs: number }>
+  colWidths: Record<number, number>
+  rowHeights: Record<number, number>
+}
+
+/**
+ * Convert an imported worksheet (values + fidelity metadata) to a FortuneSheet
+ * sheet with formulas, number formats, merges, column widths, and row heights
+ * applied. Used by the import flow when the source xlsx had any of those.
+ */
+export function createSheetFromImportedDataWithFidelity(
+  name: string,
+  id: string,
+  rows: (string | number | boolean | null)[][],
+  fidelity: SheetFidelity,
+  order: number,
+  isActive: boolean,
+): Sheet {
+  const data: CellMatrix = rows.map((row) => row.map((value) => createCell(value)))
+  const maxColumns = data.reduce((max, row) => Math.max(max, row.length), 0)
+
+  // Apply formulas (preserve existing value as the cached result)
+  for (const [key, formula] of Object.entries(fidelity.formulas)) {
+    const [rStr, cStr] = key.split(':')
+    const r = parseInt(rStr ?? '0', 10)
+    const c = parseInt(cStr ?? '0', 10)
+    if (!data[r]) continue
+    const existing = data[r]![c] ?? null
+    const v = existing && typeof existing === 'object' && 'v' in existing ? existing.v : undefined
+    data[r]![c] = {
+      ...(existing ?? {}),
+      f: formula,
+      ...(v != null ? { v } : {}),
+    } as Cell
+  }
+
+  // Apply number formats
+  for (const [key, fa] of Object.entries(fidelity.numberFormats)) {
+    const [rStr, cStr] = key.split(':')
+    const r = parseInt(rStr ?? '0', 10)
+    const c = parseInt(cStr ?? '0', 10)
+    if (!data[r]) continue
+    const existing = data[r]![c] ?? {}
+    data[r]![c] = {
+      ...existing,
+      ct: { fa, t: 'n' },
+    } as Cell
+  }
+
+  // FortuneSheet merge format: keyed by 'r_c' string
+  const mergeConfig: Record<string, { r: number; c: number; rs: number; cs: number }> = {}
+  for (const m of fidelity.merges) {
+    mergeConfig[`${m.r}_${m.c}`] = m
+  }
+
+  const columnlen: Record<number, number> = {}
+  for (const [c, px] of Object.entries(fidelity.colWidths)) columnlen[Number(c)] = px
+  const rowlen: Record<number, number> = {}
+  for (const [r, px] of Object.entries(fidelity.rowHeights)) rowlen[Number(r)] = px
+
+  return {
+    id,
+    name,
+    order,
+    status: isActive ? 1 : 0,
+    hide: 0,
+    row: Math.max(DEFAULT_ROWS, data.length, 1),
+    column: Math.max(DEFAULT_COLS, maxColumns, 1),
+    data,
+    config: {
+      ...(Object.keys(mergeConfig).length > 0 ? { merge: mergeConfig } : {}),
+      ...(Object.keys(columnlen).length > 0 ? { columnlen } : {}),
+      ...(Object.keys(rowlen).length > 0 ? { rowlen } : {}),
+    },
+  } as Sheet
+}

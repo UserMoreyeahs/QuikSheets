@@ -24,10 +24,10 @@ const TRIGGER =
   'flex h-full cursor-default items-center rounded px-2.5 text-[12px] font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800 select-none'
 
 export function AppMenuBar({ handlers }: { handlers: RibbonHandlers }) {
-  const { undo, redo, undoStack, redoStack, activeFormatting, applyFormatToSelection } =
+  const { gridInstance, activeFormatting, applyFormatToSelection } =
     useSheetStore()
-  const canUndo = undoStack.length > 0
-  const canRedo = redoStack.length > 0
+  const handleUndo = () => gridInstance?.handleUndo()
+  const handleRedo = () => gridInstance?.handleRedo()
 
   return (
     <div className="flex h-8 shrink-0 items-stretch border-b border-zinc-200 bg-white px-2 dark:border-zinc-800 dark:bg-zinc-900">
@@ -88,11 +88,11 @@ export function AppMenuBar({ handlers }: { handlers: RibbonHandlers }) {
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-60">
-          <DropdownMenuItem disabled={!canUndo} onSelect={() => undo()}>
+          <DropdownMenuItem disabled={!gridInstance} onSelect={handleUndo}>
             Undo
             <DropdownMenuShortcut>Ctrl+Z</DropdownMenuShortcut>
           </DropdownMenuItem>
-          <DropdownMenuItem disabled={!canRedo} onSelect={() => redo()}>
+          <DropdownMenuItem disabled={!gridInstance} onSelect={handleRedo}>
             Redo
             <DropdownMenuShortcut>Ctrl+Y</DropdownMenuShortcut>
           </DropdownMenuItem>

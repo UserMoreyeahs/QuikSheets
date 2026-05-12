@@ -331,11 +331,80 @@ function cellDataToHistoryValue(data: CellData | null | undefined): string | nul
   return String(data.value)
 }
 
+/** Convert our selection state to FortuneSheet Range format */
+function toFortuneRange(
+  selectedCell: CellAddress | null,
+  selectedRange: { start: CellAddress; end: CellAddress } | null
+): { row: number[]; column: number[] }[] | null {
+  if (!selectedCell) return null
+  if (!selectedRange) {
+    return [{ row: [selectedCell.row, selectedCell.row], column: [selectedCell.col, selectedCell.col] }]
+  }
+  const sr = Math.min(selectedRange.start.row, selectedRange.end.row)
+  const er = Math.max(selectedRange.start.row, selectedRange.end.row)
+  const sc = Math.min(selectedRange.start.col, selectedRange.end.col)
+  const ec = Math.max(selectedRange.start.col, selectedRange.end.col)
+  return [{ row: [sr, er], column: [sc, ec] }]
+}
+
+/** Push formatting changes to FortuneSheet via its instance API */
+function pushFormatToGrid(
+  instance: WorkbookInstance,
+  formatting: Partial<ActiveFormatting>,
+  range: { row: number[]; column: number[] }[]
+): void {
+  const calls: { name: string; args: unknown[] }[] = []
+
+  if (formatting.bold !== undefined)
+    calls.push({ name: 'setCellFormatByRange', args: ['bl', formatting.bold ? 1 : 0, range] })
+  if (formatting.italic !== undefined)
+    calls.push({ name: 'setCellFormatByRange', args: ['it', formatting.italic ? 1 : 0, range] })
+  if (formatting.underline !== undefined)
+    calls.push({ name: 'setCellFormatByRange', args: ['un', formatting.underline ? 1 : 0, range] })
+  if (formatting.strikethrough !== undefined)
+    calls.push({ name: 'setCellFormatByRange', args: ['cl', formatting.strikethrough ? 1 : 0, range] })
+  if (formatting.fontSize !== undefined)
+    calls.push({ name: 'setCellFormatByRange', args: ['fs', formatting.fontSize, range] })
+  if (formatting.fontFamily !== undefined)
+    calls.push({ name: 'setCellFormatByRange', args: ['ff', formatting.fontFamily, range] })
+  if (formatting.textColor !== undefined)
+    calls.push({ name: 'setCellFormatByRange', args: ['fc', formatting.textColor, range] })
+  if (formatting.backgroundColor !== undefined)
+    calls.push({ name: 'setCellFormatByRange', args: ['bg', formatting.backgroundColor, range] })
+  if (formatting.textAlign !== undefined) {
+    const ht = formatting.textAlign === 'left' ? 1 : formatting.textAlign === 'center' ? 0 : 2
+    calls.push({ name: 'setCellFormatByRange', args: ['ht', ht, range] })
+  }
+  if (formatting.verticalAlign !== undefined) {
+    const vt = formatting.verticalAlign === 'top' ? 1 : formatting.verticalAlign === 'middle' ? 0 : 2
+    calls.push({ name: 'setCellFormatByRange', args: ['vt', vt, range] })
+  }
+  if (formatting.wrapText !== undefined)
+    calls.push({ name: 'setCellFormatByRange', args: ['tb', formatting.wrapText ? 2 : 0, range] })
+  if (formatting.numberFormat !== undefined && formatting.numberFormat !== 'general') {
+    // FortuneSheet requires { fa, t } when attr is 'ct' — skip for 'general' (default)
+    const ct = { fa: numberFormatString(formatting.numberFormat), t: numberFormatCellType(formatting.numberFormat) }
+    calls.push({ name: 'setCellFormatByRange', args: ['ct', ct, range] })
+  }
+
+  if (calls.length > 0) {
+    try {
+      instance.batchCallApis(calls)
+    } catch {
+      // Fallback: call one by one if batch fails
+      calls.forEach((call) => {
+        try {
+          const fn = instance[call.name as keyof WorkbookInstance] as (...args: unknown[]) => void
+          fn.apply(instance, call.args)
+        } catch { /* ignore */ }
+      })
+    }
+  }
+}
+
 export const useSheetStore = create<SheetState & SheetActions>()(
   devtools(
     (set, get) => {
-      const syncLiveGrid = () => {}
-
       return {
         ...initialState,
 
@@ -353,7 +422,6 @@ export const useSheetStore = create<SheetState & SheetActions>()(
             gridSheets: nextSheets,
             activeSheetIndex: getActiveSheetIndex(nextSheets),
           })
-          syncLiveGrid()
         },
 
         setGridInstance: (instance) => set({ gridInstance: instance }),
@@ -468,7 +536,6 @@ export const useSheetStore = create<SheetState & SheetActions>()(
         reset: () => {
           const gridInstance = get().gridInstance
           set({ ...initialState, gridInstance })
-          syncLiveGrid()
         },
 
         setActiveFormatting: (formatting) =>
@@ -486,14 +553,25 @@ export const useSheetStore = create<SheetState & SheetActions>()(
             return
           }
 
-          const style = toFCellStyle(formatting)
-          const activeIndex = getActiveSheetIndex(state.gridSheets)
-          const newGridSheets = state.gridSheets.map((sheet, index) =>
-            index === activeIndex ? applyStyleToSheet(sheet, cells, style) : sheet
-          )
-
-          set({ activeFormatting, gridSheets: newGridSheets })
-          syncLiveGrid()
+          const instance = state.gridInstance
+          if (instance) {
+            // Push to FortuneSheet via its API — single source of truth.
+            // FortuneSheet's onChange fires back → handleChange → setGridSheets
+            // to keep Zustand in sync. Only update activeFormatting here.
+            set({ activeFormatting })
+            const range = toFortuneRange(state.selectedCell, state.selectedRange)
+            if (range) {
+              pushFormatToGrid(instance, formatting, range)
+            }
+          } else {
+            // Fallback when grid instance isn't mounted yet
+            const style = toFCellStyle(formatting)
+            const activeIndex = getActiveSheetIndex(state.gridSheets)
+            const newGridSheets = state.gridSheets.map((sheet, index) =>
+              index === activeIndex ? applyStyleToSheet(sheet, cells, style) : sheet
+            )
+            set({ activeFormatting, gridSheets: newGridSheets })
+          }
         },
 
         clearFormatOnSelection: () => {
@@ -504,13 +582,45 @@ export const useSheetStore = create<SheetState & SheetActions>()(
             return
           }
 
-          const activeIndex = getActiveSheetIndex(state.gridSheets)
-          const newGridSheets = state.gridSheets.map((sheet, index) =>
-            index === activeIndex ? applyStyleToSheet(sheet, cells, {}, true) : sheet
-          )
-
-          set({ activeFormatting: defaultFormatting, gridSheets: newGridSheets })
-          syncLiveGrid()
+          const instance = state.gridInstance
+          if (instance) {
+            // Reset each formatting attribute to its default via the API.
+            // Skip numberFormat (ct) since 'general' is the default and
+            // FortuneSheet requires { fa, t } for ct values.
+            set({ activeFormatting: defaultFormatting })
+            const range = toFortuneRange(state.selectedCell, state.selectedRange)
+            if (range) {
+              const clearCalls: { name: string; args: unknown[] }[] = [
+                { name: 'setCellFormatByRange', args: ['bl', 0, range] },
+                { name: 'setCellFormatByRange', args: ['it', 0, range] },
+                { name: 'setCellFormatByRange', args: ['un', 0, range] },
+                { name: 'setCellFormatByRange', args: ['cl', 0, range] },
+                { name: 'setCellFormatByRange', args: ['fs', 11, range] },
+                { name: 'setCellFormatByRange', args: ['ff', 'Inter', range] },
+                { name: 'setCellFormatByRange', args: ['fc', '#000000', range] },
+                { name: 'setCellFormatByRange', args: ['bg', '#ffffff', range] },
+                { name: 'setCellFormatByRange', args: ['ht', 1, range] },
+                { name: 'setCellFormatByRange', args: ['vt', 2, range] },
+                { name: 'setCellFormatByRange', args: ['tb', 0, range] },
+              ]
+              try {
+                instance.batchCallApis(clearCalls)
+              } catch {
+                clearCalls.forEach((call) => {
+                  try {
+                    const fn = instance[call.name as keyof WorkbookInstance] as (...a: unknown[]) => void
+                    fn.apply(instance, call.args)
+                  } catch { /* ignore */ }
+                })
+              }
+            }
+          } else {
+            const activeIndex = getActiveSheetIndex(state.gridSheets)
+            const newGridSheets = state.gridSheets.map((sheet, index) =>
+              index === activeIndex ? applyStyleToSheet(sheet, cells, {}, true) : sheet
+            )
+            set({ activeFormatting: defaultFormatting, gridSheets: newGridSheets })
+          }
         },
 
         resetFormatting: () => set({ activeFormatting: defaultFormatting }),
@@ -543,7 +653,6 @@ export const useSheetStore = create<SheetState & SheetActions>()(
           )
 
           set({ gridSheets: newGridSheets, sortConfig: config })
-          syncLiveGrid()
         },
 
         setActiveFilters: (filters) => {
@@ -585,7 +694,6 @@ export const useSheetStore = create<SheetState & SheetActions>()(
           )
 
           set({ activeFilters: filters, hiddenRows, gridSheets: newGridSheets })
-          syncLiveGrid()
         },
 
         addFilter: (filter) => {
@@ -623,7 +731,6 @@ export const useSheetStore = create<SheetState & SheetActions>()(
           )
 
           set({ activeFilters: updatedFilters, hiddenRows, gridSheets: newGridSheets })
-          syncLiveGrid()
         },
 
         removeFilter: (columnIndex) => {
@@ -669,7 +776,6 @@ export const useSheetStore = create<SheetState & SheetActions>()(
           )
 
           set({ activeFilters: updatedFilters, hiddenRows, gridSheets: newGridSheets })
-          syncLiveGrid()
         },
 
         clearFilters: () => {
@@ -682,7 +788,6 @@ export const useSheetStore = create<SheetState & SheetActions>()(
           )
 
           set({ activeFilters: [], hiddenRows: [], gridSheets: newGridSheets })
-          syncLiveGrid()
         },
 
         setHiddenRows: (rows) => set({ hiddenRows: rows }),
@@ -790,7 +895,6 @@ export const useSheetStore = create<SheetState & SheetActions>()(
             )
 
             set({ gridSheets: newGridSheets, findResults: [] })
-            syncLiveGrid()
           }
 
           return count

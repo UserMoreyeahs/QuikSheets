@@ -37,7 +37,6 @@ import {
   Sparkles,
   Strikethrough,
   Table as TableIcon,
-  Table2,
   Underline,
   Undo2,
   WrapText,
@@ -61,6 +60,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import type { FontFamily, NumberFormat } from '@/types/sheet.types'
+import { CFDropdownMenu } from '@/features/conditional-formatting/components/CFDropdownMenu'
+import { CellStylesDropdown } from '@/features/conditional-formatting/components/CellStylesDropdown'
 import type { RibbonHandlers } from './Ribbon'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -215,19 +216,19 @@ function ToolGroup({
 
 export function QuickToolbar({ handlers }: { handlers: RibbonHandlers }) {
   const {
-    undo,
-    redo,
-    undoStack,
-    redoStack,
+    gridInstance,
     activeFormatting,
     activeFilters,
     applyFormatToSelection,
     clearFormatOnSelection,
   } = useSheetStore()
 
-  const canUndo    = undoStack.length > 0
-  const canRedo    = redoStack.length > 0
   const hasFilters = activeFilters.length > 0
+
+  // Use FortuneSheet's native undo/redo — it tracks all canvas operations
+  // (cell edits, formatting, merges). The onChange callback syncs state back.
+  const handleUndo = () => gridInstance?.handleUndo()
+  const handleRedo = () => gridInstance?.handleRedo()
 
   const toggle    = (k: 'bold' | 'italic' | 'underline' | 'strikethrough' | 'wrapText') =>
     applyFormatToSelection({ [k]: !activeFormatting[k] })
@@ -247,14 +248,14 @@ export function QuickToolbar({ handlers }: { handlers: RibbonHandlers }) {
           <SmallBtn
             tip="Undo" shortcut="Ctrl+Z"
             icon={<Undo2 className="h-3.5 w-3.5" />}
-            disabled={!canUndo}
-            onClick={() => undo()}
+            disabled={!gridInstance}
+            onClick={handleUndo}
           />
           <SmallBtn
             tip="Redo" shortcut="Ctrl+Y"
             icon={<Redo2 className="h-3.5 w-3.5" />}
-            disabled={!canRedo}
-            onClick={() => redo()}
+            disabled={!gridInstance}
+            onClick={handleRedo}
           />
         </div>
       </ToolGroup>
@@ -411,12 +412,8 @@ export function QuickToolbar({ handlers }: { handlers: RibbonHandlers }) {
 
       {/* ── Styles ──────────────────────────────────────────────────────────── */}
       <ToolGroup label="Styles">
-        <BigBtn
-          tip="Conditional formatting"
-          icon={<Table2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />}
-          label="Format"
-          onClick={() => handlers.onConditionalFormatting()}
-        />
+        <CFDropdownMenu onOpenManageRules={() => handlers.onConditionalFormatting()} />
+        <CellStylesDropdown />
       </ToolGroup>
 
       {/* ── Insert ──────────────────────────────────────────────────────────── */}
