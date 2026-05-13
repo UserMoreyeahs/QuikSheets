@@ -1,9 +1,12 @@
 import { test, expect } from '@playwright/test'
 
 test.describe('Quiksheets smoke', () => {
-  test('redirects / to /dashboard', async ({ page }) => {
+  test('/ redirects to /dashboard or /login (auth-guarded)', async ({ page }) => {
     await page.goto('/')
-    await expect(page).toHaveURL(/\/dashboard$/)
+    // Without auth: middleware redirects / → /dashboard → /login?next=/dashboard
+    // With auth:    / → /dashboard directly
+    await page.waitForURL(/\/(dashboard|login)/, { timeout: 10_000 })
+    expect(page.url()).toMatch(/\/(dashboard|login)/)
   })
 
   test('login page renders the Quiksheets brand', async ({ page }) => {

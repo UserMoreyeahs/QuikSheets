@@ -17,8 +17,10 @@ import { test, expect } from '@playwright/test'
 import { capturePageErrors } from './helpers'
 
 test.describe('Root redirect', () => {
-  test('/ redirects to /dashboard or /login', async ({ page }) => {
+  test('/ redirects to /dashboard or /login (auth-aware)', async ({ page }) => {
     await page.goto('/')
+    // Without Supabase credentials: / → /dashboard (middleware falls through)
+    // With Supabase credentials:    / → /login?next=/dashboard (auth guard)
     await page.waitForURL(/\/(dashboard|login)/, { timeout: 10_000 })
     expect(page.url()).toMatch(/\/(dashboard|login)/)
   })
