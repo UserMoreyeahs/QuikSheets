@@ -22,9 +22,20 @@ interface NameManagerDialogProps {
   workbookId: string
 }
 
+/**
+ * Stable empty-array fallback for the Zustand selector below.
+ *
+ * IMPORTANT: this must live at module scope, not inside the component.
+ * Zustand's useSyncExternalStore compares snapshots with Object.is().
+ * If the selector returned `?? []` inline, a brand-new array would be
+ * created on every render ([] !== []), causing an infinite re-render loop
+ * ("getServerSnapshot should be cached" / "Maximum update depth exceeded").
+ */
+const EMPTY_NAMES: NamedRange[] = []
+
 export function NameManagerDialog({ open, onOpenChange, workbookId }: NameManagerDialogProps) {
   const { sheets } = useWorkbookStore()
-  const names = useNamedRangesStore((s) => s.names[workbookId] ?? [])
+  const names = useNamedRangesStore((s) => s.names[workbookId] ?? EMPTY_NAMES)
   const { addName, updateName, deleteName, loadNames } = useNamedRangesStore()
 
   const [editing, setEditing] = useState<NamedRange | null>(null)

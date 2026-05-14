@@ -148,6 +148,11 @@ export default function SheetPage() {
   const cellHistory = useCellHistory(workbookId)
   const collab = useRealtimeCollab(workbookId)
 
+  // Hoist dialog-open flags to the component top level so the hook calls
+  // always execute in a stable order and are never inside JSX expressions.
+  const insertFunctionOpen = useInsertFunctionStore((s) => s.open)
+  const nameManagerOpen = useNamedRangesStore((s) => s.dialogOpen)
+
   // Broadcast cursor position to other users via Realtime.
   // Use collab.broadcastCursor directly (stable useCallback ref) — do NOT
   // include the whole `collab` object (recreated every render → infinite loop).
@@ -1289,11 +1294,11 @@ export default function SheetPage() {
       <KeyboardShortcuts isOpen={showShortcuts} onOpenChange={setShowShortcuts} />
       <ConditionalFormatting isOpen={showCF} onClose={() => setShowCF(false)} />
       <InsertFunctionDialog
-        open={useInsertFunctionStore((s) => s.open)}
+        open={insertFunctionOpen}
         onOpenChange={(open) => useInsertFunctionStore.getState().setOpen(open)}
       />
       <NameManagerDialog
-        open={useNamedRangesStore((s) => s.dialogOpen)}
+        open={nameManagerOpen}
         onOpenChange={(open) => useNamedRangesStore.getState().setDialogOpen(open)}
         workbookId={workbookId}
       />
