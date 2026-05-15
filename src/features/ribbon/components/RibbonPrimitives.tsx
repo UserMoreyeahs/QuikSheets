@@ -7,6 +7,11 @@ import { cn } from '@/lib/utils'
 /**
  * RibbonGroup — vertical block on the ribbon containing several buttons,
  * with a small label at the bottom and a divider on the right edge (Excel-style).
+ *
+ * - `shrink-0` prevents groups from collapsing on narrow viewports.
+ * - Divider spans nearly the full ribbon height for clear bifurcation.
+ * - Label uses `whitespace-nowrap` so multi-word labels like
+ *   "Page Setup" don't wrap.
  */
 export function RibbonGroup({
   label,
@@ -18,12 +23,18 @@ export function RibbonGroup({
   className?: string
 }) {
   return (
-    <div className={cn('relative flex h-full flex-col items-stretch px-2', className)}>
+    <div
+      className={cn(
+        'relative flex h-full shrink-0 flex-col items-stretch px-2',
+        className
+      )}
+    >
       <div className="flex flex-1 items-center gap-0.5">{children}</div>
-      <div className="pt-0.5 text-center text-[10px] font-medium leading-tight text-zinc-500 dark:text-zinc-400">
+      <div className="whitespace-nowrap pt-0.5 text-center text-[10px] font-medium leading-tight text-zinc-500 dark:text-zinc-400">
         {label}
       </div>
-      <div className="absolute right-0 top-2 h-[60px] w-px bg-zinc-200 dark:bg-zinc-800" />
+      {/* Excel-style group divider: vertical line on right edge, spans most of the ribbon height */}
+      <div className="pointer-events-none absolute right-0 top-1 bottom-1 w-px bg-zinc-300 dark:bg-zinc-700" />
     </div>
   )
 }
@@ -65,7 +76,13 @@ export function RibbonButton({
   )
 }
 
-/** Large stacked button — 56×56 — icon on top, label below. Used for primary commands. */
+/**
+ * Large stacked button — icon on top, 2-line label below. Used for primary commands.
+ *
+ * Width is fixed at 64px to fit Excel-style labels like
+ * "Format as Table" / "Conditional Formatting" without truncating —
+ * the label wraps to 2 lines when needed.
+ */
 export function RibbonLargeButton({
   label,
   icon,
@@ -90,19 +107,19 @@ export function RibbonLargeButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        'flex h-[68px] w-[60px] flex-col items-center justify-center gap-1 rounded px-1 py-1 text-[11px] transition-colors',
+        'flex h-[68px] w-[64px] shrink-0 flex-col items-center justify-start gap-1 rounded px-1 py-1 text-[10.5px] transition-colors',
         active
           ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
           : 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800',
         disabled && 'opacity-40 cursor-not-allowed'
       )}
     >
-      <div className="flex h-7 w-7 items-center justify-center [&_svg]:h-6 [&_svg]:w-6">
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center [&_svg]:h-6 [&_svg]:w-6">
         {icon}
       </div>
-      <div className="flex items-center gap-0.5 leading-tight">
-        <span className="max-w-[58px] truncate">{label}</span>
-        {showCaret ? <ChevronDown className="h-3 w-3 shrink-0 text-zinc-400" /> : null}
+      <div className="flex w-full flex-col items-center gap-0 leading-[1.1]">
+        <span className="block max-w-[62px] break-words text-center">{label}</span>
+        {showCaret ? <ChevronDown className="mt-0.5 h-3 w-3 shrink-0 text-zinc-400" /> : null}
       </div>
     </button>
   )

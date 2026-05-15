@@ -307,13 +307,34 @@ export function HomeTab(props: HomeTabProps) {
       {/* ── 4. Number ─────────────────────────────────────────── */}
       <RibbonGroup label="Number">
         <div className="flex flex-col gap-0.5">
-          <NumberFormatSelector value={activeFormatting.numberFormat} onChange={setNumberFormat} />
+          {/* Top row: format dropdown takes ~120px to align with bottom row */}
+          <div className="flex h-7 items-center">
+            <NumberFormatSelector value={activeFormatting.numberFormat} onChange={setNumberFormat} />
+          </div>
+          {/* Bottom row: 3 narrow buttons (26px) + 2 wider buttons (32px) = ~138px */}
           <div className="flex items-center gap-0.5">
             <RibbonButton label="Accounting Format"  icon={<DollarSign className="h-3.5 w-3.5" />} active={activeFormatting.numberFormat === 'currency' || activeFormatting.numberFormat === 'accounting'} onClick={() => setNumberFormat('accounting')} />
             <RibbonButton label="Percent Style"       shortcut="Ctrl+Shift+%" icon={<Percent className="h-3.5 w-3.5" />} active={activeFormatting.numberFormat === 'percentage'} onClick={() => setNumberFormat('percentage')} />
-            <RibbonButton label="Comma Style"          icon={<span className="text-[12px] font-semibold leading-none">,</span>} active={activeFormatting.numberFormat === 'number'} onClick={() => setNumberFormat('number')} />
-            <RibbonButton label="Increase Decimal"    icon={<span className="text-[10px] leading-none">.0&rarr;.00</span>} onClick={increaseDecimal} />
-            <RibbonButton label="Decrease Decimal"    icon={<span className="text-[10px] leading-none">.00&rarr;.0</span>} onClick={decreaseDecimal} />
+            <RibbonButton label="Comma Style"          icon={<span className="text-[13px] font-semibold leading-none">,</span>} active={activeFormatting.numberFormat === 'number'} onClick={() => setNumberFormat('number')} />
+            {/* Increase / Decrease decimal — wider buttons (34px) to fit ".0→.00" text without wrapping */}
+            <button
+              type="button"
+              title="Increase Decimal"
+              aria-label="Increase Decimal"
+              onClick={increaseDecimal}
+              className="flex h-[26px] w-[34px] items-center justify-center rounded text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+              <span className="whitespace-nowrap text-[9px] font-medium leading-none tracking-tight">.0&rarr;.00</span>
+            </button>
+            <button
+              type="button"
+              title="Decrease Decimal"
+              aria-label="Decrease Decimal"
+              onClick={decreaseDecimal}
+              className="flex h-[26px] w-[34px] items-center justify-center rounded text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+              <span className="whitespace-nowrap text-[9px] font-medium leading-none tracking-tight">.00&rarr;.0</span>
+            </button>
           </div>
         </div>
       </RibbonGroup>

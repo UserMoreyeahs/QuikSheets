@@ -59,7 +59,7 @@ export function NumberFormatSelector({ value, onChange }: NumberFormatSelectorPr
         ref={buttonRef}
         onClick={handleOpen}
         title="Number format"
-        className="flex h-7 w-[90px] items-center justify-between gap-1 rounded border border-zinc-200 bg-white px-2 text-xs text-zinc-700 hover:border-zinc-300 hover:bg-zinc-50 transition-colors"
+        className="flex h-7 w-[150px] items-center justify-between gap-1 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-700 hover:border-blue-400 hover:bg-zinc-50 transition-colors dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
       >
         <span className="truncate">{current?.label ?? 'General'}</span>
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 text-zinc-400">
