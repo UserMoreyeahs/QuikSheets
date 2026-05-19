@@ -22,6 +22,7 @@ import { FormulaTooltip, useFormulaExplainer } from '@/features/formula-explaine
 import { SmartPasteBanner, useSmartPaste } from '@/features/smart-paste'
 import { PreviewOverlay, RangeHighlight, ResultBadge, useLivePreview } from '@/features/live-preview'
 import { ColumnIntentBanner, useColumnIntent } from '@/features/intent-columns'
+import { useColumnTypesStore, validateForEdit } from '@/features/typed-columns'
 import { useInlineEditSync } from '../hooks/useInlineEditSync'
 import type { RowSummarySelection } from '@/features/row-summarizer'
 import type { Cell, Sheet, Selection } from '@fortune-sheet/core'
@@ -428,6 +429,22 @@ export function SpreadsheetGrid({
             toast.error(`${toCellNotation(row, col)} is in a protected range and can't be edited.`)
           }
           return false
+        }
+
+        // ── Typed-columns check ────────────────────────────────────────
+        // Validate the new value against the column's declared type
+        // (currency/date/select/checkbox/status). Reject with a toast
+        // when the value cannot be coerced; otherwise let the standard
+        // commit path proceed. Skip when no type meta is set.
+        if (currentSheetId) {
+          const colMeta = useColumnTypesStore.getState().getColumnType(currentSheetId, col)
+          if (colMeta) {
+            const result = validateForEdit(value, colMeta)
+            if (!result.ok) {
+              toast.error(`${toCellNotation(row, col)}: ${result.error}`)
+              return false
+            }
+          }
         }
 
         const key = `${currentSheetId}:${row}:${col}`

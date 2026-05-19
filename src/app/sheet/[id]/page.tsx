@@ -59,6 +59,7 @@ const CellHistoryPanel = dynamic(
 )
 import { NLFilterBar, type NLFilterColumnSchema, type NLFilterSampleRow } from '@/features/nl-filter'
 import { useColumnDNA } from '@/features/column-dna'
+import { useTypedColumnsEnforcement } from '@/features/typed-columns'
 const ColumnDNAPanel = dynamic(
   () => import('@/features/column-dna').then((m) => ({ default: m.ColumnDNAPanel })),
   { ssr: false },
@@ -214,6 +215,9 @@ export default function SheetPage() {
   const { showMap, setShowMap, toggleMap } = useDependencyMap()
   const cellHistory = useCellHistory(workbookId)
   const collab = useRealtimeCollab(workbookId)
+  // Hydrate typed-column metadata for this workbook and re-format
+  // displayed values when columns get a new type assigned.
+  useTypedColumnsEnforcement(workbookId)
 
   // Hoist dialog-open flags to the component top level so the hook calls
   // always execute in a stable order and are never inside JSX expressions.

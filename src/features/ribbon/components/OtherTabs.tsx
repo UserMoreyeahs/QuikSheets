@@ -116,6 +116,7 @@ import {
   evaluateFormula,
 } from '../utils/cellOps'
 import { useInsertFunctionStore } from '@/features/formula-engine/stores/insertFunctionStore'
+import { ColumnTypeRibbonButton } from '@/features/typed-columns'
 
 // ─── Insert ──────────────────────────────────────────────────────────────────
 
@@ -534,6 +535,7 @@ export function DataTab(props: DataTabProps) {
 
       {/* Data Tools */}
       <RibbonGroup label="Data Tools">
+        <ColumnTypeRibbonButton />
         <RibbonLargeButton label="Text to Cols"   icon={<SquareStack className="text-blue-500" />} onClick={ribbonStub('Text to Columns')} />
         <div className="flex flex-col gap-0.5">
           <RibbonButton label="Flash Fill"        icon={<WandSparkles className="h-3.5 w-3.5" />} onClick={ribbonStub('Flash Fill (Ctrl+E)')} />
