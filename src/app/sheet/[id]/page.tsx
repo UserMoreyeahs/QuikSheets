@@ -136,8 +136,11 @@ const CommentComposer = dynamic(
   { ssr: false },
 )
 import { useCommentsUiStore } from '@/features/comments/store/commentsUiStore'
-const LocalVersionHistoryPanel = dynamic(
-  () => import('@/features/version-history/components/LocalVersionHistoryPanel').then((m) => ({ default: m.LocalVersionHistoryPanel })),
+// Server-backed version history (Supabase workbook_versions table).
+// The legacy LocalVersionHistoryPanel stays in the codebase as an
+// offline fallback but is no longer rendered by the sheet page.
+const VersionHistoryPanel = dynamic(
+  () => import('@/features/version-history/components/VersionHistoryPanel').then((m) => ({ default: m.VersionHistoryPanel })),
   { ssr: false },
 )
 import { useVersionUiStore } from '@/features/version-history/store/versionUiStore'
@@ -1380,7 +1383,7 @@ export default function SheetPage() {
       <ErrorBoundary><ForecastPanel /></ErrorBoundary>
       <ErrorBoundary><CommentsPanel workbookId={workbookId} /></ErrorBoundary>
       <ErrorBoundary><CommentComposer workbookId={workbookId} /></ErrorBoundary>
-      <ErrorBoundary><LocalVersionHistoryPanel workbookId={workbookId} /></ErrorBoundary>
+      <ErrorBoundary><VersionHistoryPanel workbookId={workbookId} /></ErrorBoundary>
       <ErrorBoundary><ShareDialog workbookId={workbookId} workbookName={workbookName} /></ErrorBoundary>
       <ErrorBoundary><ProtectedRangesDialog workbookId={workbookId} /></ErrorBoundary>
       </div>
