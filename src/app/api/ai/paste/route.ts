@@ -1,5 +1,5 @@
 import { GROQ_MODEL, groq } from '@/lib/groq'
-import { jsonError, readJsonBody } from '@/lib/aiRoute'
+import { enforceAiRateLimit, jsonError, readJsonBody } from '@/lib/aiRoute'
 
 type PasteColumnType =
   | 'text'
@@ -87,6 +87,9 @@ function validateDetection(value: unknown): PasteDetectionResponse {
 }
 
 export async function POST(request: Request) {
+  const limited = await enforceAiRateLimit(request)
+  if (limited) return limited
+
   const body = await readJsonBody<PasteRouteRequest>(request)
   if (!body) {
     return jsonError('Invalid JSON body.', 400)

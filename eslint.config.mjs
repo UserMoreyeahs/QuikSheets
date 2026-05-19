@@ -19,6 +19,11 @@ const config = [
       'playwright-report/**',
       'coverage/**',
       'next-env.d.ts',
+      // Git worktrees contain duplicate copies of the repo that lint would
+      // double-scan and report thousands of false errors against. The
+      // worktrees have their own checkout-local lint config if needed.
+      '.claude/**',
+      '.clone/**',
     ],
   },
   ...compat.extends('next/core-web-vitals', 'next/typescript'),

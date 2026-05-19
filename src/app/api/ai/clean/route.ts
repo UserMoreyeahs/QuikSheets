@@ -11,7 +11,7 @@
  */
 
 import { GROQ_MODEL, groq } from '@/lib/groq'
-import { jsonError, readJsonBody } from '@/lib/aiRoute'
+import { enforceAiRateLimit, jsonError, readJsonBody } from '@/lib/aiRoute'
 
 interface CleanRouteRequest {
   values?: unknown
@@ -67,6 +67,9 @@ function parseJsonObject(value: string): unknown {
 }
 
 export async function POST(request: Request) {
+  const limited = await enforceAiRateLimit(request)
+  if (limited) return limited
+
   const body = await readJsonBody<CleanRouteRequest>(request)
   if (!body) return jsonError('Invalid JSON body.', 400)
   if (!isStringArray(body.values)) {

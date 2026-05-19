@@ -6,6 +6,7 @@
 import '@/lib/formulajsPatches'
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
+import dynamic from 'next/dynamic'
 import { useParams, useRouter } from 'next/navigation'
 import { Network, Upload, ChevronLeft, ChevronRight } from 'lucide-react'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
@@ -42,46 +43,112 @@ import { ImportModal } from '@/features/grid/components/ImportModal'
 import { ExportMenu } from '@/features/grid/components/ExportMenu'
 import { SaveStatus } from '@/features/grid/components/SaveStatus'
 import { exportToCSV, exportToExcelFidelity, exportToPDF } from '@/features/grid/utils/exportUtils'
-import { DependencyMap, useDependencyMap, type DependencyMapCellTarget } from '@/features/dependency-map'
-import { CellHistoryPanel, useCellHistory } from '@/features/cell-history'
+// Lazy-loaded heavy panels — these render only when their respective UI
+// stores have `open: true`, so deferring their JS bundle keeps the initial
+// /sheet/[id] payload lean. Each `next/dynamic` import is split into its
+// own chunk fetched on demand.
+import { useDependencyMap, type DependencyMapCellTarget } from '@/features/dependency-map'
+const DependencyMap = dynamic(
+  () => import('@/features/dependency-map').then((m) => ({ default: m.DependencyMap })),
+  { ssr: false },
+)
+import { useCellHistory } from '@/features/cell-history'
+const CellHistoryPanel = dynamic(
+  () => import('@/features/cell-history').then((m) => ({ default: m.CellHistoryPanel })),
+  { ssr: false },
+)
 import { NLFilterBar, type NLFilterColumnSchema, type NLFilterSampleRow } from '@/features/nl-filter'
-import { ColumnDNAPanel, useColumnDNA } from '@/features/column-dna'
-import { ScratchpadPanel, ScratchpadToggle, useScratchpad } from '@/features/scratchpad'
+import { useColumnDNA } from '@/features/column-dna'
+const ColumnDNAPanel = dynamic(
+  () => import('@/features/column-dna').then((m) => ({ default: m.ColumnDNAPanel })),
+  { ssr: false },
+)
+import { ScratchpadToggle, useScratchpad } from '@/features/scratchpad'
+const ScratchpadPanel = dynamic(
+  () => import('@/features/scratchpad').then((m) => ({ default: m.ScratchpadPanel })),
+  { ssr: false },
+)
 import { RowSummarizer, useRowSummarizer } from '@/features/row-summarizer'
-import { ConditionalFormatting, applyAllCFRules } from '@/features/conditional-formatting'
-import { InsertFunctionDialog } from '@/features/formula-engine/components/InsertFunctionDialog'
+import { applyAllCFRules } from '@/features/conditional-formatting'
+const ConditionalFormatting = dynamic(
+  () => import('@/features/conditional-formatting').then((m) => ({ default: m.ConditionalFormatting })),
+  { ssr: false },
+)
+const InsertFunctionDialog = dynamic(
+  () => import('@/features/formula-engine/components/InsertFunctionDialog').then((m) => ({ default: m.InsertFunctionDialog })),
+  { ssr: false },
+)
 import { useInsertFunctionStore } from '@/features/formula-engine/stores/insertFunctionStore'
-import { NameManagerDialog } from '@/features/named-ranges/NameManagerDialog'
+const NameManagerDialog = dynamic(
+  () => import('@/features/named-ranges/NameManagerDialog').then((m) => ({ default: m.NameManagerDialog })),
+  { ssr: false },
+)
 import { useNamedRangesStore } from '@/features/named-ranges/namedRangesStore'
 import { useCFStore } from '@/features/conditional-formatting/store/cfStore'
 import { applyRulesToSheet, evaluateRules } from '@/features/conditional-formatting/utils/cfEvaluator'
 import * as cellOps from '@/features/ribbon/utils/cellOps'
 import { installHyperlinkFollow } from '@/features/ribbon/utils/cellOps'
 import { usePrintSettingsStore } from '@/features/page-layout/printSettingsStore'
-import { CleanDataPanel } from '@/features/data-cleaning/components/CleanDataPanel'
+const CleanDataPanel = dynamic(
+  () => import('@/features/data-cleaning/components/CleanDataPanel').then((m) => ({ default: m.CleanDataPanel })),
+  { ssr: false },
+)
 import { useCleanDataStore } from '@/features/data-cleaning/store/cleanDataStore'
-import { ChartBuilder } from '@/features/charts/components/ChartBuilder'
-import { ChartsLayer } from '@/features/charts/components/ChartsLayer'
+const ChartBuilder = dynamic(
+  () => import('@/features/charts/components/ChartBuilder').then((m) => ({ default: m.ChartBuilder })),
+  { ssr: false },
+)
+const ChartsLayer = dynamic(
+  () => import('@/features/charts/components/ChartsLayer').then((m) => ({ default: m.ChartsLayer })),
+  { ssr: false },
+)
 import { useChartPanelStore } from '@/features/charts/store/chartPanelStore'
-import { FormBuilder } from '@/features/forms/components/FormBuilder'
+const FormBuilder = dynamic(
+  () => import('@/features/forms/components/FormBuilder').then((m) => ({ default: m.FormBuilder })),
+  { ssr: false },
+)
 import { useFormBuilderStore } from '@/features/forms/store/formBuilderStore'
-import { PivotBuilder } from '@/features/pivot/components/PivotBuilder'
-import { PivotsLayer } from '@/features/pivot/components/PivotsLayer'
+const PivotBuilder = dynamic(
+  () => import('@/features/pivot/components/PivotBuilder').then((m) => ({ default: m.PivotBuilder })),
+  { ssr: false },
+)
+const PivotsLayer = dynamic(
+  () => import('@/features/pivot/components/PivotsLayer').then((m) => ({ default: m.PivotsLayer })),
+  { ssr: false },
+)
 import { usePivotUiStore } from '@/features/pivot/store/pivotUiStore'
 import { SlicersLayer } from '@/features/slicers/components/SlicersLayer'
 import { FillHandle } from '@/features/drag-fill/components/FillHandle'
 import { RemoteCursors, PresenceAvatars } from '@/features/collab/components/RemoteCursors'
 import { useRealtimeCollab } from '@/features/collab/hooks/useRealtimeCollab'
-import { ForecastPanel } from '@/features/forecasting/components/ForecastPanel'
+const ForecastPanel = dynamic(
+  () => import('@/features/forecasting/components/ForecastPanel').then((m) => ({ default: m.ForecastPanel })),
+  { ssr: false },
+)
 import { useForecastStore } from '@/features/forecasting/store/forecastStore'
-import { CommentsPanel } from '@/features/comments/components/CommentsPanel'
-import { CommentComposer } from '@/features/comments/components/CommentComposer'
+const CommentsPanel = dynamic(
+  () => import('@/features/comments/components/CommentsPanel').then((m) => ({ default: m.CommentsPanel })),
+  { ssr: false },
+)
+const CommentComposer = dynamic(
+  () => import('@/features/comments/components/CommentComposer').then((m) => ({ default: m.CommentComposer })),
+  { ssr: false },
+)
 import { useCommentsUiStore } from '@/features/comments/store/commentsUiStore'
-import { LocalVersionHistoryPanel } from '@/features/version-history/components/LocalVersionHistoryPanel'
+const LocalVersionHistoryPanel = dynamic(
+  () => import('@/features/version-history/components/LocalVersionHistoryPanel').then((m) => ({ default: m.LocalVersionHistoryPanel })),
+  { ssr: false },
+)
 import { useVersionUiStore } from '@/features/version-history/store/versionUiStore'
-import { ShareDialog } from '@/features/share-links/components/ShareDialog'
+const ShareDialog = dynamic(
+  () => import('@/features/share-links/components/ShareDialog').then((m) => ({ default: m.ShareDialog })),
+  { ssr: false },
+)
 import { useShareDialogStore } from '@/features/share-links/store/shareDialogStore'
-import { ProtectedRangesDialog } from '@/features/protected-ranges/components/ProtectedRangesDialog'
+const ProtectedRangesDialog = dynamic(
+  () => import('@/features/protected-ranges/components/ProtectedRangesDialog').then((m) => ({ default: m.ProtectedRangesDialog })),
+  { ssr: false },
+)
 import { useProtectedRangesUiStore } from '@/features/protected-ranges/store/protectedRangesUiStore'
 import { useSheetStore } from '@/store/sheetStore'
 import { useWorkbookStore } from '@/store/workbookStore'
