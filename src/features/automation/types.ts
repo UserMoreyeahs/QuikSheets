@@ -31,7 +31,12 @@ export interface TriggerEvent {
   sheetId: string
   rowIndex: number
   type: TriggerType
-  before?: Record<string, unknown>
+  /**
+   * Snapshot of the row before the change, keyed by column index.
+   * Optional and may be explicitly undefined under
+   * `exactOptionalPropertyTypes: true`.
+   */
+  before?: Record<string, unknown> | undefined
   after: Record<string, unknown>
 }
 
