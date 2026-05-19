@@ -32,7 +32,13 @@ export interface CommentRow {
 }
 
 export async function listCommentsAction(workbookId: string, sheetId: string): Promise<CommentRow[]> {
-  await assertCanRead(workbookId).catch(() => null)
+  // Require read access — return empty list (not an error) on failure
+  // so the comments panel renders quietly when the user lacks access.
+  try {
+    await assertCanRead(workbookId)
+  } catch {
+    return []
+  }
   const supabase = await getServerSupabase()
   if (!supabase) return []
   const { data } = await supabase

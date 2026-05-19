@@ -24,7 +24,13 @@ export interface WorkbookVersion {
 }
 
 export async function listWorkbookVersionsAction(workbookId: string): Promise<WorkbookVersion[]> {
-  await assertCanRead(workbookId).catch(() => null)
+  // Read access required — return an empty list (not an error) when the
+  // caller lacks permission, so the version-history panel renders quietly.
+  try {
+    await assertCanRead(workbookId)
+  } catch {
+    return []
+  }
   const supabase = await getServerSupabase()
   if (!supabase) return []
   const { data } = await supabase

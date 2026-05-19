@@ -29,7 +29,14 @@ export async function createAutomationAction(input: z.input<typeof createSchema>
   const parsed = createSchema.safeParse(input)
   if (!parsed.success) return { ok: false as const, error: 'Invalid automation' }
 
-  await assertCanEdit(parsed.data.workbookId).catch(() => null)
+  // Hard-require editor role. Previously this silently swallowed the
+  // permission failure (relying on RLS) — now the action returns a
+  // clean 'Forbidden' so callers can show a meaningful error.
+  try {
+    await assertCanEdit(parsed.data.workbookId)
+  } catch {
+    return { ok: false as const, error: 'Forbidden' }
+  }
 
   const supabase = await getServerSupabase()
   if (!supabase) return { ok: false as const, error: 'Supabase not configured' }
