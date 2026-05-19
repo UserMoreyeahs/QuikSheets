@@ -1287,6 +1287,7 @@ export default function SheetPage() {
           onSummarizeRows={rowSummarizer.open}
           onViewCellHistory={cellHistory.openHistory}
           onAddComment={(target) => useCommentsUiStore.getState().openComposer(target)}
+          onCellChangeBroadcast={collab.broadcastEdit}
         />
         {/* Excel-style embedded objects — sit above the grid canvas, bounded
             to the sheet view area (not the whole viewport).

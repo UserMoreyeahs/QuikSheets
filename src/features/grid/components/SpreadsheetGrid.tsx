@@ -62,6 +62,19 @@ interface SpreadsheetGridProps {
   onSummarizeRows?: (selection: RowSummarySelection) => void
   onViewCellHistory?: () => void
   onAddComment?: (target: { sheetId: string; cellAddress: string }) => void
+  /**
+   * Optional broadcaster — when supplied, every cell change committed
+   * by the local user is also broadcast over the realtime channel so
+   * other connected users see the update. Wired by the sheet page from
+   * useRealtimeCollab.broadcastEdit.
+   */
+  onCellChangeBroadcast?: (
+    sheetId: string,
+    row: number,
+    col: number,
+    value: string | number | null,
+    display: string,
+  ) => void
 }
 
 function GridSkeleton() {
@@ -191,6 +204,7 @@ export function SpreadsheetGrid({
   onSummarizeRows,
   onViewCellHistory,
   onAddComment,
+  onCellChangeBroadcast,
 }: SpreadsheetGridProps) {
   const {
     gridSheets,
@@ -400,7 +414,8 @@ export function SpreadsheetGrid({
         }
       }
 
-      getCellChangesForHistory(gridSheetsRef.current, nextSheets).forEach((change) => {
+      const cellChanges = getCellChangesForHistory(gridSheetsRef.current, nextSheets)
+      cellChanges.forEach((change) => {
         updateCell(change.address, change.newData, change.oldData, {
           workbookId,
           sheetId: change.sheetId,
@@ -408,10 +423,32 @@ export function SpreadsheetGrid({
         })
       })
 
+      // Broadcast every local edit to the realtime channel so other
+      // connected users see updates in <1s. The broadcaster is provided
+      // by the sheet page from useRealtimeCollab.broadcastEdit — when
+      // absent (e.g. no Supabase / single-user mode) this is a no-op.
+      if (onCellChangeBroadcast && cellChanges.length > 0) {
+        for (const change of cellChanges) {
+          // CellData (app domain) — coerce the value to the wire format
+          // the realtime channel expects (string | number | null + display).
+          const v = change.newData?.value
+          const rawValue: string | number | null =
+            typeof v === 'string' || typeof v === 'number' ? v : v === null ? null : null
+          const display = rawValue !== null ? String(rawValue) : ''
+          onCellChangeBroadcast(
+            change.sheetId,
+            change.address.row,
+            change.address.col,
+            rawValue,
+            display,
+          )
+        }
+      }
+
       isApplyingWorkbookChangeRef.current = true
       setGridSheets(nextSheets)
     },
-    [setGridSheets, updateCell, workbookId]
+    [setGridSheets, updateCell, workbookId, onCellChangeBroadcast]
   )
 
   const hooks = useMemo(
