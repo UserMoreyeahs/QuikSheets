@@ -311,20 +311,41 @@ export default function SheetPage() {
   // Dev-only: expose the live grid instance + a 2-D test-data seeder on
   // window so we can verify Insert > Chart/Table/Pivot end-to-end with
   // real data. Stripped from production bundles.
+  //
+  // The seeder writes directly into gridSheets via replaceGridSheets so
+  // both FortuneSheet AND the Zustand mirror (which ChartsLayer / PivotsLayer
+  // read from) end up in sync — calling FortuneSheet's setCellValue alone
+  // updates the canvas but doesn't always fire onChange in time.
   useEffect(() => {
     if (process.env.NODE_ENV === 'production') return
-    const inst = gridInstance as unknown as {
-      setCellValue?: (r: number, c: number, v: unknown) => void
-    } | null
-    ;(window as unknown as { __qsGrid?: unknown }).__qsGrid = inst
+    ;(window as unknown as { __qsGrid?: unknown }).__qsGrid = gridInstance
     ;(window as unknown as { __qsSeed?: (rows: unknown[][]) => void }).__qsSeed = (rows) => {
-      if (!inst?.setCellValue) {
-        console.warn('[qs] gridInstance not ready')
+      const state = useSheetStore.getState()
+      const sheets = state.gridSheets.length ? state.gridSheets : [{ id: activeSheetId, name: 'Sheet1', status: 1 }]
+      const targetSheetIdx = Math.max(0, sheets.findIndex((s) => s.status === 1))
+      const target = sheets[targetSheetIdx]
+      if (!target) {
+        console.warn('[qs] no active sheet to seed')
         return
       }
-      rows.forEach((row, r) => row.forEach((v, c) => inst.setCellValue!(r, c, v)))
+      const celldata = rows.flatMap((row, r) =>
+        row.map((v, c) => ({
+          r,
+          c,
+          v:
+            typeof v === 'number'
+              ? { ct: { fa: 'General', t: 'n' }, m: String(v), v }
+              : { ct: { fa: 'General', t: 'g' }, m: String(v ?? ''), v },
+        })),
+      )
+      const nextSheets = sheets.map((s, i) =>
+        i === targetSheetIdx
+          ? ({ ...s, celldata, data: s.data } as typeof s)
+          : s,
+      )
+      state.replaceGridSheets(nextSheets)
     }
-  }, [gridInstance])
+  }, [gridInstance, activeSheetId])
   const [showFormulaBarUI, setShowFormulaBarUI] = useState(true)
   const [showGridlines, setShowGridlines] = useState(true)
   const [zoomLevel, setZoomLevel] = useState(1.0)
