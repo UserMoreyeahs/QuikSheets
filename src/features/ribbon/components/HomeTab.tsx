@@ -78,7 +78,7 @@ import {
   type BorderPreset,
   type OrientationPreset,
 } from '../utils/cellOps'
-import { toast } from 'sonner'
+import { copySelection, cutSelection, pasteFromClipboard } from '../utils/clipboardOps'
 
 interface HomeTabProps {
   onSortAsc: () => void
@@ -133,46 +133,58 @@ export function HomeTab(props: HomeTabProps) {
     setFontSize(next)
   }
 
-  // Clipboard handlers (best-effort browser clipboard)
-  const handleCopy = () => {
-    try {
-      document.execCommand('copy')
-      toast.success('Copied')
-    } catch {
-      toast.error('Copy failed — use Ctrl+C')
-    }
-  }
-  const handleCut = () => {
-    try {
-      document.execCommand('cut')
-      toast.success('Cut')
-    } catch {
-      toast.error('Cut failed — use Ctrl+X')
-    }
-  }
-  const handlePaste = () => {
-    toast('Use Ctrl+V to paste', { description: 'Browser security blocks programmatic paste.' })
-  }
-
   return (
     <div className="flex h-full items-stretch overflow-x-auto">
       {/* ── 1. Clipboard ─────────────────────────────────────── */}
       <RibbonGroup label="Clipboard">
-        {/* Large Paste button */}
-        <button
-          type="button"
-          title="Paste (Ctrl+V)"
-          onClick={handlePaste}
-          className="flex h-[68px] w-[60px] flex-col items-center justify-center gap-1 rounded px-1 py-1 text-[11px] text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
-        >
-          <ClipboardPaste className="h-6 w-6 text-zinc-700 dark:text-zinc-200" />
-          <span className="flex items-center gap-0.5 leading-tight">
-            Paste <ChevronDown className="h-3 w-3 text-zinc-400" />
-          </span>
-        </button>
+        {/* Paste — Excel-style split button.
+            Top half (icon): default paste.
+            Bottom half (label + caret): opens the Paste Special menu. */}
+        <DropdownMenu>
+          <div className="flex flex-col items-stretch">
+            <button
+              type="button"
+              title="Paste (Ctrl+V)"
+              onClick={() => pasteFromClipboard('all')}
+              className="flex h-[44px] w-[60px] flex-col items-center justify-center rounded-t px-1 pt-1 text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+              <ClipboardPaste className="h-6 w-6 text-zinc-700 dark:text-zinc-200" />
+            </button>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                title="Paste options"
+                className="flex h-[24px] w-[60px] items-center justify-center gap-0.5 rounded-b text-[11px] text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                Paste <ChevronDown className="h-3 w-3 text-zinc-400" />
+              </button>
+            </DropdownMenuTrigger>
+          </div>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onSelect={() => void pasteFromClipboard('all')}>
+              Paste
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void pasteFromClipboard('values')}>
+              Paste Values only
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void pasteFromClipboard('formulas')}>
+              Paste Formulas only
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void pasteFromClipboard('formatting')}>
+              Paste Formatting only
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => void pasteFromClipboard('transpose')}>
+              Paste Transpose
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void pasteFromClipboard('link')}>
+              Paste Link
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <div className="flex flex-col gap-0.5">
-          <RibbonButton label="Cut"             shortcut="Ctrl+X" icon={<Scissors className="h-3.5 w-3.5" />}      onClick={handleCut} />
-          <RibbonButton label="Copy"            shortcut="Ctrl+C" icon={<Copy className="h-3.5 w-3.5" />}          onClick={handleCopy} />
+          <RibbonButton label="Cut"             shortcut="Ctrl+X" icon={<Scissors className="h-3.5 w-3.5" />}      onClick={() => void cutSelection()} />
+          <RibbonButton label="Copy"            shortcut="Ctrl+C" icon={<Copy className="h-3.5 w-3.5" />}          onClick={() => void copySelection()} />
           <RibbonButton label="Format Painter"  icon={<Paintbrush className="h-3.5 w-3.5" />} onClick={startFormatPainter} />
         </div>
       </RibbonGroup>
