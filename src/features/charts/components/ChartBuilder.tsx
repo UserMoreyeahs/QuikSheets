@@ -57,6 +57,7 @@ const KINDS: KindOption[] = [
 
 export function ChartBuilder() {
   const open = useChartPanelStore((s) => s.builderOpen)
+  const initialKind = useChartPanelStore((s) => s.initialKind)
   const closeBuilder = useChartPanelStore((s) => s.closeBuilder)
   const addChart = useChartPanelStore((s) => s.addChart)
 
@@ -104,13 +105,22 @@ export function ChartBuilder() {
     }
 
     setRangeText(prefill)
-    setKind('bar')
+    // R8.3 — when the builder is opened from an Insert-tab sub-dropdown
+    // (Column/Bar, Line/Area, etc.) the store carries the user's chosen
+    // chart kind. Skip to the "all" tab so the kind picker is visible
+    // with the choice pre-applied.
+    if (initialKind) {
+      setKind(initialKind)
+      setTab('all')
+    } else {
+      setKind('bar')
+      setTab('recommended')
+    }
     setHasHeader(true)
     setName('Chart')
     setCategoryColumn(0)
     setSeriesColumns([1])
-    setTab('recommended')
-  }, [open, selectedCell, selectedRange, activeSheet])
+  }, [open, initialKind, selectedCell, selectedRange, activeSheet])
 
   // ── derived: matrix + column headers ──────────────────────────────────
   const matrix = useMemo(() => {

@@ -1,7 +1,7 @@
 'use client'
 
 import { create } from 'zustand'
-import type { ChartConfig } from '../types'
+import type { ChartConfig, ChartKind } from '../types'
 
 export interface InsertedChart {
   id: string
@@ -24,7 +24,14 @@ export interface InsertedChart {
 interface ChartPanelState {
   // Builder modal open/close
   builderOpen: boolean
-  openBuilder:  () => void
+  /**
+   * When the builder is opened from the Insert tab's chart-type
+   * sub-dropdowns (Column/Bar, Line/Area, etc.), the chosen kind is
+   * stashed here so the builder can pre-select that chart type. Null
+   * when opened from the generic "Recommended Charts" entry.
+   */
+  initialKind: ChartKind | null
+  openBuilder:  (initialKind?: ChartKind) => void
   closeBuilder: () => void
 
   // Inserted charts (in-memory; persists across the session, lost on reload)
@@ -38,8 +45,10 @@ let nextOffset = 0
 
 export const useChartPanelStore = create<ChartPanelState>((set) => ({
   builderOpen: false,
-  openBuilder:  () => set({ builderOpen: true }),
-  closeBuilder: () => set({ builderOpen: false }),
+  initialKind: null,
+  openBuilder: (initialKind?: ChartKind) =>
+    set({ builderOpen: true, initialKind: initialKind ?? null }),
+  closeBuilder: () => set({ builderOpen: false, initialKind: null }),
 
   charts: [],
   addChart: (chart) =>

@@ -104,7 +104,15 @@ const ChartsLayer = dynamic(
   () => import('@/features/charts/components/ChartsLayer').then((m) => ({ default: m.ChartsLayer })),
   { ssr: false },
 )
+const ImagesLayer = dynamic(
+  () => import('@/features/images/components/ImagesLayer').then((m) => ({ default: m.ImagesLayer })),
+  { ssr: false },
+)
 import { useChartPanelStore } from '@/features/charts/store/chartPanelStore'
+const SymbolPicker = dynamic(
+  () => import('@/features/symbols/components/SymbolPicker').then((m) => ({ default: m.SymbolPicker })),
+  { ssr: false },
+)
 const FormBuilder = dynamic(
   () => import('@/features/forms/components/FormBuilder').then((m) => ({ default: m.FormBuilder })),
   { ssr: false },
@@ -1341,6 +1349,7 @@ export default function SheetPage() {
             Each wrapped in a silent ErrorBoundary so a crash in one overlay
             (e.g. chart render, pivot aggregation) doesn't freeze the grid. */}
         <ErrorBoundary silent><ChartsLayer /></ErrorBoundary>
+        <ErrorBoundary silent><ImagesLayer /></ErrorBoundary>
         <ErrorBoundary silent><PivotsLayer /></ErrorBoundary>
         <ErrorBoundary silent><SlicersLayer /></ErrorBoundary>
         <ErrorBoundary silent><FillHandle /></ErrorBoundary>
@@ -1426,6 +1435,7 @@ export default function SheetPage() {
       />
       <ErrorBoundary><CleanDataPanel /></ErrorBoundary>
       <ErrorBoundary><ChartBuilder /></ErrorBoundary>
+      <ErrorBoundary><SymbolPicker /></ErrorBoundary>
       <ErrorBoundary><FormBuilder workbookId={workbookId} /></ErrorBoundary>
       <ErrorBoundary><PivotBuilder /></ErrorBoundary>
       <ErrorBoundary><ForecastPanel /></ErrorBoundary>

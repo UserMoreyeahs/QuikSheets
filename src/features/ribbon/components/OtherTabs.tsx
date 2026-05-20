@@ -122,6 +122,10 @@ import { useSheetStore } from '@/store/sheetStore'
 import { useWorkbookStore } from '@/store/workbookStore'
 import { colIndexToLetter } from '@/lib/cellAddress'
 import { usePrintSettingsStore } from '@/features/page-layout/printSettingsStore'
+import { useChartPanelStore } from '@/features/charts/store/chartPanelStore'
+import type { ChartKind } from '@/features/charts/types'
+import { useSymbolPickerStore } from '@/features/symbols/store/symbolPickerStore'
+import { insertImageFromDevice } from '@/features/images/utils/insertImageFromDevice'
 import { toast } from 'sonner'
 
 // ─── Insert ──────────────────────────────────────────────────────────────────
@@ -152,6 +156,16 @@ function insertCommentForActiveCell(): void {
   }
   const cellAddress = `${colIndexToLetter(selectedCell.col)}${selectedCell.row + 1}`
   useCommentsUiStore.getState().openComposer({ sheetId: activeSheetId, cellAddress })
+}
+
+/**
+ * R8.3 — Open ChartBuilder pre-selected to a specific chart kind.
+ * The Excel chart sub-dropdowns (Column/Bar, Line/Area, etc.) used to
+ * open the builder with no type info — now they pass the chosen kind
+ * so the builder lands on the right type with tab='all'.
+ */
+function openChartBuilderWithKind(kind: ChartKind): void {
+  useChartPanelStore.getState().openBuilder(kind)
 }
 
 /**
@@ -193,7 +207,7 @@ export function InsertTab(props: InsertTabProps) {
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            <DropdownMenuItem onSelect={ribbonStub('This Device…')}>This Device…</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => insertImageFromDevice()}>This Device…</DropdownMenuItem>
             <DropdownMenuItem onSelect={ribbonStub('Stock Images…')}>Stock Images…</DropdownMenuItem>
             <DropdownMenuItem onSelect={ribbonStub('Online Pictures…')}>Online Pictures…</DropdownMenuItem>
           </DropdownMenuContent>
@@ -221,11 +235,19 @@ export function InsertTab(props: InsertTabProps) {
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            <DropdownMenuItem onSelect={() => props.onInsertChart?.()}>Column / Bar</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => props.onInsertChart?.()}>Line / Area</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => props.onInsertChart?.()}>Pie / Doughnut</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => props.onInsertChart?.()}>Scatter / Bubble</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => props.onInsertChart?.()}>Combo</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('bar')}>Column / Bar</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('stacked_bar')}>Stacked Bar</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('line')}>Line / Area</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('pie')}>Pie</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('doughnut')}>Doughnut</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('scatter')}>Scatter / Bubble</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('combo')}>Combo</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('radar')}>Radar</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('treemap')}>Treemap</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('funnel')}>Funnel</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('waterfall')}>Waterfall</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('heatmap')}>Heatmap</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('gauge')}>Gauge</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <DropdownMenu>
@@ -236,13 +258,12 @@ export function InsertTab(props: InsertTabProps) {
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            <DropdownMenuItem onSelect={() => props.onInsertChart?.()}>Line</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => props.onInsertChart?.()}>Area</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => props.onInsertChart?.()}>Stacked Area</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('line')}>Line</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('area')}>Area</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <RibbonLargeButton label="Maps"        icon={<MapIcon className="text-rose-500" />}    onClick={ribbonStub('Maps')} showCaret />
-        <RibbonLargeButton label="PivotChart"  icon={<ChartPie className="text-violet-500" />} onClick={props.onInsertChart} showCaret />
+        <RibbonLargeButton label="PivotChart"  icon={<ChartPie className="text-violet-500" />} onClick={() => openChartBuilderWithKind('bar')} showCaret />
       </RibbonGroup>
 
       {/* Sparklines */}
@@ -277,7 +298,7 @@ export function InsertTab(props: InsertTabProps) {
       {/* Symbols */}
       <RibbonGroup label="Symbols" className="border-r-0">
         <RibbonLargeButton label="Equation" icon={<Pi className="text-zinc-500" />}   onClick={ribbonStub('Equation')} showCaret />
-        <RibbonLargeButton label="Symbol"   icon={<Equal className="text-zinc-500" />} onClick={ribbonStub('Symbol')} />
+        <RibbonLargeButton label="Symbol"   icon={<Equal className="text-zinc-500" />} onClick={() => useSymbolPickerStore.getState().openPicker()} />
       </RibbonGroup>
 
       {/* AI shortcuts (kept as sheet-specific power tools) */}
