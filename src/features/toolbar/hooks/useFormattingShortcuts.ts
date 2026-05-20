@@ -86,6 +86,11 @@ export function useFormattingShortcuts() {
           e.preventDefault()
           applyFormatToSelection({ underline: !activeFormatting.underline })
           break
+        case '5':
+          // Ctrl+5 toggles strikethrough — Excel parity.
+          e.preventDefault()
+          applyFormatToSelection({ strikethrough: !activeFormatting.strikethrough })
+          break
       }
     }
 

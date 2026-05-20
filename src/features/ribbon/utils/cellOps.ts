@@ -135,7 +135,25 @@ const BORDER_TYPE_MAP: Record<BorderPreset, string> = {
   none:    'border-none',
 }
 
-export function applyBorder(preset: BorderPreset): void {
+/** FortuneSheet line-style index. */
+export type BorderLineStyle = '1' | '2' | '3' | '4'
+
+/** Default border options — black thin solid. */
+const DEFAULT_BORDER_OPTS = { color: '#000000', style: '1' as BorderLineStyle }
+
+/**
+ * Apply a border preset to the current selection.
+ *
+ * @param preset  Which edges receive the border (top/bottom/all/etc.)
+ * @param opts    Optional per-call overrides for color + line style.
+ *                When omitted, defaults to black thin solid (matching
+ *                the previous behaviour exactly). The 'thick' preset
+ *                upgrades to style '4' unless an explicit style is given.
+ */
+export function applyBorder(
+  preset: BorderPreset,
+  opts?: { color?: string; style?: BorderLineStyle },
+): void {
   const inst = getInstance()
   const rows = selectionRows()
   const cols = selectionCols()
@@ -143,6 +161,9 @@ export function applyBorder(preset: BorderPreset): void {
     toast.message('Select a cell first')
     return
   }
+  const color = opts?.color ?? DEFAULT_BORDER_OPTS.color
+  const style = opts?.style ?? (preset === 'thick' ? '4' : DEFAULT_BORDER_OPTS.style)
+
   try {
     const allSheets = (inst as unknown as { getAllSheets: () => Record<string, unknown>[] }).getAllSheets()
     const { activeSheetId } = useWorkbookStore.getState()
@@ -170,8 +191,8 @@ export function applyBorder(preset: BorderPreset): void {
         {
           rangeType: 'range',
           borderType: BORDER_TYPE_MAP[preset],
-          style: preset === 'thick' ? '4' : '1',
-          color: '#000000',
+          style,
+          color,
           range: [{ row: [rows.start, rows.end], column: [cols.start, cols.end] }],
         },
       ]

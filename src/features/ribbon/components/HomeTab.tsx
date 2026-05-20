@@ -32,7 +32,7 @@ import { useSheetStore } from '@/store/sheetStore'
 import { FontFamilySelector } from '@/features/toolbar/components/FontFamilySelector'
 import { FontSizeSelector } from '@/features/toolbar/components/FontSizeSelector'
 import { NumberFormatSelector } from '@/features/toolbar/components/NumberFormatSelector'
-import { ColorPicker } from '@/features/toolbar/components/ColorPicker'
+import { ColorPicker, NO_FILL } from '@/features/toolbar/components/ColorPicker'
 import { CFDropdownMenu } from '@/features/conditional-formatting/components/CFDropdownMenu'
 import { CellStylesDropdown } from '@/features/conditional-formatting/components/CellStylesDropdown'
 import { FormatAsTableDropdown } from './FormatAsTableDropdown'
@@ -46,10 +46,10 @@ import {
 } from '@/components/ui/dropdown-menu'
 import type { FontFamily, NumberFormat } from '@/types/sheet.types'
 import { RibbonGroup, RibbonButton, RibbonIconLabel } from './RibbonPrimitives'
+import { BordersDropdown } from './BordersDropdown'
 import { ribbonStub } from '../utils/ribbonStub'
 import {
   applyAutoSumOp,
-  applyBorder,
   applyOrientation,
   clearAll,
   clearComments,
@@ -73,7 +73,6 @@ import {
   selectCellsWithFormulas,
   selectCellsWithValidation,
   startFormatPainter,
-  type BorderPreset,
   type OrientationPreset,
 } from '../utils/cellOps'
 import { copySelection, cutSelection, pasteFromClipboard } from '../utils/clipboardOps'
@@ -96,17 +95,6 @@ interface HomeTabProps {
   onAIAssistant: () => void
 }
 
-const BORDER_PRESETS: { label: string; value: BorderPreset }[] = [
-  { label: 'Bottom Border',     value: 'bottom' },
-  { label: 'Top Border',        value: 'top' },
-  { label: 'Left Border',       value: 'left' },
-  { label: 'Right Border',      value: 'right' },
-  { label: 'No Border',         value: 'none' },
-  { label: 'All Borders',       value: 'all' },
-  { label: 'Outside Borders',   value: 'outside' },
-  { label: 'Thick Box Border',  value: 'thick' },
-]
-
 export function HomeTab(props: HomeTabProps) {
   const { gridInstance, activeFormatting, applyFormatToSelection } = useSheetStore()
 
@@ -122,9 +110,14 @@ export function HomeTab(props: HomeTabProps) {
     applyFormatToSelection({ numberFormat })
   const setFontFamily = (fontFamily: FontFamily) => applyFormatToSelection({ fontFamily })
   const setFontSize = (fontSize: number) => applyFormatToSelection({ fontSize })
-  const setTextColor = (textColor: string) => applyFormatToSelection({ textColor })
+  // ColorPicker emits `NO_FILL` when the user clicks "No Fill"; translate
+  // that to an empty string so the format-apply path clears the cell's
+  // backgroundColor / textColor (rather than literally writing the
+  // sentinel as a CSS colour value).
+  const setTextColor = (textColor: string) =>
+    applyFormatToSelection({ textColor: textColor === NO_FILL ? '' : textColor })
   const setBgColor = (backgroundColor: string) =>
-    applyFormatToSelection({ backgroundColor })
+    applyFormatToSelection({ backgroundColor: backgroundColor === NO_FILL ? '' : backgroundColor })
 
   const bumpFont = (delta: number) => {
     const next = Math.max(8, Math.min(72, (activeFormatting.fontSize ?? 11) + delta))
@@ -206,51 +199,26 @@ export function HomeTab(props: HomeTabProps) {
             <RibbonButton label="Bold" shortcut="Ctrl+B" icon={<Bold className="h-3.5 w-3.5" />} active={activeFormatting.bold} onClick={() => toggle('bold')} />
             <RibbonButton label="Italic" shortcut="Ctrl+I" icon={<Italic className="h-3.5 w-3.5" />} active={activeFormatting.italic} onClick={() => toggle('italic')} />
             <RibbonButton label="Underline" shortcut="Ctrl+U" icon={<Underline className="h-3.5 w-3.5" />} active={activeFormatting.underline} onClick={() => toggle('underline')} />
-            <RibbonButton label="Strikethrough" icon={<Strikethrough className="h-3.5 w-3.5" />} active={activeFormatting.strikethrough} onClick={() => toggle('strikethrough')} />
-            {/* Borders dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  title="Borders"
-                  className="flex h-[26px] items-center gap-0.5 rounded px-1 text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                >
-                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="3" width="18" height="18" />
-                    <line x1="3" y1="12" x2="21" y2="12" />
-                    <line x1="12" y1="3" x2="12" y2="21" />
-                  </svg>
-                  <ChevronDown className="h-2.5 w-2.5 text-zinc-400" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                {BORDER_PRESETS.map((b) => (
-                  <DropdownMenuItem key={b.value} onSelect={() => applyBorder(b.value)}>{b.label}</DropdownMenuItem>
-                ))}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={ribbonStub('More Borders…')}>More Borders…</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <RibbonButton label="Strikethrough" shortcut="Ctrl+5" icon={<Strikethrough className="h-3.5 w-3.5" />} active={activeFormatting.strikethrough} onClick={() => toggle('strikethrough')} />
+            {/* Borders dropdown (R2.3) — visual grid + line color + line style.
+                Replaces the previous text-only DropdownMenu list. */}
+            <BordersDropdown />
             <ColorPicker
               value={activeFormatting.backgroundColor ?? '#ffff00'}
               onChange={setBgColor}
               label="Fill color"
+              allowNoFill
               trigger={
-                <span className="flex flex-col items-center">
-                  <span className="text-[10px] font-bold leading-none text-zinc-700 dark:text-zinc-300">▣</span>
-                  <span className="mt-[1px] block h-[3px] w-[12px] rounded-[1px]" style={{ backgroundColor: activeFormatting.backgroundColor ?? '#ffff00' }} />
-                </span>
+                <span className="text-[10px] font-bold leading-none text-zinc-700 dark:text-zinc-300">▣</span>
               }
             />
             <ColorPicker
               value={activeFormatting.textColor ?? '#FF0000'}
               onChange={setTextColor}
               label="Text color"
+              allowNoFill
               trigger={
-                <span className="flex flex-col items-center">
-                  <span className="text-[10px] font-bold leading-none" style={{ color: activeFormatting.textColor ?? '#000000' }}>A</span>
-                  <span className="mt-[1px] block h-[3px] w-[12px] rounded-[1px]" style={{ backgroundColor: activeFormatting.textColor ?? '#FF0000' }} />
-                </span>
+                <span className="text-[10px] font-bold leading-none" style={{ color: activeFormatting.textColor ?? '#000000' }}>A</span>
               }
             />
           </div>
