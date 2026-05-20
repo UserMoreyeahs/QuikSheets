@@ -16,7 +16,11 @@ export function ScratchpadToggle({ isOpen, onToggle }: ScratchpadToggleProps) {
       aria-label="Private Scratchpad"
       aria-pressed={isOpen}
       className={[
-        'fixed bottom-4 right-4 z-[97] flex h-11 w-11 items-center justify-center rounded-full border shadow-lg transition-colors',
+        // UX-3: nudged up 32px so the Next.js dev-mode indicator (now
+        // pinned to bottom-right via next.config.mjs) doesn't stack
+        // directly on top of the scratchpad button. Production builds
+        // ignore the offset since the dev indicator is gone.
+        'fixed bottom-12 right-4 z-[97] flex h-11 w-11 items-center justify-center rounded-full border shadow-lg transition-colors',
         isOpen
           ? 'border-emerald-300 bg-emerald-600 text-white hover:bg-emerald-700'
           : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50',
