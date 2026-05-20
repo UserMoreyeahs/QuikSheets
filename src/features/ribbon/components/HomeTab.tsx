@@ -13,7 +13,6 @@ import {
   ChevronDown,
   ClipboardPaste,
   Copy,
-  DollarSign,
   Eraser,
   Italic,
   Merge as MergeIcon,
@@ -47,9 +46,11 @@ import {
 import type { FontFamily, NumberFormat } from '@/types/sheet.types'
 import { RibbonGroup, RibbonButton, RibbonIconLabel } from './RibbonPrimitives'
 import { BordersDropdown } from './BordersDropdown'
+import { AccountingDropdown } from './AccountingDropdown'
 import { ribbonStub } from '../utils/ribbonStub'
 import {
   applyAutoSumOp,
+  applyCustomNumberFormat,
   applyOrientation,
   mergeAcross,
   clearAll,
@@ -298,7 +299,13 @@ export function HomeTab(props: HomeTabProps) {
           </div>
           {/* Bottom row: 3 narrow buttons (26px) + 2 wider buttons (32px) = ~138px */}
           <div className="flex items-center gap-0.5">
-            <RibbonButton label="Accounting Format"  icon={<DollarSign className="h-3.5 w-3.5" />} active={activeFormatting.numberFormat === 'currency' || activeFormatting.numberFormat === 'accounting'} onClick={() => setNumberFormat('accounting')} />
+            {/* Accounting split-button (R4.1): icon applies the last-picked
+                currency symbol; caret opens the currency selector. Default
+                derived from system locale (`₹` for en-IN). */}
+            <AccountingDropdown
+              active={activeFormatting.numberFormat === 'currency' || activeFormatting.numberFormat === 'accounting'}
+              onApply={applyCustomNumberFormat}
+            />
             <RibbonButton label="Percent Style"       shortcut="Ctrl+Shift+%" icon={<Percent className="h-3.5 w-3.5" />} active={activeFormatting.numberFormat === 'percentage'} onClick={() => setNumberFormat('percentage')} />
             <RibbonButton label="Comma Style"          icon={<span className="text-[13px] font-semibold leading-none">,</span>} active={activeFormatting.numberFormat === 'number'} onClick={() => setNumberFormat('number')} />
             {/* Increase / Decrease decimal — wider buttons (34px) to fit ".0→.00" text without wrapping */}

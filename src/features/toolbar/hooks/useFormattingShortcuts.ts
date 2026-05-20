@@ -57,6 +57,39 @@ export function useFormattingShortcuts() {
 
       // ── Ctrl+Shift combinations ──
       if (e.shiftKey) {
+        // Excel-standard number format shortcuts. Identified by e.key
+        // (the SHIFTED character) since Ctrl+Shift+! is what the user
+        // types and what Excel documents.
+        switch (e.key) {
+          case '~':
+            e.preventDefault()
+            applyFormatToSelection({ numberFormat: 'general' })
+            return
+          case '!':
+            e.preventDefault()
+            applyFormatToSelection({ numberFormat: 'number' })
+            return
+          case '@':
+            e.preventDefault()
+            applyFormatToSelection({ numberFormat: 'time' })
+            return
+          case '#':
+            e.preventDefault()
+            applyFormatToSelection({ numberFormat: 'date_short' })
+            return
+          case '$':
+            e.preventDefault()
+            applyFormatToSelection({ numberFormat: 'currency' })
+            return
+          case '%':
+            e.preventDefault()
+            applyFormatToSelection({ numberFormat: 'percentage' })
+            return
+          case '^':
+            e.preventDefault()
+            applyFormatToSelection({ numberFormat: 'scientific' })
+            return
+        }
         switch (e.key.toLowerCase()) {
           case 'm':
             e.preventDefault()

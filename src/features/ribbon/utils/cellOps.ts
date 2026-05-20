@@ -359,6 +359,35 @@ function countDecimals(format: string): number {
   return n
 }
 
+/**
+ * Apply an arbitrary Excel-style number format string to the selection.
+ *
+ * Used by the Currency-symbol dropdown to set non-preset formats like
+ * `₹#,##,##0.00;[Red]-₹#,##,##0.00` (Indian Rupee with lakh-style
+ * grouping) — which the canned NumberFormat presets can't express.
+ *
+ * Writes the format into FortuneSheet's `ct.fa` per-cell. Cell type
+ * stays 'n' (numeric) so calculations keep working.
+ */
+export function applyCustomNumberFormat(format: string): void {
+  const inst = getInstance()
+  const rows = selectionRows()
+  const cols = selectionCols()
+  if (!inst || !rows || !cols) {
+    toast.message('Select a cell first')
+    return
+  }
+  try {
+    const range = [{ row: [rows.start, rows.end], column: [cols.start, cols.end] }]
+    ;(inst as unknown as {
+      setCellFormatByRange: (attr: string, value: unknown, range: unknown) => void
+    }).setCellFormatByRange('ct', { fa: format, t: 'n' }, range)
+    toast.success('Format applied')
+  } catch (e) {
+    toast.error(`Could not apply format: ${String(e)}`)
+  }
+}
+
 // ─── AutoSum operations (Average / Count / Max / Min) ───────────────────
 
 export function applyAutoSumOp(op: 'SUM' | 'AVERAGE' | 'COUNT' | 'MAX' | 'MIN'): void {
