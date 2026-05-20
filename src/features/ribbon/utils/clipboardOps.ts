@@ -63,9 +63,32 @@ let pendingCutClear: { sheetId: string; sr: number; sc: number; er: number; ec: 
 // Internal helpers
 // ─────────────────────────────────────────────────────────────────────────
 
+/**
+ * Resolve the live active sheet.
+ *
+ * The grid's authoritative state lives inside the FortuneSheet instance —
+ * the Zustand gridSheets mirror lags by one tick after `setCellValue`
+ * calls because the sync goes through the workbook `onChange` hook.
+ * For clipboard operations we MUST read the live instance state or the
+ * captured payload will be missing freshly-typed values.
+ */
 function getActiveSheet(): Sheet | null {
-  const { gridSheets } = useSheetStore.getState()
+  const { gridInstance, gridSheets } = useSheetStore.getState()
   const { activeSheetId } = useWorkbookStore.getState()
+
+  // Prefer the instance's live data.
+  if (gridInstance) {
+    try {
+      const all = (gridInstance as unknown as { getAllSheets?: () => Sheet[] }).getAllSheets?.()
+      if (all && all.length > 0) {
+        const live = all.find((s) => s.id === activeSheetId)
+        if (live) return live
+        return all[0] ?? null
+      }
+    } catch {
+      // fall through to Zustand mirror
+    }
+  }
   return gridSheets.find((s) => s.id === activeSheetId) ?? null
 }
 
