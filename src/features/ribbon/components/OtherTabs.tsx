@@ -116,7 +116,12 @@ import {
   evaluateFormula,
 } from '../utils/cellOps'
 import { useInsertFunctionStore } from '@/features/formula-engine/stores/insertFunctionStore'
-import { ColumnTypeRibbonButton } from '@/features/typed-columns'
+import { ColumnTypeRibbonButton, useColumnTypesStore } from '@/features/typed-columns'
+import { useCommentsUiStore } from '@/features/comments/store/commentsUiStore'
+import { useSheetStore } from '@/store/sheetStore'
+import { useWorkbookStore } from '@/store/workbookStore'
+import { colIndexToLetter } from '@/lib/cellAddress'
+import { toast } from 'sonner'
 
 // ─── Insert ──────────────────────────────────────────────────────────────────
 
@@ -131,6 +136,39 @@ interface InsertTabProps {
   onRowSummarizer?: (() => void) | undefined
   onColumnDNA?: (() => void) | undefined
   onImport?: (() => void) | undefined
+}
+
+/**
+ * R8.1 — Insert > Comment: open the CommentComposer for the active cell.
+ * Reuses the existing comments feature; only the menu wire was missing.
+ */
+function insertCommentForActiveCell(): void {
+  const { selectedCell } = useSheetStore.getState()
+  const { activeSheetId } = useWorkbookStore.getState()
+  if (!selectedCell || !activeSheetId) {
+    toast.message('Select a cell to add a comment')
+    return
+  }
+  const cellAddress = `${colIndexToLetter(selectedCell.col)}${selectedCell.row + 1}`
+  useCommentsUiStore.getState().openComposer({ sheetId: activeSheetId, cellAddress })
+}
+
+/**
+ * R8.2 — Insert > Checkbox: set the active column's type to "checkbox",
+ * reusing the typed-columns infrastructure shipped in Phase 3a. Every
+ * cell in the column becomes a ☐ / ☑ toggle with validation.
+ */
+function insertCheckboxForActiveColumn(): void {
+  const { selectedCell } = useSheetStore.getState()
+  const { activeSheetId } = useWorkbookStore.getState()
+  if (!selectedCell || !activeSheetId) {
+    toast.message('Select a cell in the target column first')
+    return
+  }
+  useColumnTypesStore.getState().setColumnType(activeSheetId, selectedCell.col, {
+    type: 'checkbox',
+  })
+  toast.success(`Column ${colIndexToLetter(selectedCell.col)} set to Checkbox`)
 }
 
 export function InsertTab(props: InsertTabProps) {
@@ -168,7 +206,7 @@ export function InsertTab(props: InsertTabProps) {
 
       {/* Controls */}
       <RibbonGroup label="Controls">
-        <RibbonLargeButton label="Checkbox" icon={<CheckSquare className="text-emerald-500" />} onClick={ribbonStub('Checkbox')} />
+        <RibbonLargeButton label="Checkbox" icon={<CheckSquare className="text-emerald-500" />} onClick={insertCheckboxForActiveColumn} />
       </RibbonGroup>
 
       {/* Charts */}
@@ -226,7 +264,7 @@ export function InsertTab(props: InsertTabProps) {
 
       {/* Comments */}
       <RibbonGroup label="Comments">
-        <RibbonLargeButton label="Comment" icon={<MessageSquare className="text-blue-500" />} onClick={ribbonStub('New Comment')} />
+        <RibbonLargeButton label="Comment" icon={<MessageSquare className="text-blue-500" />} onClick={insertCommentForActiveCell} />
       </RibbonGroup>
 
       {/* Text */}
