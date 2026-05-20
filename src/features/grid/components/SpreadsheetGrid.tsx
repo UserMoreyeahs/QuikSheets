@@ -24,6 +24,8 @@ import { PreviewOverlay, RangeHighlight, ResultBadge, useLivePreview } from '@/f
 import { ColumnIntentBanner, useColumnIntent } from '@/features/intent-columns'
 import { useColumnTypesStore, validateForEdit } from '@/features/typed-columns'
 import { useInlineEditSync } from '../hooks/useInlineEditSync'
+import { CellContextMenu } from './CellContextMenu'
+import { insertHyperlink, defineNameFromSelection } from '@/features/ribbon/utils/cellOps'
 import type { RowSummarySelection } from '@/features/row-summarizer'
 import type { Cell, Sheet, Selection } from '@fortune-sheet/core'
 import type { WorkbookInstance } from '@fortune-sheet/react'
@@ -870,6 +872,70 @@ export function SpreadsheetGrid({
     }
   }, [])
 
+  // ── UX-2 helpers used by the right-click context menu ──────────────
+  // Run a FortuneSheet API op against the cell that was right-clicked.
+  // The instance is dynamically typed because @fortune-sheet/react's
+  // WorkbookInstance type doesn't expose insertRowOrColumn /
+  // deleteRowOrColumn / setCellValue.
+  const runGridOp = useCallback(
+    (op: (
+      inst: {
+        insertRowOrColumn: (type: 'row' | 'column', index: number, count: number, dir: 'lefttop' | 'rightbottom') => void
+        deleteRowOrColumn: (type: 'row' | 'column', start: number, end: number) => void
+        setCellValue: (r: number, c: number, v: unknown) => void
+      },
+      row: number,
+      col: number,
+    ) => void) => {
+      const inst = workbookRef.current
+      const cm = contextMenu
+      if (!inst || !cm) return
+      try {
+        op(inst as unknown as Parameters<typeof op>[0], cm.row, cm.col)
+      } catch (e) {
+        toast.error(`Failed: ${String(e)}`)
+      }
+    },
+    [contextMenu],
+  )
+
+  // Fire the document-level Cut/Copy/Paste so FortuneSheet's existing
+  // clipboard pipeline picks up the action. document.execCommand is
+  // deprecated but still the only reliable way to drive a third-party
+  // canvas grid's clipboard from a menu item without OS permissions.
+  const runClipboardCommand = useCallback(async (cmd: 'cut' | 'copy' | 'paste') => {
+    try {
+      document.execCommand(cmd)
+    } catch {
+      toast.message(`${cmd[0]?.toUpperCase()}${cmd.slice(1)} via the keyboard (Ctrl+${cmd === 'cut' ? 'X' : cmd === 'copy' ? 'C' : 'V'})`)
+    }
+  }, [])
+
+  // Paste-values-only: read clipboard text and write each cell as plain
+  // string/number, ignoring source formatting + formulas.
+  const runPasteValues = useCallback(async () => {
+    const inst = workbookRef.current as unknown as {
+      setCellValue: (r: number, c: number, v: unknown) => void
+    } | null
+    const cm = contextMenu
+    if (!inst || !cm) return
+    try {
+      const text = await navigator.clipboard.readText()
+      const rows = text.split(/\r?\n/).filter((r, i, arr) => !(i === arr.length - 1 && r === ''))
+      rows.forEach((rowText, dr) => {
+        rowText.split('\t').forEach((cellText, dc) => {
+          const trimmed = cellText.trim()
+          const asNum = Number(trimmed)
+          const value = trimmed !== '' && !isNaN(asNum) ? asNum : trimmed
+          inst.setCellValue(cm.row + dr, cm.col + dc, value)
+        })
+      })
+      toast.success(`Pasted values (${rows.length} row${rows.length > 1 ? 's' : ''})`)
+    } catch (e) {
+      toast.error(`Paste values failed: ${String(e)}`)
+    }
+  }, [contextMenu])
+
   return (
     <div
       ref={gridContainerRef}
@@ -1013,56 +1079,95 @@ export function SpreadsheetGrid({
       )}
 
       {contextMenu && (
-        <div
+        <CellContextMenu
           ref={contextMenuRef}
-          style={{ left: contextMenu.left, top: contextMenu.top }}
-          className="fixed z-[70] min-w-[200px] rounded-md border border-zinc-200 bg-white py-1 shadow-xl dark:border-zinc-700 dark:bg-zinc-800"
-        >
-          {contextMenu.rowSelection && onSummarizeRows && (
-            <button
-              type="button"
-              onClick={() => {
-                const rowSelection = contextMenu.rowSelection
-                setContextMenu(null)
-                if (rowSelection) {
-                  onSummarizeRows(rowSelection)
-                }
-              }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-700"
-            >
-              <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-              Summarize selected rows
-            </button>
-          )}
-          {onAddComment && (
-            <button
-              type="button"
-              onClick={() => {
-                const target = contextMenu
-                setContextMenu(null)
-                if (target && activeSheetId) {
-                  onAddComment({
-                    sheetId: activeSheetId,
-                    cellAddress: toCellNotation(target.row, target.col),
-                  })
-                }
-              }}
-              className="flex w-full items-center px-3 py-2 text-left text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-700"
-            >
-              Add comment
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => {
-              setContextMenu(null)
-              onViewCellHistory?.()
-            }}
-            className="flex w-full items-center px-3 py-2 text-left text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-700"
-          >
-            View Cell History
-          </button>
-        </div>
+          left={contextMenu.left}
+          top={contextMenu.top}
+          hasRowSelection={!!contextMenu.rowSelection}
+          onCut={() => {
+            setContextMenu(null)
+            void runClipboardCommand('cut')
+          }}
+          onCopy={() => {
+            setContextMenu(null)
+            void runClipboardCommand('copy')
+          }}
+          onPaste={() => {
+            setContextMenu(null)
+            void runClipboardCommand('paste')
+          }}
+          onPasteValues={() => {
+            setContextMenu(null)
+            void runPasteValues()
+          }}
+          onInsertRowAbove={() => {
+            setContextMenu(null)
+            runGridOp((inst, row) => inst.insertRowOrColumn('row', row, 1, 'lefttop'))
+            toast.success('Row inserted above')
+          }}
+          onInsertRowBelow={() => {
+            setContextMenu(null)
+            runGridOp((inst, row) => inst.insertRowOrColumn('row', row, 1, 'rightbottom'))
+            toast.success('Row inserted below')
+          }}
+          onInsertColLeft={() => {
+            setContextMenu(null)
+            runGridOp((inst, _row, col) => inst.insertRowOrColumn('column', col, 1, 'lefttop'))
+            toast.success('Column inserted left')
+          }}
+          onInsertColRight={() => {
+            setContextMenu(null)
+            runGridOp((inst, _row, col) => inst.insertRowOrColumn('column', col, 1, 'rightbottom'))
+            toast.success('Column inserted right')
+          }}
+          onDeleteRow={() => {
+            setContextMenu(null)
+            runGridOp((inst, row) => inst.deleteRowOrColumn('row', row, row))
+            toast.success('Row deleted')
+          }}
+          onDeleteCol={() => {
+            setContextMenu(null)
+            runGridOp((inst, _row, col) => inst.deleteRowOrColumn('column', col, col))
+            toast.success('Column deleted')
+          }}
+          onClearContents={() => {
+            setContextMenu(null)
+            runGridOp((inst, row, col) => inst.setCellValue(row, col, null))
+          }}
+          onFormatCells={() => {
+            setContextMenu(null)
+            // Surface the Home tab's Number Format dropdown by focusing it
+            // via a custom event — wired up at the FormattingToolbar level.
+            window.dispatchEvent(new CustomEvent('quiksheets:open-format-cells'))
+          }}
+          onInsertHyperlink={() => {
+            setContextMenu(null)
+            insertHyperlink()
+          }}
+          onDefineName={() => {
+            setContextMenu(null)
+            defineNameFromSelection(workbookId ?? '')
+          }}
+          onAddComment={onAddComment ? () => {
+            const target = contextMenu
+            setContextMenu(null)
+            if (target && activeSheetId) {
+              onAddComment({
+                sheetId: activeSheetId,
+                cellAddress: toCellNotation(target.row, target.col),
+              })
+            }
+          } : undefined}
+          onViewCellHistory={() => {
+            setContextMenu(null)
+            onViewCellHistory?.()
+          }}
+          onSummarizeRows={contextMenu.rowSelection && onSummarizeRows ? () => {
+            const rowSelection = contextMenu.rowSelection
+            setContextMenu(null)
+            if (rowSelection) onSummarizeRows(rowSelection)
+          } : undefined}
+        />
       )}
     </div>
   )
