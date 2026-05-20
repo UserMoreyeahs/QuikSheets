@@ -7,7 +7,6 @@ import {
   AlignVerticalJustifyCenter,
   AlignVerticalJustifyEnd,
   AlignVerticalJustifyStart,
-  ArrowDownAZ,
   ArrowDownNarrowWide,
   ArrowUpDown,
   Bold,
@@ -16,7 +15,6 @@ import {
   Copy,
   DollarSign,
   Eraser,
-  Filter as FilterIcon,
   Italic,
   Merge as MergeIcon,
   Paintbrush,
@@ -490,12 +488,16 @@ export function HomeTab(props: HomeTabProps) {
             <DropdownMenuItem onSelect={selectCellsWithValidation}>Data Validation</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        {/* History — Undo/Redo (compact) */}
+        {/* Undo/Redo — compact column.
+            Previously had 4 buttons (Undo/Redo/Sort/Filter) but Sort
+            and Filter were duplicates of the Sort & Filter dropdown
+            immediately to the left, AND 4*26+3*2 = 110px overflowed
+            the 80px content area. Trimmed to just Undo/Redo so the
+            column is 2*26+2 = 54px and fits comfortably with the
+            group label visible below. */}
         <div className="ml-1 flex flex-col gap-0.5 border-l border-zinc-200 pl-2 dark:border-zinc-700">
           <RibbonButton label="Undo" shortcut="Ctrl+Z" icon={<Undo2 className="h-3.5 w-3.5" />} disabled={!gridInstance} onClick={() => gridInstance?.handleUndo()} />
           <RibbonButton label="Redo" shortcut="Ctrl+Y" icon={<Redo2 className="h-3.5 w-3.5" />} disabled={!gridInstance} onClick={() => gridInstance?.handleRedo()} />
-          <RibbonButton label="Sort A→Z" icon={<ArrowDownAZ className="h-3.5 w-3.5" />} onClick={props.onSortAsc} />
-          <RibbonButton label="Filter"   icon={<FilterIcon className="h-3.5 w-3.5" />} onClick={props.onFilter} />
         </div>
       </RibbonGroup>
     </div>
