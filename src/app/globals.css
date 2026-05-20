@@ -24,6 +24,15 @@
   .scrollbar-thin::-webkit-scrollbar-track {
     background: transparent;
   }
+  /* Hide the scrollbar entirely while keeping the element scrollable.
+     Used by ribbon tab rows so a vestigial 10-12px horizontal bar
+     doesn't eat space between the ribbon and the formula bar. */
+  .scrollbar-hide {
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
 
   /* Format Painter armed — show paintbrush cursor + subtle blue tint over the grid */
   body.quiksheets-format-painter-active,

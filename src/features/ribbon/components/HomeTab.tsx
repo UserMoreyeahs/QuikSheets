@@ -134,7 +134,7 @@ export function HomeTab(props: HomeTabProps) {
   }
 
   return (
-    <div className="flex h-full items-stretch overflow-x-auto">
+    <div className="flex h-full items-stretch overflow-x-auto scrollbar-hide">
       {/* ── 1. Clipboard ─────────────────────────────────────── */}
       <RibbonGroup label="Clipboard">
         {/* Paste — Excel-style split button.

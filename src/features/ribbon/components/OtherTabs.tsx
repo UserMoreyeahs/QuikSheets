@@ -188,7 +188,7 @@ function insertCheckboxForActiveColumn(): void {
 
 export function InsertTab(props: InsertTabProps) {
   return (
-    <div className="flex h-full items-stretch overflow-x-auto">
+    <div className="flex h-full items-stretch overflow-x-auto scrollbar-hide">
       {/* Tables */}
       <RibbonGroup label="Tables">
         <RibbonLargeButton label="PivotTable"            icon={<TableIcon className="text-violet-500" />} onClick={props.onInsertPivot} showCaret />
@@ -334,7 +334,7 @@ export function PageLayoutTab(props: PageLayoutTabProps) {
   const setScalePct = usePrintSettingsStore((s) => s.setScalePct)
 
   return (
-    <div className="flex h-full items-stretch overflow-x-auto">
+    <div className="flex h-full items-stretch overflow-x-auto scrollbar-hide">
       {/* Themes */}
       <RibbonGroup label="Themes">
         <RibbonLargeButton label="Themes"  icon={<Palette className="text-violet-500" />}     onClick={ribbonStub('Themes')} showCaret />
@@ -532,7 +532,7 @@ interface FormulasTabProps {
 
 export function FormulasTab(props: FormulasTabProps) {
   return (
-    <div className="flex h-full items-stretch overflow-x-auto">
+    <div className="flex h-full items-stretch overflow-x-auto scrollbar-hide">
       {/* Function Library */}
       <RibbonGroup label="Function Library">
         <RibbonLargeButton label="Insert Function" icon={<Calculator className="text-emerald-600" />} onClick={() => useInsertFunctionStore.getState().setOpen(true)} />
@@ -609,7 +609,7 @@ interface DataTabProps {
 
 export function DataTab(props: DataTabProps) {
   return (
-    <div className="flex h-full items-stretch overflow-x-auto">
+    <div className="flex h-full items-stretch overflow-x-auto scrollbar-hide">
       {/* Get & Transform Data */}
       <RibbonGroup label="Get & Transform Data">
         <RibbonLargeButton label="Get Data" icon={<Database className="text-emerald-500" />} onClick={props.onImport} showCaret />
@@ -704,7 +704,7 @@ interface ReviewTabProps {
 
 export function ReviewTab(props: ReviewTabProps) {
   return (
-    <div className="flex h-full items-stretch overflow-x-auto">
+    <div className="flex h-full items-stretch overflow-x-auto scrollbar-hide">
       {/* Proofing */}
       <RibbonGroup label="Proofing">
         <RibbonLargeButton label="Spelling"            icon={<BookOpen className="text-emerald-500" />} onClick={ribbonStub('Spelling (F7)')} />
@@ -788,7 +788,7 @@ interface ViewTabProps {
 
 export function ViewTab(props: ViewTabProps) {
   return (
-    <div className="flex h-full items-stretch overflow-x-auto">
+    <div className="flex h-full items-stretch overflow-x-auto scrollbar-hide">
       {/* Sheet View */}
       <RibbonGroup label="Sheet View">
         <DropdownMenu>
@@ -915,7 +915,7 @@ export function ViewTab(props: ViewTabProps) {
 
 export function AutomateTab() {
   return (
-    <div className="flex h-full items-stretch overflow-x-auto">
+    <div className="flex h-full items-stretch overflow-x-auto scrollbar-hide">
       <RibbonGroup label="Office Scripts">
         <RibbonLargeButton label="New Script"   icon={<Plus className="text-emerald-500" />}     onClick={ribbonStub('New Script')} showCaret />
         <RibbonLargeButton label="View Scripts" icon={<Code2 className="text-blue-500" />}        onClick={ribbonStub('View Scripts')} showCaret />
@@ -951,7 +951,7 @@ interface HelpTabProps {
 
 export function HelpTab({ onShortcuts }: HelpTabProps) {
   return (
-    <div className="flex h-full items-stretch overflow-x-auto">
+    <div className="flex h-full items-stretch overflow-x-auto scrollbar-hide">
       <RibbonGroup label="Help">
         <RibbonLargeButton label="Help"           icon={<CircleHelp className="text-blue-500" />}  onClick={onShortcuts} />
         <RibbonLargeButton label="Contact Support" icon={<MessageCircle className="text-emerald-500" />} onClick={ribbonStub('Contact Support')} />

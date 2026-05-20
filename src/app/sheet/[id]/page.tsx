@@ -59,6 +59,7 @@ const CellHistoryPanel = dynamic(
   { ssr: false },
 )
 import { NLFilterBar, type NLFilterColumnSchema, type NLFilterSampleRow } from '@/features/nl-filter'
+import { useNLFilterUiStore } from '@/features/nl-filter/store/nlFilterUiStore'
 import { useColumnDNA } from '@/features/column-dna'
 import { useTypedColumnsEnforcement } from '@/features/typed-columns'
 const ColumnDNAPanel = dynamic(
@@ -307,6 +308,20 @@ export default function SheetPage() {
     window.addEventListener('quiksheets:toggle-map', handle)
     return () => window.removeEventListener('quiksheets:toggle-map', handle)
   }, [toggleMap])
+
+  // UX-1: NL filter bar visibility + Ctrl+Shift+L shortcut to toggle.
+  const nlFilterVisible = useNLFilterUiStore((s) => s.visible)
+  const toggleNlFilter = useNLFilterUiStore((s) => s.toggle)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'L' || e.key === 'l')) {
+        e.preventDefault()
+        toggleNlFilter()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [toggleNlFilter])
 
   // Dev-only: expose the live grid instance + a 2-D test-data seeder on
   // window so we can verify Insert > Chart/Table/Pivot end-to-end with
@@ -1387,7 +1402,7 @@ export default function SheetPage() {
 
       {showFormulaBarUI && <FormulaBar />}
 
-      <NLFilterBar columnSchema={nlFilterColumnSchema} sampleData={nlFilterSampleData} />
+      {nlFilterVisible && <NLFilterBar columnSchema={nlFilterColumnSchema} sampleData={nlFilterSampleData} />}
 
       <div className="relative flex-1 overflow-hidden">
         <SpreadsheetGrid
