@@ -5,28 +5,56 @@ import { ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSheetStore } from '@/store/sheetStore'
 
+/**
+ * Table style palettes. Expanded from 18 to 30, organised in tiers
+ * matching Excel's gallery (Light / Medium / Dark, plus a "Plain"
+ * row of neutral greys and Light additions for Purple / Teal / Pink
+ * / Brown / Mint).
+ *
+ * Schema:
+ *   header — first-row fill (typically darker accent)
+ *   bg     — banded "odd row" fill
+ *   alt    — banded "even row" fill (usually white)
+ */
 const PALETTES = [
-  // Light
-  { name: 'Light Blue',   bg: '#DDEBF7', header: '#5B9BD5', alt: '#FFFFFF' },
-  { name: 'Light Orange', bg: '#FCE4D6', header: '#ED7D31', alt: '#FFFFFF' },
-  { name: 'Light Gray',   bg: '#EDEDED', header: '#A5A5A5', alt: '#FFFFFF' },
-  { name: 'Light Yellow', bg: '#FFF2CC', header: '#FFC000', alt: '#FFFFFF' },
-  { name: 'Light Green',  bg: '#E2EFDA', header: '#70AD47', alt: '#FFFFFF' },
-  { name: 'Light Red',    bg: '#FCE4E4', header: '#C00000', alt: '#FFFFFF' },
-  // Medium
-  { name: 'Med Blue',     bg: '#9DC3E6', header: '#2E75B6', alt: '#DDEBF7' },
-  { name: 'Med Orange',   bg: '#F4B183', header: '#C55A11', alt: '#FCE4D6' },
-  { name: 'Med Gray',     bg: '#BFBFBF', header: '#7F7F7F', alt: '#EDEDED' },
-  { name: 'Med Yellow',   bg: '#FFD966', header: '#BF8F00', alt: '#FFF2CC' },
-  { name: 'Med Green',    bg: '#A9D08E', header: '#548235', alt: '#E2EFDA' },
-  { name: 'Med Red',      bg: '#F4B0B0', header: '#823535', alt: '#FCE4E4' },
-  // Dark
-  { name: 'Dark Blue',    bg: '#2E75B6', header: '#1F4E79', alt: '#FFFFFF' },
-  { name: 'Dark Orange',  bg: '#C55A11', header: '#833C0C', alt: '#FFFFFF' },
-  { name: 'Dark Gray',    bg: '#595959', header: '#262626', alt: '#FFFFFF' },
-  { name: 'Dark Yellow',  bg: '#BF8F00', header: '#806000', alt: '#FFFFFF' },
-  { name: 'Dark Green',   bg: '#548235', header: '#385723', alt: '#FFFFFF' },
-  { name: 'Dark Red',     bg: '#823535', header: '#491D1D', alt: '#FFFFFF' },
+  // Plain / neutral
+  { name: 'None / White',  bg: '#FFFFFF', header: '#D9D9D9', alt: '#F2F2F2' },
+  { name: 'Plain Light',   bg: '#F2F2F2', header: '#A6A6A6', alt: '#FFFFFF' },
+  { name: 'Plain Medium',  bg: '#D9D9D9', header: '#808080', alt: '#F2F2F2' },
+  { name: 'Plain Dark',    bg: '#808080', header: '#262626', alt: '#A6A6A6' },
+
+  // Light tier
+  { name: 'Light Blue',    bg: '#DDEBF7', header: '#5B9BD5', alt: '#FFFFFF' },
+  { name: 'Light Orange',  bg: '#FCE4D6', header: '#ED7D31', alt: '#FFFFFF' },
+  { name: 'Light Gray',    bg: '#EDEDED', header: '#A5A5A5', alt: '#FFFFFF' },
+  { name: 'Light Yellow',  bg: '#FFF2CC', header: '#FFC000', alt: '#FFFFFF' },
+  { name: 'Light Green',   bg: '#E2EFDA', header: '#70AD47', alt: '#FFFFFF' },
+  { name: 'Light Red',     bg: '#FCE4E4', header: '#C00000', alt: '#FFFFFF' },
+  { name: 'Light Purple',  bg: '#E4DFEC', header: '#7030A0', alt: '#FFFFFF' },
+  { name: 'Light Teal',    bg: '#D6EBE7', header: '#0F9D85', alt: '#FFFFFF' },
+  { name: 'Light Pink',    bg: '#FCE4F0', header: '#E94BA8', alt: '#FFFFFF' },
+  { name: 'Light Brown',   bg: '#F0E6DD', header: '#8B5A2B', alt: '#FFFFFF' },
+  { name: 'Light Mint',    bg: '#E6F4EA', header: '#34A853', alt: '#FFFFFF' },
+
+  // Medium tier
+  { name: 'Med Blue',      bg: '#9DC3E6', header: '#2E75B6', alt: '#DDEBF7' },
+  { name: 'Med Orange',    bg: '#F4B183', header: '#C55A11', alt: '#FCE4D6' },
+  { name: 'Med Gray',      bg: '#BFBFBF', header: '#7F7F7F', alt: '#EDEDED' },
+  { name: 'Med Yellow',    bg: '#FFD966', header: '#BF8F00', alt: '#FFF2CC' },
+  { name: 'Med Green',     bg: '#A9D08E', header: '#548235', alt: '#E2EFDA' },
+  { name: 'Med Red',       bg: '#F4B0B0', header: '#823535', alt: '#FCE4E4' },
+  { name: 'Med Purple',    bg: '#B4A6CC', header: '#5C2E8B', alt: '#E4DFEC' },
+  { name: 'Med Teal',      bg: '#92D2C7', header: '#0B7D6A', alt: '#D6EBE7' },
+
+  // Dark tier
+  { name: 'Dark Blue',     bg: '#2E75B6', header: '#1F4E79', alt: '#FFFFFF' },
+  { name: 'Dark Orange',   bg: '#C55A11', header: '#833C0C', alt: '#FFFFFF' },
+  { name: 'Dark Gray',     bg: '#595959', header: '#262626', alt: '#FFFFFF' },
+  { name: 'Dark Yellow',   bg: '#BF8F00', header: '#806000', alt: '#FFFFFF' },
+  { name: 'Dark Green',    bg: '#548235', header: '#385723', alt: '#FFFFFF' },
+  { name: 'Dark Red',      bg: '#823535', header: '#491D1D', alt: '#FFFFFF' },
+  { name: 'Dark Purple',   bg: '#5C2E8B', header: '#3B1D5C', alt: '#FFFFFF' },
+  { name: 'Dark Teal',     bg: '#0B7D6A', header: '#08503F', alt: '#FFFFFF' },
 ]
 
 export function FormatAsTableDropdown() {
