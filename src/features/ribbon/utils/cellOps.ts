@@ -210,6 +210,59 @@ export function applyBorder(
   }
 }
 
+// ─── Merge Across (one merge per row of the selection) ─────────────────
+
+/**
+ * "Merge Across" — Excel parity.
+ *
+ * For an N-row × M-col selection, perform N independent merges, one
+ * per row spanning columns start→end. The rows themselves stay
+ * separate. Useful for header bands where each row of a multi-row
+ * heading should be its own merged label.
+ *
+ * Different from "Merge Cells" which collapses the entire rectangle
+ * into a single cell.
+ */
+export function mergeAcross(): void {
+  const inst = getInstance()
+  const rows = selectionRows()
+  const cols = selectionCols()
+  if (!inst || !rows || !cols) {
+    toast.message('Select a range to merge across')
+    return
+  }
+  if (cols.start === cols.end) {
+    toast.message('Merge Across needs at least 2 columns')
+    return
+  }
+  const { activeSheetId } = useWorkbookStore.getState()
+  const mergeFn = (inst as unknown as {
+    mergeCells?: (
+      ranges: { row: [number, number]; column: [number, number] }[],
+      type: string,
+      opts?: { id?: string },
+    ) => void
+  }).mergeCells
+  if (!mergeFn) {
+    toast.error('Merge API not available')
+    return
+  }
+  try {
+    // One merge call per row so each row stays distinct.
+    for (let r = rows.start; r <= rows.end; r++) {
+      mergeFn(
+        [{ row: [r, r], column: [cols.start, cols.end] }],
+        'merge-all',
+        { id: activeSheetId },
+      )
+    }
+    const n = rows.end - rows.start + 1
+    toast.success(`Merged ${n} row${n === 1 ? '' : 's'} across`)
+  } catch (e) {
+    toast.error(`Merge Across failed: ${String(e)}`)
+  }
+}
+
 // ─── Increase / Decrease Decimal ─────────────────────────────────────────
 
 /**
@@ -452,12 +505,30 @@ export function clearHyperlinks(): void {
 }
 
 // ─── Indent +/- ─────────────────────────────────────────────────────────
-// FortuneSheet uses `tr` attr for text rotation, not indent. Excel indent
-// is roughly equivalent to extra padding-left. We approximate by using the
-// `cl` (clip) and `tb` (text break) modifiers — actually we just store an
-// `indent` cell-level prop and prepend spaces in the display string.
+//
+// FortuneSheet doesn't expose a native `alignment.indent` attribute the
+// way Excel's OOXML does. We approximate by:
+//
+//   1. Tracking the indent level per cell on a custom property `qsIndent`
+//      (0..15). The raw value `v` and formula `f` are NEVER mutated, so
+//      sort + edit see the value as the user typed it.
+//   2. Applying the visual indent through the display string `m`, which
+//      is what FortuneSheet's canvas renderer reads. The display is
+//      rebuilt deterministically from `qsIndent` + raw value, so
+//      bumping indent twice doesn't compound spaces incorrectly.
+//
+// Improvements over the previous "count leading spaces in m" hack:
+//   - Edit input no longer shows the padding spaces (we keep `v` clean)
+//   - Sort uses the raw value, ignoring indent
+//   - User-typed leading spaces in their own data aren't confused with
+//     the indent level
+//   - Indent level is queryable for future Excel xlsx round-trip
+//
+// Limitations: Spaces still appear in CSV/TSV export of display text;
+// true xlsx round-trip needs FortuneSheet to expose alignment.indent.
 
-const INDENT_SPACES = 4 // ~Excel's 1-level indent in characters
+const INDENT_SPACES_PER_LEVEL = 4
+const MAX_INDENT_LEVEL = 15
 
 export function increaseIndent(): void {
   bumpIndent(1)
@@ -479,19 +550,35 @@ function bumpIndent(delta: 1 | -1): void {
     const { activeSheetId } = useWorkbookStore.getState()
     const sheet = sheets.find((s) => s.id === activeSheetId)
     if (!sheet) return
+
+    type IndentableCell = {
+      v?: unknown
+      m?: string
+      f?: string
+      qsIndent?: number
+    }
+    const setFmt = (inst as unknown as {
+      setCellFormatByRange: (attr: string, value: unknown, range: unknown) => void
+    }).setCellFormatByRange
+
     for (let r = rows.start; r <= rows.end; r++) {
       for (let c = cols.start; c <= cols.end; c++) {
-        const cell = sheet.data?.[r]?.[c] as { v?: unknown; m?: string; f?: string } | undefined
+        const cell = sheet.data?.[r]?.[c] as IndentableCell | undefined
         if (!cell) continue
-        const currentDisplay = String(cell.m ?? cell.v ?? '')
-        const stripped = currentDisplay.replace(/^ +/, '')
-        const currentSpaces = currentDisplay.length - stripped.length
-        const nextSpaces = Math.max(0, currentSpaces + delta * INDENT_SPACES)
-        const nextDisplay = ' '.repeat(nextSpaces) + stripped
-        if (cell.f) continue // don't indent formula display
-        ;(inst as unknown as {
-          setCellFormatByRange: (attr: string, value: unknown, range: unknown) => void
-        }).setCellFormatByRange('m', nextDisplay, [{ row: [r, r], column: [c, c] }])
+        // Formulas keep `m` engine-managed — don't fight that.
+        if (cell.f) continue
+
+        const currentLevel = typeof cell.qsIndent === 'number' ? cell.qsIndent : 0
+        const nextLevel = Math.min(MAX_INDENT_LEVEL, Math.max(0, currentLevel + delta))
+        if (nextLevel === currentLevel) continue
+
+        // Rebuild display from the raw value so we never compound spaces.
+        const rawText = cell.v == null ? '' : String(cell.v)
+        const display = ' '.repeat(nextLevel * INDENT_SPACES_PER_LEVEL) + rawText
+
+        const range = [{ row: [r, r], column: [c, c] }]
+        setFmt('qsIndent', nextLevel, range)
+        setFmt('m', display, range)
       }
     }
     toast.success(delta > 0 ? 'Indent increased' : 'Indent decreased')

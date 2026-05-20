@@ -51,6 +51,7 @@ import { ribbonStub } from '../utils/ribbonStub'
 import {
   applyAutoSumOp,
   applyOrientation,
+  mergeAcross,
   clearAll,
   clearComments,
   clearContents,
@@ -278,7 +279,7 @@ export function HomeTab(props: HomeTabProps) {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start">
                 <DropdownMenuItem onSelect={() => { props.onMergeCells(); setAlign('center') }}>Merge &amp; Center</DropdownMenuItem>
-                <DropdownMenuItem onSelect={ribbonStub('Merge Across')}>Merge Across</DropdownMenuItem>
+                <DropdownMenuItem onSelect={mergeAcross}>Merge Across</DropdownMenuItem>
                 <DropdownMenuItem onSelect={props.onMergeCells}>Merge Cells</DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={props.onUnmergeCells}>Unmerge Cells</DropdownMenuItem>
