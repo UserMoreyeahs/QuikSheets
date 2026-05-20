@@ -46,14 +46,17 @@ export function ChartRenderer({ matrix, config, height = 320 }: ChartRendererPro
   // infinite recursion on certain proxied inputs.
   useEffect(() => {
     if (!instanceRef.current) return
-    try {
-      const sanitized = JSON.parse(JSON.stringify(option))
-      // eslint-disable-next-line no-console
-      console.log('[ChartRenderer] option:', sanitized)
-      instanceRef.current.setOption(sanitized, { notMerge: true, lazyUpdate: true })
-    } catch (err) {
-      console.warn('[ChartRenderer] failed to render option', err)
-    }
+    // Strip any DOM nodes / React fiber refs / functions that may have
+    // slipped into the option (Zustand selectors that returned mid-fiber
+    // objects, for example) — they cause zrender's clone to recurse
+    // through React internals forever.
+    const sanitized = stripNonSerializable(option) as Record<string, unknown>
+    // eslint-disable-next-line no-console
+    console.log('[ChartRenderer] option keys:', Object.keys(sanitized))
+    instanceRef.current.setOption(sanitized as Parameters<echarts.ECharts['setOption']>[0], {
+      notMerge: true,
+      lazyUpdate: true,
+    })
   }, [option])
 
   // Resize when the parent's height prop changes.
@@ -62,4 +65,30 @@ export function ChartRenderer({ matrix, config, height = 320 }: ChartRendererPro
   }, [height])
 
   return <div ref={containerRef} style={{ height, width: '100%' }} />
+}
+
+/**
+ * Deep-strip values that ECharts' zrender clone cannot handle:
+ * DOM nodes, React fibers, functions, and anything with a circular ref.
+ * Returns a plain JSON-compatible object.
+ */
+function stripNonSerializable(input: unknown, seen = new WeakSet<object>()): unknown {
+  if (input === null || input === undefined) return input
+  const t = typeof input
+  if (t === 'string' || t === 'number' || t === 'boolean') return input
+  if (t === 'function') return undefined
+  if (t !== 'object') return undefined
+  if (typeof window !== 'undefined' && input instanceof Node) return undefined
+  if (seen.has(input as object)) return undefined
+  seen.add(input as object)
+  if (Array.isArray(input)) {
+    return input.map((v) => stripNonSerializable(v, seen))
+  }
+  const out: Record<string, unknown> = {}
+  for (const key of Object.keys(input as Record<string, unknown>)) {
+    if (key.startsWith('__react')) continue
+    if (key === 'stateNode' || key === 'fiber' || key === '_owner') continue
+    out[key] = stripNonSerializable((input as Record<string, unknown>)[key], seen)
+  }
+  return out
 }
