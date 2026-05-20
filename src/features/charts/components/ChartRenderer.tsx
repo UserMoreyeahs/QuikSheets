@@ -85,7 +85,7 @@ export function ChartRenderer({ matrix, config, height = 320 }: ChartRendererPro
     // through React internals forever.
     const sanitized = stripNonSerializable(option) as Record<string, unknown>
     // eslint-disable-next-line no-console
-    console.log('[ChartRenderer] option keys:', Object.keys(sanitized))
+    console.log('[ChartRenderer] sanitized option:', JSON.stringify(sanitized).slice(0, 600))
     instanceRef.current.setOption(sanitized as Parameters<echarts.ECharts['setOption']>[0], {
       notMerge: true,
       lazyUpdate: true,
