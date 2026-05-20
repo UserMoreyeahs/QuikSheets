@@ -48,6 +48,8 @@ export function ChartRenderer({ matrix, config, height = 320 }: ChartRendererPro
     if (!instanceRef.current) return
     try {
       const sanitized = JSON.parse(JSON.stringify(option))
+      // eslint-disable-next-line no-console
+      console.log('[ChartRenderer] option:', sanitized)
       instanceRef.current.setOption(sanitized, { notMerge: true, lazyUpdate: true })
     } catch (err) {
       console.warn('[ChartRenderer] failed to render option', err)
