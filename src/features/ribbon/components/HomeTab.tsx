@@ -47,6 +47,9 @@ import type { FontFamily, NumberFormat } from '@/types/sheet.types'
 import { RibbonGroup, RibbonButton, RibbonIconLabel } from './RibbonPrimitives'
 import { BordersDropdown } from './BordersDropdown'
 import { AccountingDropdown } from './AccountingDropdown'
+import { SeriesDialog } from './SeriesDialog'
+import { useInsertFunctionStore } from '@/features/formula-engine/stores/insertFunctionStore'
+import { useState } from 'react'
 import { ribbonStub } from '../utils/ribbonStub'
 import {
   applyAutoSumOp,
@@ -63,7 +66,6 @@ import {
   fillDown,
   fillLeft,
   fillRight,
-  fillSeries,
   fillUp,
   goToDialog,
   increaseDecimal,
@@ -120,6 +122,9 @@ export function HomeTab(props: HomeTabProps) {
     applyFormatToSelection({ textColor: textColor === NO_FILL ? '' : textColor })
   const setBgColor = (backgroundColor: string) =>
     applyFormatToSelection({ backgroundColor: backgroundColor === NO_FILL ? '' : backgroundColor })
+
+  // R7.2 — Series dialog open state (replaces the previous chained prompts).
+  const [seriesDialogOpen, setSeriesDialogOpen] = useState(false)
 
   const bumpFont = (delta: number) => {
     const next = Math.max(8, Math.min(72, (activeFormatting.fontSize ?? 11) + delta))
@@ -371,7 +376,14 @@ export function HomeTab(props: HomeTabProps) {
             <DropdownMenuItem onSelect={() => applyAutoSumOp('MAX')}>Max</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => applyAutoSumOp('MIN')}>Min</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={ribbonStub('More Functions')}>More Functions…</DropdownMenuItem>
+            {/* R7.1 — open the Insert Function dialog (Shift+F3) which is
+                already built. Was previously a stub showing a "coming soon"
+                toast even though the dialog has shipped for months. */}
+            <DropdownMenuItem
+              onSelect={() => useInsertFunctionStore.getState().setOpen(true)}
+            >
+              More Functions…
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <div className="flex flex-col gap-0.5">
@@ -390,7 +402,9 @@ export function HomeTab(props: HomeTabProps) {
               <DropdownMenuItem onSelect={fillUp}>Up</DropdownMenuItem>
               <DropdownMenuItem onSelect={fillLeft}>Left</DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={fillSeries}>Series…</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setSeriesDialogOpen(true)}>
+                Series…
+              </DropdownMenuItem>
               <DropdownMenuItem onSelect={ribbonStub('Flash Fill')}>Flash Fill</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -476,6 +490,10 @@ export function HomeTab(props: HomeTabProps) {
           <RibbonButton label="Redo" shortcut="Ctrl+Y" icon={<Redo2 className="h-3.5 w-3.5" />} disabled={!gridInstance} onClick={() => gridInstance?.handleRedo()} />
         </div>
       </RibbonGroup>
+
+      {/* R7.2 — Fill > Series dialog. Mounted at the ribbon root so it
+          renders above the grid. Open state is local to HomeTab. */}
+      <SeriesDialog open={seriesDialogOpen} onOpenChange={setSeriesDialogOpen} />
     </div>
   )
 }
