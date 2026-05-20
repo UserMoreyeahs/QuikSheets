@@ -46,8 +46,16 @@ let nextOffset = 0
 export const useChartPanelStore = create<ChartPanelState>((set) => ({
   builderOpen: false,
   initialKind: null,
-  openBuilder: (initialKind?: ChartKind) =>
-    set({ builderOpen: true, initialKind: initialKind ?? null }),
+  openBuilder: (initialKind?: ChartKind) => {
+    // Guard against accidental call-as-event-handler — when the store
+    // action is wired as `onClick={openBuilder}` React passes the click
+    // event as the first arg, which the previous version stashed as
+    // initialKind. That made the chart's `kind` a synthetic event,
+    // which then leaked into ECharts options as `series[0].type`.
+    const valid =
+      typeof initialKind === 'string' && initialKind.length > 0 ? initialKind : null
+    set({ builderOpen: true, initialKind: valid })
+  },
   closeBuilder: () => set({ builderOpen: false, initialKind: null }),
 
   charts: [],
