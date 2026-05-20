@@ -328,19 +328,34 @@ export default function SheetPage() {
         console.warn('[qs] no active sheet to seed')
         return
       }
+      const buildCell = (v: unknown) =>
+        v === null || v === undefined
+          ? null
+          : typeof v === 'number'
+            ? { ct: { fa: 'General', t: 'n' }, m: String(v), v }
+            : { ct: { fa: 'General', t: 'g' }, m: String(v), v: String(v) }
       const celldata = rows.flatMap((row, r) =>
-        row.map((v, c) => ({
-          r,
-          c,
-          v:
-            typeof v === 'number'
-              ? { ct: { fa: 'General', t: 'n' }, m: String(v), v }
-              : { ct: { fa: 'General', t: 'g' }, m: String(v ?? ''), v },
-        })),
+        row.map((v, c) => ({ r, c, v: buildCell(v) })).filter((e) => e.v !== null),
       )
+      // Also populate the 2-D `data` matrix because FortuneSheet renders
+      // from `data`, not celldata, when the workbook is hydrated via the
+      // `data` prop. Build a 100x26 matrix (default sheet size).
+      const ROWS = 100
+      const COLS = 26
+      const matrix: (ReturnType<typeof buildCell> | null)[][] = Array.from(
+        { length: ROWS },
+        () => Array<ReturnType<typeof buildCell> | null>(COLS).fill(null),
+      )
+      rows.forEach((row, r) => {
+        if (r >= ROWS) return
+        row.forEach((v, c) => {
+          if (c >= COLS) return
+          matrix[r]![c] = buildCell(v)
+        })
+      })
       const nextSheets = sheets.map((s, i) =>
         i === targetSheetIdx
-          ? ({ ...s, celldata, data: s.data } as typeof s)
+          ? ({ ...s, celldata, data: matrix } as typeof s)
           : s,
       )
       state.replaceGridSheets(nextSheets)
