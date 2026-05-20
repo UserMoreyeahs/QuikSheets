@@ -20,6 +20,7 @@
  *   Ctrl+Space   — Select entire column(s)
  *   Shift+Space  — Select entire row(s)
  *   Ctrl+T       — Format selection as Excel Table (Light Blue palette)
+ *   Ctrl+E       — Flash Fill (AI-detected pattern from typed examples)
  *   Ctrl+P       — Print (export to PDF + open browser print dialog)
  *   Ctrl+9       — Hide selected row(s)
  *   Ctrl+Shift+9 — Unhide rows in/around selection
@@ -31,6 +32,7 @@ import { useEffect } from 'react'
 import { useSheetStore } from '@/store/sheetStore'
 import { useWorkbookStore } from '@/store/workbookStore'
 import { applyTablePalette, toggleShowFormulas } from '@/features/ribbon/utils/cellOps'
+import { flashFill } from '@/features/ribbon/utils/flashFill'
 import { useInsertFunctionStore } from '@/features/formula-engine/stores/insertFunctionStore'
 import { useNamedRangesStore } from '@/features/named-ranges/namedRangesStore'
 
@@ -194,6 +196,16 @@ export function useExcelKeyboardShortcuts(opts: Options = {}) {
       if (!e.shiftKey && !e.altKey && e.key.toLowerCase() === 't') {
         e.preventDefault()
         applyTablePalette()
+        return
+      }
+
+      // Ctrl+E — Flash Fill (AI pattern detection)
+      // Excel parity. Detects example transformations the user has
+      // typed and fills the rest of the column. Async (network call
+      // to Groq) but the call site doesn't need to await.
+      if (!e.shiftKey && !e.altKey && e.key.toLowerCase() === 'e') {
+        e.preventDefault()
+        void flashFill()
         return
       }
 

@@ -49,8 +49,8 @@ import { BordersDropdown } from './BordersDropdown'
 import { AccountingDropdown } from './AccountingDropdown'
 import { SeriesDialog } from './SeriesDialog'
 import { useInsertFunctionStore } from '@/features/formula-engine/stores/insertFunctionStore'
+import { flashFill } from '../utils/flashFill'
 import { useState } from 'react'
-import { ribbonStub } from '../utils/ribbonStub'
 import {
   applyAutoSumOp,
   applyCustomNumberFormat,
@@ -67,6 +67,8 @@ import {
   fillLeft,
   fillRight,
   fillUp,
+  // flashFill imported from its own module just below — keeps it
+  // out of cellOps (which is otherwise free of network calls).
   goToDialog,
   increaseDecimal,
   increaseIndent,
@@ -405,7 +407,9 @@ export function HomeTab(props: HomeTabProps) {
               <DropdownMenuItem onSelect={() => setSeriesDialogOpen(true)}>
                 Series…
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={ribbonStub('Flash Fill')}>Flash Fill</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void flashFill()}>
+                Flash Fill <span className="ml-auto text-[10px] text-zinc-400">Ctrl+E</span>
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           {/* Clear dropdown */}
