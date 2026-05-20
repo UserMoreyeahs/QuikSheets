@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { FileSpreadsheet, Plus, Sparkles, Clock, Layers, Trash2 } from 'lucide-react'
+import { FileSpreadsheet, Plus, Sparkles, Clock, Layers, Trash2, Search, ArrowDownUp } from 'lucide-react'
 import { TEMPLATES, TEMPLATE_CATEGORIES, type TemplateCategory, type TemplateDefinition } from '@/lib/templates'
 import type { Sheet } from '@fortune-sheet/core'
 import { useDashboardWorkbooks, type DashboardWorkbook } from '@/features/workbook/useDashboardWorkbooks'
@@ -173,6 +173,10 @@ const CATEGORY_COLORS: Record<string, string> = {
 export default function DashboardPage() {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<'workbooks' | 'templates'>('workbooks')
+  // UX-4: search + sort over the workbooks grid. Sort defaults to
+  // 'recent' (last updated) which matches Google Sheets / Excel Online.
+  const [searchQuery, setSearchQuery] = useState('')
+  const [sortBy, setSortBy] = useState<'recent' | 'name' | 'created'>('recent')
   const [selectedCategory, setSelectedCategory] = useState<TemplateCategory>('All')
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateDefinition | null>(null)
   const [pending, startTransition] = useTransition()
@@ -304,11 +308,40 @@ export default function DashboardPage() {
         {/* My Workbooks */}
         {activeTab === 'workbooks' && (
           <div>
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-zinc-800 dark:text-zinc-200">Recent workbooks</h2>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-base font-semibold text-zinc-800 dark:text-zinc-200">
+                {searchQuery ? `Workbooks matching "${searchQuery}"` : 'Recent workbooks'}
+              </h2>
               {!hasAuth ? (
                 <p className="text-xs text-zinc-500">Sign in to sync workbooks across devices.</p>
               ) : null}
+            </div>
+
+            {/* UX-4: search + sort row */}
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search workbooks by name…"
+                  className="h-9 w-full rounded-md border border-zinc-200 bg-white pl-8 pr-3 text-sm text-zinc-800 outline-none transition-colors placeholder:text-zinc-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                />
+              </div>
+              <div className="flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2.5 dark:border-zinc-700 dark:bg-zinc-900">
+                <ArrowDownUp className="h-3.5 w-3.5 text-zinc-400" aria-hidden="true" />
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                  className="h-9 bg-transparent text-xs text-zinc-700 outline-none dark:text-zinc-200"
+                  aria-label="Sort workbooks"
+                >
+                  <option value="recent">Last opened</option>
+                  <option value="name">Name (A → Z)</option>
+                  <option value="created">Date created</option>
+                </select>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
               {/* New workbook card */}
@@ -324,7 +357,17 @@ export default function DashboardPage() {
               {isLoading && workbooks.length === 0 ? (
                 <p className="col-span-full text-sm text-zinc-500">Loading workbooks…</p>
               ) : (
-                workbooks.map((wb) => (
+                workbooks
+                  .filter((wb) => !searchQuery || wb.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                  .sort((a, b) => {
+                    if (sortBy === 'name') return a.name.localeCompare(b.name)
+                    // 'created' falls back to updatedAt — DashboardWorkbook
+                    // doesn't currently track a separate created timestamp.
+                    const aTime = a.updatedAt
+                    const bTime = b.updatedAt
+                    return (bTime ? new Date(bTime).getTime() : 0) - (aTime ? new Date(aTime).getTime() : 0)
+                  })
+                  .map((wb) => (
                   <div
                     key={wb.id}
                     onClick={() => router.push(`/sheet/${wb.id}`)}
