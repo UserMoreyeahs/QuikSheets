@@ -47,7 +47,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import type { FontFamily, NumberFormat } from '@/types/sheet.types'
-import { RibbonGroup, RibbonButton } from './RibbonPrimitives'
+import { RibbonGroup, RibbonButton, RibbonIconLabel } from './RibbonPrimitives'
 import { ribbonStub } from '../utils/ribbonStub'
 import {
   applyAutoSumOp,
@@ -139,14 +139,16 @@ export function HomeTab(props: HomeTabProps) {
       <RibbonGroup label="Clipboard">
         {/* Paste — Excel-style split button.
             Top half (icon): default paste.
-            Bottom half (label + caret): opens the Paste Special menu. */}
+            Bottom half (label + caret): opens the Paste Special menu.
+            A thin border separates the halves visually so users see
+            two distinct click targets, like Excel's real split button. */}
         <DropdownMenu>
-          <div className="flex flex-col items-stretch">
+          <div className="flex flex-col items-stretch overflow-hidden rounded border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700">
             <button
               type="button"
               title="Paste (Ctrl+V)"
               onClick={() => pasteFromClipboard('all')}
-              className="flex h-[44px] w-[60px] flex-col items-center justify-center rounded-t px-1 pt-1 text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              className="flex h-[52px] w-[60px] flex-col items-center justify-center px-1 pt-1 text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
             >
               <ClipboardPaste className="h-6 w-6 text-zinc-700 dark:text-zinc-200" />
             </button>
@@ -154,7 +156,7 @@ export function HomeTab(props: HomeTabProps) {
               <button
                 type="button"
                 title="Paste options"
-                className="flex h-[24px] w-[60px] items-center justify-center gap-0.5 rounded-b text-[11px] text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                className="flex h-[20px] w-[60px] items-center justify-center gap-0.5 border-t border-zinc-200 text-[11px] text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
               >
                 Paste <ChevronDown className="h-3 w-3 text-zinc-400" />
               </button>
@@ -182,10 +184,14 @@ export function HomeTab(props: HomeTabProps) {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        {/* Right column: Cut / Copy / Format Painter with icon + text
+            labels (Excel-faithful) instead of icon-only. 3 stacked
+            buttons at 20px each + 2*2px gaps = 64px, fits within the
+            80px content area with room for the group label. */}
         <div className="flex flex-col gap-0.5">
-          <RibbonButton label="Cut"             shortcut="Ctrl+X" icon={<Scissors className="h-3.5 w-3.5" />}      onClick={() => void cutSelection()} />
-          <RibbonButton label="Copy"            shortcut="Ctrl+C" icon={<Copy className="h-3.5 w-3.5" />}          onClick={() => void copySelection()} />
-          <RibbonButton label="Format Painter"  icon={<Paintbrush className="h-3.5 w-3.5" />} onClick={startFormatPainter} />
+          <RibbonIconLabel label="Cut"            shortcut="Ctrl+X" icon={<Scissors className="h-3.5 w-3.5" />}    onClick={() => void cutSelection()} />
+          <RibbonIconLabel label="Copy"           shortcut="Ctrl+C" icon={<Copy className="h-3.5 w-3.5" />}        onClick={() => void copySelection()} />
+          <RibbonIconLabel label="Format Painter"                   icon={<Paintbrush className="h-3.5 w-3.5" />}  onClick={startFormatPainter} />
         </div>
       </RibbonGroup>
 

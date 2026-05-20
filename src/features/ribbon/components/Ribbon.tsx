@@ -226,8 +226,13 @@ export function Ribbon({ handlers }: { handlers: RibbonHandlers }) {
       {/* Row 1: Tab selector with File backstage button */}
       <RibbonTabBar activeTab={activeTab} onTabChange={setActiveTab} handlers={handlers} />
 
-      {/* Row 2: Tab content — 80px tall panel */}
-      <div className="h-20 shrink-0 overflow-hidden border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+      {/* Row 2: Tab content — 96px tall panel (Excel-faithful).
+          Previously h-20 (80px), which left only 64px of content area
+          after subtracting the group label — too short for the 3
+          stacked 26px buttons in the Clipboard group and for the
+          68px-tall RibbonLargeButtons used in Styles/Editing. The
+          extra 16px brings us inline with Excel 365's ribbon body. */}
+      <div className="h-24 shrink-0 overflow-hidden border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
         {activeTab === 'home' && (
           <HomeTab
             onSortAsc={handlers.onSortAsc}

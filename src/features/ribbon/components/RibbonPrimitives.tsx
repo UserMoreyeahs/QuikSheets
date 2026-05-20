@@ -153,6 +153,55 @@ export function RibbonLargeButton({
   )
 }
 
+/**
+ * Compact icon+label button — single horizontal row.
+ *
+ * Used in the Clipboard group for Cut / Copy / Format Painter so they
+ * have visible text labels (Excel-faithful) without taking up the
+ * vertical space of a stacked `RibbonLargeButton`.
+ *
+ * 20px tall × 84px wide. Three of these stack neatly in the 64px
+ * available content area: 3*20 + 2*2 (gaps) = 64px.
+ */
+export function RibbonIconLabel({
+  label,
+  icon,
+  shortcut,
+  active = false,
+  disabled = false,
+  onClick,
+}: {
+  label: string
+  icon: ReactNode
+  shortcut?: string
+  active?: boolean
+  disabled?: boolean
+  onClick?: (() => void) | undefined
+}) {
+  return (
+    <button
+      type="button"
+      title={shortcut ? `${label} (${shortcut})` : label}
+      aria-label={label}
+      aria-pressed={active}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        'flex h-[20px] w-[84px] items-center justify-start gap-1.5 rounded px-1.5 text-[11px] transition-colors',
+        active
+          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+          : 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800',
+        disabled && 'opacity-40 cursor-not-allowed',
+      )}
+    >
+      <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center text-zinc-600 dark:text-zinc-300">
+        {icon}
+      </span>
+      <span className="truncate">{label}</span>
+    </button>
+  )
+}
+
 /** A small button with a caret on its right edge (e.g. "B ▾" used by font color/fill). */
 export function RibbonSplitButton({
   label,
