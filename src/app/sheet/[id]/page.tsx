@@ -307,6 +307,24 @@ export default function SheetPage() {
     window.addEventListener('quiksheets:toggle-map', handle)
     return () => window.removeEventListener('quiksheets:toggle-map', handle)
   }, [toggleMap])
+
+  // Dev-only: expose the live grid instance + a 2-D test-data seeder on
+  // window so we can verify Insert > Chart/Table/Pivot end-to-end with
+  // real data. Stripped from production bundles.
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production') return
+    const inst = gridInstance as unknown as {
+      setCellValue?: (r: number, c: number, v: unknown) => void
+    } | null
+    ;(window as unknown as { __qsGrid?: unknown }).__qsGrid = inst
+    ;(window as unknown as { __qsSeed?: (rows: unknown[][]) => void }).__qsSeed = (rows) => {
+      if (!inst?.setCellValue) {
+        console.warn('[qs] gridInstance not ready')
+        return
+      }
+      rows.forEach((row, r) => row.forEach((v, c) => inst.setCellValue!(r, c, v)))
+    }
+  }, [gridInstance])
   const [showFormulaBarUI, setShowFormulaBarUI] = useState(true)
   const [showGridlines, setShowGridlines] = useState(true)
   const [zoomLevel, setZoomLevel] = useState(1.0)
