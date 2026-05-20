@@ -39,8 +39,19 @@ export function ChartRenderer({ matrix, config, height = 320 }: ChartRendererPro
 
   // Push option whenever data or config changes — outside any echarts
   // main process, so no "setOption during main process" warning.
+  //
+  // We hand ECharts a JSON-roundtripped option to strip any non-cloneable
+  // garnish (functions, Proxies, circular refs) that Zustand selectors or
+  // React DevTools may sneak in. ECharts 6's zrender clone otherwise hits
+  // infinite recursion on certain proxied inputs.
   useEffect(() => {
-    instanceRef.current?.setOption(option, { notMerge: true, lazyUpdate: true })
+    if (!instanceRef.current) return
+    try {
+      const sanitized = JSON.parse(JSON.stringify(option))
+      instanceRef.current.setOption(sanitized, { notMerge: true, lazyUpdate: true })
+    } catch (err) {
+      console.warn('[ChartRenderer] failed to render option', err)
+    }
   }, [option])
 
   // Resize when the parent's height prop changes.
