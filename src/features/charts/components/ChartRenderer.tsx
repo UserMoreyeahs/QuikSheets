@@ -1,9 +1,42 @@
 'use client'
 
 import { useEffect, useMemo, useRef } from 'react'
-import * as echarts from 'echarts'
+import * as echarts from 'echarts/core'
+import {
+  BarChart,
+  LineChart,
+  PieChart,
+  ScatterChart,
+  RadarChart,
+  GaugeChart,
+  FunnelChart,
+  HeatmapChart,
+  TreemapChart,
+  CustomChart,
+} from 'echarts/charts'
+import {
+  GridComponent,
+  TooltipComponent,
+  TitleComponent,
+  LegendComponent,
+  DataZoomComponent,
+  MarkLineComponent,
+  MarkPointComponent,
+} from 'echarts/components'
+import { SVGRenderer } from 'echarts/renderers'
 import type { ChartConfig } from '../types'
 import { toEChartsOption, type RangeMatrix } from '../utils/toEChartsOption'
+
+// Register all chart kinds + components Quiksheets uses. ECharts 6 uses
+// tree-shakable imports — without these explicit `use` calls we get
+// "Unknown series [object Object]" at runtime.
+echarts.use([
+  BarChart, LineChart, PieChart, ScatterChart, RadarChart,
+  GaugeChart, FunnelChart, HeatmapChart, TreemapChart, CustomChart,
+  GridComponent, TooltipComponent, TitleComponent, LegendComponent,
+  DataZoomComponent, MarkLineComponent, MarkPointComponent,
+  SVGRenderer,
+])
 
 interface ChartRendererProps {
   matrix: RangeMatrix
