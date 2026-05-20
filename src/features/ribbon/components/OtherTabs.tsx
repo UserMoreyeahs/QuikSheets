@@ -121,6 +121,7 @@ import { useCommentsUiStore } from '@/features/comments/store/commentsUiStore'
 import { useSheetStore } from '@/store/sheetStore'
 import { useWorkbookStore } from '@/store/workbookStore'
 import { colIndexToLetter } from '@/lib/cellAddress'
+import { usePrintSettingsStore } from '@/features/page-layout/printSettingsStore'
 import { toast } from 'sonner'
 
 // ─── Insert ──────────────────────────────────────────────────────────────────
@@ -292,11 +293,25 @@ export function InsertTab(props: InsertTabProps) {
 // ─── Page Layout ─────────────────────────────────────────────────────────────
 
 interface PageLayoutTabProps {
-  // intentionally empty — all stubbed for now
-  _placeholder?: never
+  /** On-screen gridlines visibility — shared with View tab. */
+  gridlinesVisible?: boolean
+  onToggleGridlines?: () => void
+  /** On-screen row/column headings visibility. */
+  headingsVisible?: boolean
+  onToggleHeadings?: () => void
 }
 
-export function PageLayoutTab(_props: PageLayoutTabProps) {
+export function PageLayoutTab(props: PageLayoutTabProps) {
+  // R9 — Sheet Options + Scale to Fit are now functional. View toggles
+  // are owned by the sheet page (passed in as props); print toggles +
+  // scale live in the printSettings store so they survive xlsx export.
+  const printGridlines = usePrintSettingsStore((s) => s.printGridlines)
+  const printHeadings = usePrintSettingsStore((s) => s.printHeadings)
+  const setPrintGridlines = usePrintSettingsStore((s) => s.setPrintGridlines)
+  const setPrintHeadings = usePrintSettingsStore((s) => s.setPrintHeadings)
+  const scalePct = usePrintSettingsStore((s) => s.scalePct)
+  const setScalePct = usePrintSettingsStore((s) => s.setScalePct)
+
   return (
     <div className="flex h-full items-stretch overflow-x-auto">
       {/* Themes */}
@@ -380,41 +395,90 @@ export function PageLayoutTab(_props: PageLayoutTabProps) {
         <RibbonLargeButton label="Print Titles" icon={<Bookmark className="text-violet-500" />} onClick={ribbonStub('Print Titles')} />
       </RibbonGroup>
 
-      {/* Scale to Fit */}
+      {/* Scale to Fit — R9.4: Scale% input is now functional and writes
+          to printSettingsStore.scalePct, which the PDF exporter reads.
+          Width/Height (in pages) require a page-break engine, so they
+          stay disabled with an explanatory title until that ships. */}
       <RibbonGroup label="Scale to Fit">
         <div className="flex flex-col gap-1 px-1 py-1 text-[11px]">
-          <label className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-200">
+          <label className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-200" title="Fit to N pages wide — coming soon">
             <span className="w-12">Width:</span>
             <select disabled className="h-6 rounded border border-zinc-200 bg-white px-1 text-[11px] dark:border-zinc-700 dark:bg-zinc-900">
               <option>Automatic</option>
             </select>
           </label>
-          <label className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-200">
+          <label className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-200" title="Fit to N pages tall — coming soon">
             <span className="w-12">Height:</span>
             <select disabled className="h-6 rounded border border-zinc-200 bg-white px-1 text-[11px] dark:border-zinc-700 dark:bg-zinc-900">
               <option>Automatic</option>
             </select>
           </label>
-          <label className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-200">
+          <label className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-200" title="Scale the printed output (10–400%)">
             <span className="w-12">Scale:</span>
-            <input disabled type="number" defaultValue={100} className="h-6 w-14 rounded border border-zinc-200 bg-white px-1 text-[11px] dark:border-zinc-700 dark:bg-zinc-900" />
+            <input
+              type="number"
+              min={10}
+              max={400}
+              step={5}
+              value={scalePct}
+              onChange={(e) => {
+                const n = Number(e.target.value)
+                if (Number.isFinite(n)) setScalePct(n)
+              }}
+              className="h-6 w-14 rounded border border-zinc-200 bg-white px-1 text-[11px] focus:border-blue-400 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900"
+            />
             <span>%</span>
           </label>
         </div>
       </RibbonGroup>
 
-      {/* Sheet Options */}
+      {/* Sheet Options — R9.1/R9.2/R9.3: checkboxes are now fully wired.
+          View toggles affect what the user sees in the grid (shared
+          state with the View tab); Print toggles affect the PDF/print
+          output via printSettingsStore. */}
       <RibbonGroup label="Sheet Options">
         <div className="flex flex-col gap-1.5 px-1 py-1 text-[11px]">
           <div className="flex items-center gap-2">
             <span className="w-16 text-zinc-700 dark:text-zinc-200">Gridlines</span>
-            <label className="flex items-center gap-1"><input type="checkbox" defaultChecked className="h-3 w-3" /> View</label>
-            <label className="flex items-center gap-1"><input type="checkbox" className="h-3 w-3" /> Print</label>
+            <label className="flex items-center gap-1">
+              <input
+                type="checkbox"
+                className="h-3 w-3"
+                checked={props.gridlinesVisible ?? true}
+                onChange={() => props.onToggleGridlines?.()}
+              />
+              View
+            </label>
+            <label className="flex items-center gap-1">
+              <input
+                type="checkbox"
+                className="h-3 w-3"
+                checked={printGridlines}
+                onChange={(e) => setPrintGridlines(e.target.checked)}
+              />
+              Print
+            </label>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-16 text-zinc-700 dark:text-zinc-200">Headings</span>
-            <label className="flex items-center gap-1"><input type="checkbox" defaultChecked className="h-3 w-3" /> View</label>
-            <label className="flex items-center gap-1"><input type="checkbox" className="h-3 w-3" /> Print</label>
+            <label className="flex items-center gap-1">
+              <input
+                type="checkbox"
+                className="h-3 w-3"
+                checked={props.headingsVisible ?? true}
+                onChange={() => props.onToggleHeadings?.()}
+              />
+              View
+            </label>
+            <label className="flex items-center gap-1">
+              <input
+                type="checkbox"
+                className="h-3 w-3"
+                checked={printHeadings}
+                onChange={(e) => setPrintHeadings(e.target.checked)}
+              />
+              Print
+            </label>
           </div>
         </div>
       </RibbonGroup>

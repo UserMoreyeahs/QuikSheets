@@ -32,7 +32,12 @@ interface PrintSettingsState {
   margins: MarginInches
   paperSize: PaperSize
   printArea: PrintArea | null
-  scalePct: number // 100 = no scaling
+  /** 100 = no scaling. Range: 10..400 (Excel parity). */
+  scalePct: number
+  /** Whether to print grid borders. Independent of view state. */
+  printGridlines: boolean
+  /** Whether to print row numbers + column letters on the printed page. */
+  printHeadings: boolean
 }
 
 interface PrintSettingsActions {
@@ -42,6 +47,8 @@ interface PrintSettingsActions {
   setPaperSize: (s: PaperSize) => void
   setPrintArea: (range: string | null) => void
   setScalePct: (pct: number) => void
+  setPrintGridlines: (v: boolean) => void
+  setPrintHeadings: (v: boolean) => void
   reset: () => void
 }
 
@@ -52,6 +59,8 @@ const initialState: PrintSettingsState = {
   paperSize: 'letter',
   printArea: null,
   scalePct: 100,
+  printGridlines: false,
+  printHeadings: false,
 }
 
 export const usePrintSettingsStore = create<PrintSettingsState & PrintSettingsActions>()(
@@ -79,7 +88,14 @@ export const usePrintSettingsStore = create<PrintSettingsState & PrintSettingsAc
       setPrintArea: (range) =>
         set({ printArea: range ? { range } : null }, false, 'print/setPrintArea'),
 
-      setScalePct: (scalePct) => set({ scalePct }, false, 'print/setScalePct'),
+      setScalePct: (scalePct) =>
+        set({ scalePct: Math.max(10, Math.min(400, Math.round(scalePct))) }, false, 'print/setScalePct'),
+
+      setPrintGridlines: (printGridlines) =>
+        set({ printGridlines }, false, 'print/setPrintGridlines'),
+
+      setPrintHeadings: (printHeadings) =>
+        set({ printHeadings }, false, 'print/setPrintHeadings'),
 
       reset: () => set(initialState, false, 'print/reset'),
     }),

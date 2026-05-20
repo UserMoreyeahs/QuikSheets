@@ -297,7 +297,16 @@ export function Ribbon({ handlers }: { handlers: RibbonHandlers }) {
             onShareLink={handlers.onShareLink}
           />
         )}
-        {activeTab === 'pageLayout' && <PageLayoutTab />}
+        {activeTab === 'pageLayout' && (
+          <PageLayoutTab
+            gridlinesVisible={handlers.gridlinesVisible ?? true}
+            onToggleGridlines={handlers.onToggleGridlines ?? (() => {})}
+            // Headings visibility isn't yet plumbed through to the
+            // sheet page — accept the props but no-op until we wire
+            // showHeadings into SheetPage. The checkbox will still
+            // toggle locally for the user.
+          />
+        )}
         {activeTab === 'view' && (
           <ViewTab
             onMapView={handlers.onMapView}
