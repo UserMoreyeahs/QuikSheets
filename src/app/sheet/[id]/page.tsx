@@ -43,6 +43,7 @@ import { ImportModal } from '@/features/grid/components/ImportModal'
 import { ExportMenu } from '@/features/grid/components/ExportMenu'
 import { SaveStatus } from '@/features/grid/components/SaveStatus'
 import { exportToCSV, exportToExcelFidelity, exportToPDF } from '@/features/grid/utils/exportUtils'
+import { buildExportExtras } from '@/features/grid/utils/exportExtrasAdapter'
 // Lazy-loaded heavy panels — these render only when their respective UI
 // stores have `open: true`, so deferring their JS bundle keeps the initial
 // /sheet/[id] payload lean. Each `next/dynamic` import is split into its
@@ -430,6 +431,24 @@ export default function SheetPage() {
       }))
   }, [gridSheets, sheets])
 
+  /**
+   * Build the round-trip extras (named ranges, data validation, CF) for
+   * the high-fidelity XLSX export. Pulled fresh on each call so the
+   * latest store state is included.
+   */
+  const buildExtrasForExport = useCallback(() => {
+    const named = useNamedRangesStore.getState().names[workbookId] ?? []
+    const cfRules = useCFStore.getState().rules
+    const validation = useSheetStore.getState().validationRules
+    return buildExportExtras({
+      sheets: gridSheets,
+      sheetTabs: sheets,
+      namedRanges: named,
+      cfRulesByActiveSheet: cfRules,
+      validationRules: validation,
+    })
+  }, [workbookId, sheets, gridSheets])
+
   useEffect(() => {
     try {
       const storedName = window.localStorage.getItem(`quiksheets_workbook_name:${workbookId}`)
@@ -601,7 +620,7 @@ export default function SheetPage() {
         id: 'export-excel',
         label: 'Export Excel',
         category: 'Actions',
-        onExecute: () => exportToExcelFidelity(gridSheets, workbookName),
+        onExecute: () => exportToExcelFidelity(gridSheets, workbookName, buildExtrasForExport()),
       },
       {
         id: 'export-csv',
@@ -651,6 +670,7 @@ export default function SheetPage() {
     ]
   }, [
     addSheet,
+    buildExtrasForExport,
     clearFilters,
     getActiveSheetData,
     gridSheets,
@@ -1229,7 +1249,7 @@ export default function SheetPage() {
             onSaveNow: () => toast.success('Saved'),
             onImport: () => setShowImport(true),
             onExportCSV: () => exportToCSV(getActiveSheetData(), workbookName),
-            onExportXLSX: () => exportToExcelFidelity(gridSheets, workbookName),
+            onExportXLSX: () => exportToExcelFidelity(gridSheets, workbookName, buildExtrasForExport()),
             onExportPDF: () => exportToPDF(getActiveSheetData(), workbookName),
             onPrint: () => exportToPDF(getActiveSheetData(), workbookName),
             // Home
