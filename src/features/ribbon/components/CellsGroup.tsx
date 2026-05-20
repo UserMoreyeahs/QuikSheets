@@ -16,6 +16,7 @@ import { useWorkbookStore } from '@/store/workbookStore'
 import { toast } from 'sonner'
 import { ribbonStub } from '../utils/ribbonStub'
 import { insertColumnLeft, insertColumnRight, deleteColumn, insertRowAbove } from '../utils/cellOps'
+import { autoFitColumns, autoFitRows } from '../utils/autoFit'
 
 interface CellsGroupProps {
   onInsertRow?: (() => void) | undefined
@@ -33,7 +34,7 @@ interface CellsGroupProps {
  */
 export function CellsGroup(props: CellsGroupProps) {
   const { gridInstance, selectedCell, selectedRange } = useSheetStore()
-  const { activeSheetId, sheets, renameSheet, hideSheet, setSheetColor } = useWorkbookStore()
+  const { activeSheetId, sheets, renameSheet, hideSheet, removeSheet, setSheetColor } = useWorkbookStore()
 
   /** Row range from current selection. Single cell → just that row. */
   function getSelectionRows(): { start: number; end: number } {
@@ -69,14 +70,19 @@ export function CellsGroup(props: CellsGroupProps) {
     }
   }
 
+  /**
+   * R6.2 — real AutoFit. Measures content with a canvas 2D context
+   * and sets row height to fit the tallest cell in the row. See
+   * autoFit.ts for the measurement logic.
+   *
+   * Previous behaviour reset everything to 21px regardless of
+   * content — that was misleading and unhelpful.
+   */
   function autoFitRowHeight() {
     if (!gridInstance) { toast.error('Grid not ready'); return }
-    const { start, end } = getSelectionRows()
     try {
-      const config: Record<number, number> = {}
-      for (let r = start; r <= end; r++) config[r] = 21 // default Excel-like height
-      ;(gridInstance as unknown as { setRowHeight: (cfg: Record<number, number>) => void }).setRowHeight(config)
-      toast.success('Row height reset (auto-fit)')
+      autoFitRows()
+      toast.success('Row height auto-fit to content')
     } catch (e) {
       toast.error(`AutoFit failed: ${String(e)}`)
     }
@@ -99,14 +105,15 @@ export function CellsGroup(props: CellsGroupProps) {
     }
   }
 
+  /**
+   * R6.2 — real AutoFit. Measures the longest text in each column
+   * of the selection and sets the column width to fit it +padding.
+   */
   function autoFitColumnWidth() {
     if (!gridInstance) { toast.error('Grid not ready'); return }
-    const { start, end } = getSelectionCols()
     try {
-      const config: Record<number, number> = {}
-      for (let c = start; c <= end; c++) config[c] = 74
-      ;(gridInstance as unknown as { setColumnWidth: (cfg: Record<number, number>) => void }).setColumnWidth(config)
-      toast.success('Column width reset (auto-fit)')
+      autoFitColumns()
+      toast.success('Column width auto-fit to content')
     } catch (e) {
       toast.error(`AutoFit failed: ${String(e)}`)
     }
@@ -176,25 +183,14 @@ export function CellsGroup(props: CellsGroupProps) {
     toast.success(`Sheet renamed to "${newName.trim()}"`)
   }
 
-  function pickTabColor() {
-    const colors = [
-      ['#FF0000', 'Red'],
-      ['#FFA500', 'Orange'],
-      ['#FFFF00', 'Yellow'],
-      ['#00FF00', 'Green'],
-      ['#0000FF', 'Blue'],
-      ['#800080', 'Purple'],
-      ['#000000', 'Black'],
-      ['', 'No color'],
-    ] as const
-    const labels = colors.map((c, i) => `${i + 1}. ${c[1]}`).join('\n')
-    const choice = window.prompt(`Tab color (1-${colors.length}):\n${labels}`, '1')
-    if (!choice) return
-    const idx = parseInt(choice, 10) - 1
-    const c = colors[idx]
-    if (!c) { toast.error('Invalid choice'); return }
-    setSheetColor(activeSheetId, c[0] || null)
-    toast.success(c[0] ? `Tab color set to ${c[1]}` : 'Tab color cleared')
+  /**
+   * R6.3 — tab color is set directly via the inline swatch grid in
+   * the Format menu (see JSX below). This helper handles a single
+   * apply, including the "No Color" sentinel.
+   */
+  function applyTabColor(hex: string | null) {
+    setSheetColor(activeSheetId, hex)
+    toast.success(hex ? `Tab color set to ${hex}` : 'Tab color cleared')
   }
 
   function hideActiveSheet() {
@@ -204,6 +200,28 @@ export function CellsGroup(props: CellsGroupProps) {
     }
     hideSheet(activeSheetId)
     toast.success('Sheet hidden')
+  }
+
+  /**
+   * R6.1 — actually delete the sheet (was previously aliased to hide).
+   *
+   * Refuses to delete the last remaining sheet (Excel parity), and
+   * shows a confirm dialog because this destroys data. Calls the
+   * workbookStore.removeSheet action — sheetStore.gridSheets is
+   * synced via its own subscriber.
+   */
+  function deleteActiveSheet() {
+    if (sheets.length <= 1) {
+      toast.error('Cannot delete the only sheet')
+      return
+    }
+    const current = sheets.find((s) => s.id === activeSheetId)
+    const ok = window.confirm(
+      `Delete sheet "${current?.name ?? 'Sheet'}"? All data on this sheet will be lost. This cannot be undone.`,
+    )
+    if (!ok) return
+    removeSheet(activeSheetId)
+    toast.success(`Sheet "${current?.name ?? 'Sheet'}" deleted`)
   }
 
   return (
@@ -251,7 +269,9 @@ export function CellsGroup(props: CellsGroupProps) {
           <DropdownMenuItem onSelect={() => props.onDeleteRow?.()}>Delete Row</DropdownMenuItem>
           <DropdownMenuItem onSelect={deleteColumn}>Delete Column</DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={hideActiveSheet}>Delete Sheet</DropdownMenuItem>
+          <DropdownMenuItem onSelect={deleteActiveSheet} className="text-red-600">
+            Delete Sheet
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -298,7 +318,42 @@ export function CellsGroup(props: CellsGroupProps) {
           <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Organize Sheets</div>
           <DropdownMenuItem onSelect={renameActiveSheet}>Rename Sheet</DropdownMenuItem>
           <DropdownMenuItem onSelect={ribbonStub('Move or Copy Sheet')}>Move or Copy Sheet…</DropdownMenuItem>
-          <DropdownMenuItem onSelect={pickTabColor}>Tab Color…</DropdownMenuItem>
+
+          {/* R6.3 — tab color picker (replaces the old prompt-with-numbered-list).
+              Click any swatch to apply; click "No Color" to clear. */}
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>Tab Color</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="p-2">
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                Tab Color
+              </div>
+              <div className="grid grid-cols-7 gap-1">
+                {[
+                  '#C00000','#FF0000','#FFC000','#FFFF00','#92D050','#00B050','#00B0F0',
+                  '#0070C0','#002060','#7030A0','#FF69B4','#A5A5A5','#000000','#FFFFFF',
+                ].map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    title={c}
+                    onClick={() => applyTabColor(c)}
+                    className="h-5 w-5 rounded border border-zinc-300 transition-transform hover:scale-110 dark:border-zinc-700"
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => applyTabColor(null)}
+                className="mt-2 flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                <span className="flex h-4 w-4 items-center justify-center rounded border border-zinc-300 bg-white text-[10px] text-red-500">
+                  ✕
+                </span>
+                No Color
+              </button>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
           <DropdownMenuSeparator />
 
           {/* Protection */}
