@@ -245,11 +245,30 @@ export default function SheetPage() {
   const [showCommandPalette, setShowCommandPalette] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [showCF, setShowCF] = useState(false)
-  // Sidebar starts collapsed on small viewports (< 768px) to give the grid more room.
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    if (typeof window === 'undefined') return false
-    return window.innerWidth < 768
-  })
+  // Sidebar starts expanded on BOTH server and client so the initial
+  // hydration markup matches. Without this guarantee Next.js logs a
+  // "hydration failed" recoverable error because window.innerWidth is
+  // only defined on the client. After mount we sync to the user's saved
+  // preference (or auto-collapse on narrow viewports).
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  useEffect(() => {
+    // 1) Honour an explicit user preference if present.
+    try {
+      const saved = window.localStorage.getItem('quiksheets_sidebar_collapsed')
+      if (saved === '1') {
+        setSidebarCollapsed(true)
+        return
+      }
+      if (saved === '0') {
+        setSidebarCollapsed(false)
+        return
+      }
+    } catch {
+      // localStorage unavailable — fall through to viewport heuristic.
+    }
+    // 2) No preference: collapse on narrow viewports.
+    if (window.innerWidth < 768) setSidebarCollapsed(true)
+  }, [])
   // Auto-collapse the sidebar on viewport resize crossing the breakpoint.
   useEffect(() => {
     function onResize() {
@@ -258,6 +277,14 @@ export default function SheetPage() {
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
+  // Persist the user's choice so it carries across reloads / new tabs.
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('quiksheets_sidebar_collapsed', sidebarCollapsed ? '1' : '0')
+    } catch {
+      /* ignore */
+    }
+  }, [sidebarCollapsed])
 
   // Install Ctrl+Click hyperlink-follow on the canvas. Idempotent.
   useEffect(() => {
