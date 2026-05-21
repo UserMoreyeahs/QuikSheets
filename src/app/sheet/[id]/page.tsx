@@ -394,6 +394,18 @@ export default function SheetPage() {
         const { useColumnTypesStore } = require('@/features/typed-columns/store/columnTypesStore') as typeof import('@/features/typed-columns/store/columnTypesStore')
         useColumnTypesStore.getState().clearColumnType(sheetId, col)
       }
+    // Named-ranges helper — define a name programmatically (skips the
+    // window.prompt() in defineNameFromSelection so we can test the
+    // store / Name Manager without UI driver flakiness).
+    ;(window as unknown as { __qsAddName?: (name: string, range: string) => void }).__qsAddName =
+      (name, range) => {
+        const { useNamedRangesStore } = require('@/features/named-ranges/namedRangesStore') as typeof import('@/features/named-ranges/namedRangesStore')
+        useNamedRangesStore.getState().addName(workbookId, { name, range, scope: 'workbook' })
+      }
+    ;(window as unknown as { __qsListNames?: () => Array<{ name: string; range: string }> }).__qsListNames = () => {
+      const { useNamedRangesStore } = require('@/features/named-ranges/namedRangesStore') as typeof import('@/features/named-ranges/namedRangesStore')
+      return useNamedRangesStore.getState().getNamesForWorkbook(workbookId) as unknown as Array<{ name: string; range: string }>
+    }
     // Filter helper — add a single equals-filter on a column.
     ;(window as unknown as { __qsAddFilter?: (col: number, operator: string, value: string) => void }).__qsAddFilter =
       (col, operator, value) => {
