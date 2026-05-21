@@ -394,6 +394,18 @@ export default function SheetPage() {
         const { useColumnTypesStore } = require('@/features/typed-columns/store/columnTypesStore') as typeof import('@/features/typed-columns/store/columnTypesStore')
         useColumnTypesStore.getState().clearColumnType(sheetId, col)
       }
+    // CF helper — add a "highlight cells > value" rule and re-apply.
+    ;(window as unknown as { __qsAddCFGreaterThan?: (sheetId: string, range: string, threshold: number, bgColor: string) => void }).__qsAddCFGreaterThan =
+      (sheetId, range, threshold, bgColor) => {
+        const { useCFStore } = require('@/features/conditional-formatting/store/cfStore') as typeof import('@/features/conditional-formatting/store/cfStore')
+        useCFStore.getState().addRule(sheetId, {
+          range,
+          condition: { type: 'cell_value', operator: 'greater', value: String(threshold) },
+          format: { fill: bgColor },
+          priority: 0,
+        })
+        useCFStore.getState().applyToActiveSheet()
+      }
   }, [gridInstance, activeSheetId])
   const [showFormulaBarUI, setShowFormulaBarUI] = useState(true)
   const [showGridlines, setShowGridlines] = useState(true)
