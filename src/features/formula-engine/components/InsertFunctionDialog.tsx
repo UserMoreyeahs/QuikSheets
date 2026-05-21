@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useSheetStore } from '@/store/sheetStore'
+import { useInsertFunctionStore } from '../stores/insertFunctionStore'
 import { FORMULA_LIST, CATEGORY_COLORS, type FormulaCategory, type FormulaEntry } from '../formulaList'
 
 interface InsertFunctionDialogProps {
@@ -27,18 +28,25 @@ const CATEGORIES: ('All' | FormulaCategory)[] = [
 ]
 
 export function InsertFunctionDialog({ open, onOpenChange }: InsertFunctionDialogProps) {
+  const initialCategory = useInsertFunctionStore((s) => s.initialCategory)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<'All' | FormulaCategory>('All')
   const [selectedFn, setSelectedFn] = useState<FormulaEntry | null>(FORMULA_LIST[0] ?? null)
 
-  // Reset filter / selection on open
+  // Reset filter / selection on open; honour the category the Formulas-tab
+  // button passed in (if any) so e.g. Insert > Logical jumps straight into
+  // the Logical filter.
   useEffect(() => {
     if (open) {
       setQuery('')
-      setCategory('All')
-      setSelectedFn(FORMULA_LIST[0] ?? null)
+      setCategory(initialCategory ?? 'All')
+      const initialFn =
+        initialCategory && initialCategory !== 'All'
+          ? FORMULA_LIST.find((f) => f.category === initialCategory) ?? FORMULA_LIST[0]
+          : FORMULA_LIST[0]
+      setSelectedFn(initialFn ?? null)
     }
-  }, [open])
+  }, [open, initialCategory])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()

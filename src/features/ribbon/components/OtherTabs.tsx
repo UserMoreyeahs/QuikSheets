@@ -116,6 +116,7 @@ import {
   evaluateFormula,
 } from '../utils/cellOps'
 import { useInsertFunctionStore } from '@/features/formula-engine/stores/insertFunctionStore'
+import type { FormulaCategory } from '@/features/formula-engine/formulaList'
 import { ColumnTypeRibbonButton, useColumnTypesStore } from '@/features/typed-columns'
 import { useCommentsUiStore } from '@/features/comments/store/commentsUiStore'
 import { useSheetStore } from '@/store/sheetStore'
@@ -530,6 +531,22 @@ interface FormulasTabProps {
   workbookId: string
 }
 
+/** Open the Insert Function dialog scoped to a single category. */
+function openFunctionsByCategory(category: 'All' | FormulaCategory): void {
+  useInsertFunctionStore.getState().setOpen(true, category)
+}
+
+/**
+ * "Calculate Now / Calculate Sheet" in Excel forces a recompute when
+ * Calculation Options is set to Manual. Quiksheets always runs in
+ * auto-calc mode (formulajs evaluates on cell change), so the most
+ * truthful behaviour is to confirm to the user that their formulas
+ * are already up to date.
+ */
+function calculateNowToast(): void {
+  toast.message('Auto-calc is on — formulas already up to date.')
+}
+
 export function FormulasTab(props: FormulasTabProps) {
   return (
     <div className="flex h-full items-stretch overflow-x-auto scrollbar-hide">
@@ -537,14 +554,14 @@ export function FormulasTab(props: FormulasTabProps) {
       <RibbonGroup label="Function Library">
         <RibbonLargeButton label="Insert Function" icon={<Calculator className="text-emerald-600" />} onClick={() => useInsertFunctionStore.getState().setOpen(true)} />
         <RibbonLargeButton label="AutoSum" icon={<Sigma className="text-orange-500" />} onClick={props.onAutoSum} showCaret />
-        <RibbonLargeButton label="Recently Used" icon={<History className="text-zinc-500" />} onClick={ribbonStub('Recently Used')} showCaret />
-        <RibbonLargeButton label="Financial" icon={<Briefcase className="text-emerald-500" />} onClick={ribbonStub('Financial')} showCaret />
-        <RibbonLargeButton label="Logical" icon={<GitBranch className="text-amber-500" />} onClick={ribbonStub('Logical')} showCaret />
-        <RibbonLargeButton label="Text" icon={<Type className="text-blue-500" />} onClick={ribbonStub('Text')} showCaret />
-        <RibbonLargeButton label="Date & Time" icon={<Calendar className="text-violet-500" />} onClick={ribbonStub('Date & Time')} showCaret />
-        <RibbonLargeButton label="Lookup & Ref" icon={<Search className="text-blue-500" />} onClick={ribbonStub('Lookup & Reference')} showCaret />
-        <RibbonLargeButton label="Math & Trig" icon={<Pi className="text-rose-500" />} onClick={ribbonStub('Math & Trig')} showCaret />
-        <RibbonLargeButton label="More Functions" icon={<PlusSquare className="text-zinc-500" />} onClick={ribbonStub('More Functions')} showCaret />
+        <RibbonLargeButton label="Recently Used" icon={<History className="text-zinc-500" />} onClick={() => openFunctionsByCategory('All')} showCaret />
+        <RibbonLargeButton label="Financial" icon={<Briefcase className="text-emerald-500" />} onClick={() => openFunctionsByCategory('Financial')} showCaret />
+        <RibbonLargeButton label="Logical" icon={<GitBranch className="text-amber-500" />} onClick={() => openFunctionsByCategory('Logical')} showCaret />
+        <RibbonLargeButton label="Text" icon={<Type className="text-blue-500" />} onClick={() => openFunctionsByCategory('Text')} showCaret />
+        <RibbonLargeButton label="Date & Time" icon={<Calendar className="text-violet-500" />} onClick={() => openFunctionsByCategory('Date')} showCaret />
+        <RibbonLargeButton label="Lookup & Ref" icon={<Search className="text-blue-500" />} onClick={() => openFunctionsByCategory('Lookup')} showCaret />
+        <RibbonLargeButton label="Math & Trig" icon={<Pi className="text-rose-500" />} onClick={() => openFunctionsByCategory('Math')} showCaret />
+        <RibbonLargeButton label="More Functions" icon={<PlusSquare className="text-zinc-500" />} onClick={() => useInsertFunctionStore.getState().setOpen(true)} showCaret />
       </RibbonGroup>
 
       {/* Defined Names */}
@@ -579,10 +596,22 @@ export function FormulasTab(props: FormulasTabProps) {
 
       {/* Calculation */}
       <RibbonGroup label="Calculation" className="border-r-0">
-        <RibbonLargeButton label="Calc Options" icon={<RefreshCcw className="text-amber-500" />} onClick={ribbonStub('Calculation Options')} showCaret />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" title="Calculation Options" className="flex h-[68px] w-[64px] shrink-0 flex-col items-center justify-center gap-1 rounded px-1 py-1 text-[11px] hover:bg-zinc-100 dark:hover:bg-zinc-800">
+              <RefreshCcw className="h-6 w-6 text-amber-500" />
+              <span className="flex items-center gap-0.5">Calc Options <ChevronDown className="h-3 w-3 text-zinc-400" /></span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onSelect={() => toast.success('Automatic calculation is on')}>Automatic (current)</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => toast.message('Manual calculation mode is not supported yet')} disabled>Manual</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => toast.success('Auto except for tables is on')} disabled>Automatic Except for Data Tables</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <div className="flex flex-col gap-0.5">
-          <RibbonButton label="Calculate Now"   shortcut="F9"        icon={<Calculator className="h-3.5 w-3.5" />} onClick={ribbonStub('Calculate Now')} />
-          <RibbonButton label="Calculate Sheet" shortcut="Shift+F9" icon={<FileSpreadsheet className="h-3.5 w-3.5" />} onClick={ribbonStub('Calculate Sheet')} />
+          <RibbonButton label="Calculate Now"   shortcut="F9"        icon={<Calculator className="h-3.5 w-3.5" />} onClick={calculateNowToast} />
+          <RibbonButton label="Calculate Sheet" shortcut="Shift+F9" icon={<FileSpreadsheet className="h-3.5 w-3.5" />} onClick={calculateNowToast} />
         </div>
       </RibbonGroup>
 
