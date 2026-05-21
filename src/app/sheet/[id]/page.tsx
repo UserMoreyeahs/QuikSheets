@@ -375,6 +375,19 @@ export default function SheetPage() {
       )
       state.replaceGridSheets(nextSheets)
     }
+    // Dev helpers for the typed-columns store — used to verify the
+    // enforcement hook reverts cells correctly when a column type is
+    // cleared. Reaches into the same store the picker chips use.
+    ;(window as unknown as { __qsSetColType?: (sheetId: string, col: number, type: string) => void }).__qsSetColType =
+      (sheetId, col, type) => {
+        const { useColumnTypesStore } = require('@/features/typed-columns/store/columnTypesStore') as typeof import('@/features/typed-columns/store/columnTypesStore')
+        useColumnTypesStore.getState().setColumnType(sheetId, col, { type: type as never })
+      }
+    ;(window as unknown as { __qsClearColType?: (sheetId: string, col: number) => void }).__qsClearColType =
+      (sheetId, col) => {
+        const { useColumnTypesStore } = require('@/features/typed-columns/store/columnTypesStore') as typeof import('@/features/typed-columns/store/columnTypesStore')
+        useColumnTypesStore.getState().clearColumnType(sheetId, col)
+      }
   }, [gridInstance, activeSheetId])
   const [showFormulaBarUI, setShowFormulaBarUI] = useState(true)
   const [showGridlines, setShowGridlines] = useState(true)
