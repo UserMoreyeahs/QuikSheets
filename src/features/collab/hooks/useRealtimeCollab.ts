@@ -14,7 +14,7 @@
  * the app works in single-user mode with no errors.
  */
 
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 import { usePresenceStore } from '../store/presenceStore'
 import { useSheetStore } from '@/store/sheetStore'
@@ -47,14 +47,38 @@ export function useRealtimeCollab(workbookId: string) {
   const removePresence = usePresenceStore((s) => s.removePresence)
   const pruneStale = usePresenceStore((s) => s.pruneStale)
 
-  // Generate a stable anonymous user ID for this session
-  const userIdRef = useRef<string>('')
-  if (!userIdRef.current) {
-    userIdRef.current = typeof crypto !== 'undefined'
+  // Identity priority:
+  //  1. Authenticated Supabase user id (so two tabs from the same user
+  //     appear as ONE presence — the previous behaviour gave each tab a
+  //     fresh random UUID and showed the user as a duplicate).
+  //  2. Fallback to a stable per-session anon UUID.
+  //
+  // We render anon first to avoid blocking the channel subscription on
+  // the auth round-trip, then upgrade when getUser() returns.
+  const anonIdRef = useRef<string>('')
+  if (!anonIdRef.current) {
+    anonIdRef.current = typeof crypto !== 'undefined'
       ? crypto.randomUUID()
       : `anon-${Math.random().toString(36).slice(2, 10)}`
   }
-  const userId = userIdRef.current
+  const [authUser, setAuthUser] = useState<{ id: string; email: string; name: string } | null>(null)
+  useEffect(() => {
+    const supabase = getBrowserSupabase()
+    if (!supabase) return
+    void supabase.auth.getUser().then(({ data }) => {
+      const u = data?.user
+      if (!u) return
+      const meta = (u.user_metadata ?? {}) as { full_name?: string; name?: string }
+      setAuthUser({
+        id: u.id,
+        email: u.email ?? '',
+        name: meta.full_name ?? meta.name ?? u.email?.split('@')[0] ?? `User ${u.id.slice(0, 4)}`,
+      })
+    })
+  }, [])
+  const userId = authUser?.id ?? anonIdRef.current
+  const userName = authUser?.name ?? `User ${anonIdRef.current.slice(0, 4)}`
+  const userEmail = authUser?.email ?? ''
 
   // ── Join channel on mount ──────────────────────────────────────
   useEffect(() => {
@@ -113,15 +137,15 @@ export function useRealtimeCollab(workbookId: string) {
         payload: {
           type: 'cursor',
           userId,
-          name: `User ${userId.slice(0, 4)}`,
-          email: '',
+          name: userName,
+          email: userEmail,
           sheetId,
           row,
           col,
         } satisfies CursorPayload,
       })
     },
-    [userId],
+    [userId, userName, userEmail],
   )
 
   // ── Broadcast cell edit ────────────────────────────────────────

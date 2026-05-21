@@ -1,5 +1,5 @@
 import { GROQ_MODEL, groq } from '@/lib/groq'
-import { jsonError, readJsonBody } from '@/lib/aiRoute'
+import { enforceAiRateLimit, jsonError, readJsonBody } from '@/lib/aiRoute'
 import type { ColumnStats } from '@/features/row-summarizer/utils/rowStats'
 
 interface SummarizeRouteRequest {
@@ -157,6 +157,9 @@ function normalizeAiResult(value: unknown, fallback: SummaryResult): SummaryResu
 }
 
 export async function POST(request: Request) {
+  const limited = await enforceAiRateLimit(request)
+  if (limited) return limited
+
   const body = await readJsonBody<SummarizeRouteRequest>(request)
   if (!body) {
     return jsonError('Invalid JSON body.', 400)

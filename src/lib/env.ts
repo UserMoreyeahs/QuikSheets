@@ -39,12 +39,25 @@ const serverSchema = z.object({
     .default('30000')
     .transform((v) => Number.parseInt(v, 10) || 30_000),
 
-  // Integration providers
+  // Integration providers — set to 'real' (or any non-'mock' string)
+  // to use the real adapter; otherwise the MockProvider is returned
+  // and the action no-ops successfully (useful for dev / CI).
   EMAIL_PROVIDER: trimmedString.optional().default('mock'),
   SLACK_PROVIDER: trimmedString.optional().default('mock'),
   TEAMS_PROVIDER: trimmedString.optional().default('mock'),
   WHATSAPP_PROVIDER: trimmedString.optional().default('mock'),
   TASK_PROVIDER: trimmedString.optional().default('mock'),
+
+  // Real provider credentials. Reading these is gated by the provider
+  // selection above. Missing values cause the provider to return a clear
+  // "not configured" error rather than crashing or silently dropping.
+  RESEND_API_KEY: optionalString,
+  RESEND_FROM: optionalString,
+  SLACK_WEBHOOK_URL: optionalString,
+  TEAMS_WEBHOOK_URL: optionalString,
+  TWILIO_ACCOUNT_SID: optionalString,
+  TWILIO_AUTH_TOKEN: optionalString,
+  TWILIO_WHATSAPP_FROM: optionalString,
 })
 
 const publicSchema = z.object({
@@ -101,6 +114,13 @@ function readServerEnv() {
     TEAMS_PROVIDER: process.env.TEAMS_PROVIDER,
     WHATSAPP_PROVIDER: process.env.WHATSAPP_PROVIDER,
     TASK_PROVIDER: process.env.TASK_PROVIDER,
+    RESEND_API_KEY: process.env.RESEND_API_KEY,
+    RESEND_FROM: process.env.RESEND_FROM,
+    SLACK_WEBHOOK_URL: process.env.SLACK_WEBHOOK_URL,
+    TEAMS_WEBHOOK_URL: process.env.TEAMS_WEBHOOK_URL,
+    TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID,
+    TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN,
+    TWILIO_WHATSAPP_FROM: process.env.TWILIO_WHATSAPP_FROM,
   })
 }
 

@@ -1,5 +1,5 @@
 import { GROQ_MODEL, groq } from '@/lib/groq'
-import { jsonError, readJsonBody } from '@/lib/aiRoute'
+import { enforceAiRateLimit, jsonError, readJsonBody } from '@/lib/aiRoute'
 import { parseFormulaReferences } from '@/features/formula-explainer/utils/formulaParser'
 
 interface ExplainRouteRequest {
@@ -51,6 +51,9 @@ function parseJsonPayload(raw: string, formula: string, dependencies: string[]):
 }
 
 export async function POST(request: Request) {
+  const limited = await enforceAiRateLimit(request)
+  if (limited) return limited
+
   const body = await readJsonBody<ExplainRouteRequest>(request)
   if (!body) {
     return jsonError('Invalid JSON body.', 400)

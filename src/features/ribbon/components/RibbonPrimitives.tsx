@@ -3,6 +3,7 @@
 import { ChevronDown } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
+import { getStubFeatureName } from '../utils/ribbonStub'
 
 /**
  * RibbonGroup — vertical block on the ribbon containing several buttons,
@@ -39,7 +40,13 @@ export function RibbonGroup({
   )
 }
 
-/** Compact (small) icon button — 24×24 — for dense rows. */
+/**
+ * Compact (small) icon button — 24×24 — for dense rows.
+ *
+ * If `onClick` was created by `ribbonStub()`, the button automatically
+ * renders in a "Coming soon" visual state (reduced opacity, dotted
+ * underline) with an informative tooltip.
+ */
 export function RibbonButton({
   label,
   icon,
@@ -55,10 +62,16 @@ export function RibbonButton({
   onClick?: (() => void) | undefined
   shortcut?: string
 }) {
+  const stubName = getStubFeatureName(onClick)
+  const title = stubName
+    ? `${label} — coming soon`
+    : shortcut
+      ? `${label} (${shortcut})`
+      : label
   return (
     <button
       type="button"
-      title={shortcut ? `${label} (${shortcut})` : label}
+      title={title}
       aria-label={label}
       aria-pressed={active}
       disabled={disabled}
@@ -68,7 +81,8 @@ export function RibbonButton({
         active
           ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
           : 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800',
-        disabled && 'opacity-40 cursor-not-allowed'
+        disabled && 'opacity-40 cursor-not-allowed',
+        stubName && 'opacity-50 [&_svg]:opacity-70'
       )}
     >
       {icon}
@@ -98,10 +112,11 @@ export function RibbonLargeButton({
   onClick?: (() => void) | undefined
   showCaret?: boolean
 }) {
+  const stubName = getStubFeatureName(onClick)
   return (
     <button
       type="button"
-      title={label}
+      title={stubName ? `${label} — coming soon` : label}
       aria-label={label}
       aria-pressed={active}
       disabled={disabled}
@@ -111,16 +126,78 @@ export function RibbonLargeButton({
         active
           ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
           : 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800',
-        disabled && 'opacity-40 cursor-not-allowed'
+        disabled && 'opacity-40 cursor-not-allowed',
+        // Visibly muted state for "coming soon" features — icon dims,
+        // label is grayed, but the button stays clickable so the toast
+        // explanation still works for users who do click.
+        stubName && 'opacity-60 [&_svg]:opacity-70',
       )}
     >
       <div className="flex h-7 w-7 shrink-0 items-center justify-center [&_svg]:h-6 [&_svg]:w-6">
         {icon}
       </div>
       <div className="flex w-full flex-col items-center gap-0 leading-[1.1]">
-        <span className="block max-w-[62px] break-words text-center">{label}</span>
+        <span
+          className={cn(
+            'block max-w-[62px] break-words text-center',
+            // Dotted underline cues "experimental / placeholder" without
+            // looking like an error.
+            stubName && 'underline decoration-dotted decoration-zinc-400 underline-offset-2',
+          )}
+        >
+          {label}
+        </span>
         {showCaret ? <ChevronDown className="mt-0.5 h-3 w-3 shrink-0 text-zinc-400" /> : null}
       </div>
+    </button>
+  )
+}
+
+/**
+ * Compact icon+label button — single horizontal row.
+ *
+ * Used in the Clipboard group for Cut / Copy / Format Painter so they
+ * have visible text labels (Excel-faithful) without taking up the
+ * vertical space of a stacked `RibbonLargeButton`.
+ *
+ * 20px tall × 84px wide. Three of these stack neatly in the 64px
+ * available content area: 3*20 + 2*2 (gaps) = 64px.
+ */
+export function RibbonIconLabel({
+  label,
+  icon,
+  shortcut,
+  active = false,
+  disabled = false,
+  onClick,
+}: {
+  label: string
+  icon: ReactNode
+  shortcut?: string
+  active?: boolean
+  disabled?: boolean
+  onClick?: (() => void) | undefined
+}) {
+  return (
+    <button
+      type="button"
+      title={shortcut ? `${label} (${shortcut})` : label}
+      aria-label={label}
+      aria-pressed={active}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        'flex h-[20px] w-[84px] items-center justify-start gap-1.5 rounded px-1.5 text-[11px] transition-colors',
+        active
+          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+          : 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800',
+        disabled && 'opacity-40 cursor-not-allowed',
+      )}
+    >
+      <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center text-zinc-600 dark:text-zinc-300">
+        {icon}
+      </span>
+      <span className="truncate">{label}</span>
     </button>
   )
 }
@@ -143,11 +220,12 @@ export function RibbonSplitButton({
   onCaretClick?: () => void
   shortcut?: string
 }) {
+  const stubName = getStubFeatureName(onMainClick) ?? getStubFeatureName(onCaretClick)
   return (
-    <div className="inline-flex h-[26px] items-stretch overflow-hidden rounded">
+    <div className={cn('inline-flex h-[26px] items-stretch overflow-hidden rounded', stubName && 'opacity-60')}>
       <button
         type="button"
-        title={shortcut ? `${label} (${shortcut})` : label}
+        title={stubName ? `${label} — coming soon` : shortcut ? `${label} (${shortcut})` : label}
         aria-label={label}
         aria-pressed={active}
         onClick={onMainClick}

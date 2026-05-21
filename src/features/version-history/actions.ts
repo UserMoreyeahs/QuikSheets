@@ -24,7 +24,13 @@ export interface WorkbookVersion {
 }
 
 export async function listWorkbookVersionsAction(workbookId: string): Promise<WorkbookVersion[]> {
-  await assertCanRead(workbookId).catch(() => null)
+  // Read access required — return an empty list (not an error) when the
+  // caller lacks permission, so the version-history panel renders quietly.
+  try {
+    await assertCanRead(workbookId)
+  } catch {
+    return []
+  }
   const supabase = await getServerSupabase()
   if (!supabase) return []
   const { data } = await supabase
@@ -68,6 +74,20 @@ export async function snapshotWorkbookAction(input: z.input<typeof snapshotSchem
   return { ok: true as const, id: data.id as string }
 }
 
+/**
+ * Restore a previous workbook version.
+ *
+ * Flow:
+ *  1. Verify the caller can edit the workbook.
+ *  2. Fetch the snapshot JSON for the requested versionId.
+ *  3. Write a "pre-restore" snapshot of the current state so the
+ *     restore itself is reversible.
+ *  4. Return the snapshot payload to the client; SpreadsheetGrid
+ *     calls `replaceGridSheets` to apply it, and the normal save
+ *     pipeline writes the restored cells back to Supabase on its
+ *     next debounced flush.
+ *  5. Record an audit_logs row.
+ */
 export async function restoreWorkbookVersionAction(input: z.input<typeof restoreSchema>) {
   const parsed = restoreSchema.safeParse(input)
   if (!parsed.success) return { ok: false as const, error: 'Invalid input' }
@@ -78,7 +98,6 @@ export async function restoreWorkbookVersionAction(input: z.input<typeof restore
   const service = getServiceRoleSupabase()
   if (!service) return { ok: false as const, error: 'Supabase service role not configured' }
 
-  // Read snapshot
   const { data: version } = await service
     .from('workbook_versions')
     .select('snapshot_json')
@@ -87,28 +106,34 @@ export async function restoreWorkbookVersionAction(input: z.input<typeof restore
     .maybeSingle()
   if (!version) return { ok: false as const, error: 'Version not found' }
 
-  // Take a fresh snapshot of the *current* state first so the restore is
-  // itself undoable.
-  await service.from('workbook_versions').insert({
-    workbook_id: parsed.data.workbookId,
-    snapshot_json: { restored_from: parsed.data.versionId },
-    label: 'Auto-snapshot before restore',
-    created_by: ctx.userId,
-  })
+  // Take an "undo" snapshot of the current cells before we overwrite.
+  // Best-effort: a failure here should not block the restore itself.
+  try {
+    const { data: currentCells } = await service
+      .from('cells')
+      .select('sheet_id, row_index, column_index, raw_value, formula')
+      .eq('workbook_id', parsed.data.workbookId)
+      .limit(50_000)
+    await service.from('workbook_versions').insert({
+      workbook_id: parsed.data.workbookId,
+      snapshot_json: { cells: currentCells ?? [], restored_from: parsed.data.versionId },
+      label: 'Auto-snapshot before restore',
+      created_by: ctx.userId,
+    })
+  } catch {
+    // Soft-fail — proceed with the restore.
+  }
 
-  // Restore implementation: delete-then-replay would happen here. For
-  // safety we leave the actual replay to a follow-up R12.x because it
-  // requires the SpreadsheetGrid migration to call cellPersistence.
-  // We do, however, write the audit row so the action is observable.
+  // Audit trail.
   await service.from('audit_logs').insert({
     workbook_id: parsed.data.workbookId,
     actor_id: ctx.userId,
-    action: 'workbook.restore_started',
+    action: 'workbook.restore',
     target_type: 'workbook_version',
     target_id: parsed.data.versionId,
     metadata_json: { note: parsed.data.note ?? '' },
   })
 
   revalidatePath(`/sheet/${parsed.data.workbookId}`)
-  return { ok: true as const }
+  return { ok: true as const, snapshot: version.snapshot_json }
 }

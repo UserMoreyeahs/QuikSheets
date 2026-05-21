@@ -138,7 +138,12 @@ export function computeHiddenRows(
     topNFilters.map((filter) => [filter, getTopNAllowedRows(rows, filter, totalRows)])
   )
 
-  for (let rowIndex = 0; rowIndex < totalRows; rowIndex++) {
+  // Start at row 1 so the header row (row 0) is never hidden by a
+  // filter. Excel + Google Sheets both treat row 0 as the header label
+  // and always keep it visible regardless of the active rule set.
+  // Previously every filter (e.g. Region = North) would hide the
+  // "Region / Q1" header along with the non-matching data rows.
+  for (let rowIndex = 1; rowIndex < totalRows; rowIndex++) {
     const rowData = rows[rowIndex] ?? {}
     const passes = filters.every((filter) => {
       if (filter.operator === 'top_n') {

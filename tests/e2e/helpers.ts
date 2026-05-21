@@ -180,7 +180,6 @@ export async function runDebug<T>(
   return page.evaluate((fnStr) => {
     const bridge = (window as unknown as { __quiksheetsDebug?: Record<string, unknown> }).__quiksheetsDebug
     if (!bridge) return null
-    // eslint-disable-next-line no-new-func
     const wrappedFn = new Function('bridge', `return (${fnStr})(bridge)`)
     return wrappedFn(bridge) as T
   }, fn.toString())

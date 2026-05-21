@@ -181,11 +181,31 @@ export interface CFFormatPreset {
   bold?: boolean
 }
 
+/**
+ * Section header used by the Cell Styles gallery to group presets
+ * (e.g. "Good, Bad and Neutral", "Themed Cell Styles"). Each preset
+ * carries the category it belongs to so the dropdown can render
+ * matching section labels above each block.
+ */
+export type CellStyleCategory =
+  | 'Good, Bad and Neutral'
+  | 'Data and Model'
+  | 'Titles and Headings'
+  | 'Themed Cell Styles'
+  | 'Number Format'
+
 /** A named cell style preset for the "Cell Styles" quick-apply gallery. */
 export interface CFCellStylePreset {
   label: string
   fill?: string
   color?: string
   bold?: boolean
+  italic?: boolean
   fontSize?: number
+  /** Group label used to render the gallery's section headers. */
+  category?: CellStyleCategory
+  /** Optional number format string (e.g. "0%" for Percent style). */
+  numberFormat?: string
+  /** Border accent for headings — `{ bottom: '2px solid #4472C4' }` etc. */
+  borderBottom?: string
 }

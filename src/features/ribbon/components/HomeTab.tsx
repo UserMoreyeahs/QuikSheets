@@ -7,16 +7,13 @@ import {
   AlignVerticalJustifyCenter,
   AlignVerticalJustifyEnd,
   AlignVerticalJustifyStart,
-  ArrowDownAZ,
   ArrowDownNarrowWide,
   ArrowUpDown,
   Bold,
   ChevronDown,
   ClipboardPaste,
   Copy,
-  DollarSign,
   Eraser,
-  Filter as FilterIcon,
   Italic,
   Merge as MergeIcon,
   Paintbrush,
@@ -34,7 +31,7 @@ import { useSheetStore } from '@/store/sheetStore'
 import { FontFamilySelector } from '@/features/toolbar/components/FontFamilySelector'
 import { FontSizeSelector } from '@/features/toolbar/components/FontSizeSelector'
 import { NumberFormatSelector } from '@/features/toolbar/components/NumberFormatSelector'
-import { ColorPicker } from '@/features/toolbar/components/ColorPicker'
+import { ColorPicker, NO_FILL } from '@/features/toolbar/components/ColorPicker'
 import { CFDropdownMenu } from '@/features/conditional-formatting/components/CFDropdownMenu'
 import { CellStylesDropdown } from '@/features/conditional-formatting/components/CellStylesDropdown'
 import { FormatAsTableDropdown } from './FormatAsTableDropdown'
@@ -47,12 +44,18 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import type { FontFamily, NumberFormat } from '@/types/sheet.types'
-import { RibbonGroup, RibbonButton } from './RibbonPrimitives'
-import { ribbonStub } from '../utils/ribbonStub'
+import { RibbonGroup, RibbonButton, RibbonIconLabel } from './RibbonPrimitives'
+import { BordersDropdown } from './BordersDropdown'
+import { AccountingDropdown } from './AccountingDropdown'
+import { SeriesDialog } from './SeriesDialog'
+import { useInsertFunctionStore } from '@/features/formula-engine/stores/insertFunctionStore'
+import { flashFill } from '../utils/flashFill'
+import { useState } from 'react'
 import {
   applyAutoSumOp,
-  applyBorder,
+  applyCustomNumberFormat,
   applyOrientation,
+  mergeAcross,
   clearAll,
   clearComments,
   clearContents,
@@ -63,8 +66,9 @@ import {
   fillDown,
   fillLeft,
   fillRight,
-  fillSeries,
   fillUp,
+  // flashFill imported from its own module just below — keeps it
+  // out of cellOps (which is otherwise free of network calls).
   goToDialog,
   increaseDecimal,
   increaseIndent,
@@ -75,10 +79,9 @@ import {
   selectCellsWithFormulas,
   selectCellsWithValidation,
   startFormatPainter,
-  type BorderPreset,
   type OrientationPreset,
 } from '../utils/cellOps'
-import { toast } from 'sonner'
+import { copySelection, cutSelection, pasteFromClipboard } from '../utils/clipboardOps'
 
 interface HomeTabProps {
   onSortAsc: () => void
@@ -98,17 +101,6 @@ interface HomeTabProps {
   onAIAssistant: () => void
 }
 
-const BORDER_PRESETS: { label: string; value: BorderPreset }[] = [
-  { label: 'Bottom Border',     value: 'bottom' },
-  { label: 'Top Border',        value: 'top' },
-  { label: 'Left Border',       value: 'left' },
-  { label: 'Right Border',      value: 'right' },
-  { label: 'No Border',         value: 'none' },
-  { label: 'All Borders',       value: 'all' },
-  { label: 'Outside Borders',   value: 'outside' },
-  { label: 'Thick Box Border',  value: 'thick' },
-]
-
 export function HomeTab(props: HomeTabProps) {
   const { gridInstance, activeFormatting, applyFormatToSelection } = useSheetStore()
 
@@ -124,56 +116,82 @@ export function HomeTab(props: HomeTabProps) {
     applyFormatToSelection({ numberFormat })
   const setFontFamily = (fontFamily: FontFamily) => applyFormatToSelection({ fontFamily })
   const setFontSize = (fontSize: number) => applyFormatToSelection({ fontSize })
-  const setTextColor = (textColor: string) => applyFormatToSelection({ textColor })
+  // ColorPicker emits `NO_FILL` when the user clicks "No Fill"; translate
+  // that to an empty string so the format-apply path clears the cell's
+  // backgroundColor / textColor (rather than literally writing the
+  // sentinel as a CSS colour value).
+  const setTextColor = (textColor: string) =>
+    applyFormatToSelection({ textColor: textColor === NO_FILL ? '' : textColor })
   const setBgColor = (backgroundColor: string) =>
-    applyFormatToSelection({ backgroundColor })
+    applyFormatToSelection({ backgroundColor: backgroundColor === NO_FILL ? '' : backgroundColor })
+
+  // R7.2 — Series dialog open state (replaces the previous chained prompts).
+  const [seriesDialogOpen, setSeriesDialogOpen] = useState(false)
 
   const bumpFont = (delta: number) => {
     const next = Math.max(8, Math.min(72, (activeFormatting.fontSize ?? 11) + delta))
     setFontSize(next)
   }
 
-  // Clipboard handlers (best-effort browser clipboard)
-  const handleCopy = () => {
-    try {
-      document.execCommand('copy')
-      toast.success('Copied')
-    } catch {
-      toast.error('Copy failed — use Ctrl+C')
-    }
-  }
-  const handleCut = () => {
-    try {
-      document.execCommand('cut')
-      toast.success('Cut')
-    } catch {
-      toast.error('Cut failed — use Ctrl+X')
-    }
-  }
-  const handlePaste = () => {
-    toast('Use Ctrl+V to paste', { description: 'Browser security blocks programmatic paste.' })
-  }
-
   return (
-    <div className="flex h-full items-stretch overflow-x-auto">
+    <div className="flex h-full items-stretch overflow-x-auto scrollbar-hide">
       {/* ── 1. Clipboard ─────────────────────────────────────── */}
       <RibbonGroup label="Clipboard">
-        {/* Large Paste button */}
-        <button
-          type="button"
-          title="Paste (Ctrl+V)"
-          onClick={handlePaste}
-          className="flex h-[68px] w-[60px] flex-col items-center justify-center gap-1 rounded px-1 py-1 text-[11px] text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
-        >
-          <ClipboardPaste className="h-6 w-6 text-zinc-700 dark:text-zinc-200" />
-          <span className="flex items-center gap-0.5 leading-tight">
-            Paste <ChevronDown className="h-3 w-3 text-zinc-400" />
-          </span>
-        </button>
+        {/* Paste — Excel-style split button.
+            Top half (icon): default paste.
+            Bottom half (label + caret): opens the Paste Special menu.
+            A thin border separates the halves visually so users see
+            two distinct click targets, like Excel's real split button. */}
+        <DropdownMenu>
+          <div className="flex flex-col items-stretch overflow-hidden rounded border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700">
+            <button
+              type="button"
+              title="Paste (Ctrl+V)"
+              onClick={() => pasteFromClipboard('all')}
+              className="flex h-[52px] w-[60px] flex-col items-center justify-center px-1 pt-1 text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+              <ClipboardPaste className="h-6 w-6 text-zinc-700 dark:text-zinc-200" />
+            </button>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                title="Paste options"
+                className="flex h-[20px] w-[60px] items-center justify-center gap-0.5 border-t border-zinc-200 text-[11px] text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                Paste <ChevronDown className="h-3 w-3 text-zinc-400" />
+              </button>
+            </DropdownMenuTrigger>
+          </div>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onSelect={() => void pasteFromClipboard('all')}>
+              Paste
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void pasteFromClipboard('values')}>
+              Paste Values only
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void pasteFromClipboard('formulas')}>
+              Paste Formulas only
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void pasteFromClipboard('formatting')}>
+              Paste Formatting only
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => void pasteFromClipboard('transpose')}>
+              Paste Transpose
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void pasteFromClipboard('link')}>
+              Paste Link
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        {/* Right column: Cut / Copy / Format Painter with icon + text
+            labels (Excel-faithful) instead of icon-only. 3 stacked
+            buttons at 20px each + 2*2px gaps = 64px, fits within the
+            80px content area with room for the group label. */}
         <div className="flex flex-col gap-0.5">
-          <RibbonButton label="Cut"             shortcut="Ctrl+X" icon={<Scissors className="h-3.5 w-3.5" />}      onClick={handleCut} />
-          <RibbonButton label="Copy"            shortcut="Ctrl+C" icon={<Copy className="h-3.5 w-3.5" />}          onClick={handleCopy} />
-          <RibbonButton label="Format Painter"  icon={<Paintbrush className="h-3.5 w-3.5" />} onClick={startFormatPainter} />
+          <RibbonIconLabel label="Cut"            shortcut="Ctrl+X" icon={<Scissors className="h-3.5 w-3.5" />}    onClick={() => void cutSelection()} />
+          <RibbonIconLabel label="Copy"           shortcut="Ctrl+C" icon={<Copy className="h-3.5 w-3.5" />}        onClick={() => void copySelection()} />
+          <RibbonIconLabel label="Format Painter"                   icon={<Paintbrush className="h-3.5 w-3.5" />}  onClick={startFormatPainter} />
         </div>
       </RibbonGroup>
 
@@ -190,51 +208,26 @@ export function HomeTab(props: HomeTabProps) {
             <RibbonButton label="Bold" shortcut="Ctrl+B" icon={<Bold className="h-3.5 w-3.5" />} active={activeFormatting.bold} onClick={() => toggle('bold')} />
             <RibbonButton label="Italic" shortcut="Ctrl+I" icon={<Italic className="h-3.5 w-3.5" />} active={activeFormatting.italic} onClick={() => toggle('italic')} />
             <RibbonButton label="Underline" shortcut="Ctrl+U" icon={<Underline className="h-3.5 w-3.5" />} active={activeFormatting.underline} onClick={() => toggle('underline')} />
-            <RibbonButton label="Strikethrough" icon={<Strikethrough className="h-3.5 w-3.5" />} active={activeFormatting.strikethrough} onClick={() => toggle('strikethrough')} />
-            {/* Borders dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  title="Borders"
-                  className="flex h-[26px] items-center gap-0.5 rounded px-1 text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                >
-                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="3" width="18" height="18" />
-                    <line x1="3" y1="12" x2="21" y2="12" />
-                    <line x1="12" y1="3" x2="12" y2="21" />
-                  </svg>
-                  <ChevronDown className="h-2.5 w-2.5 text-zinc-400" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                {BORDER_PRESETS.map((b) => (
-                  <DropdownMenuItem key={b.value} onSelect={() => applyBorder(b.value)}>{b.label}</DropdownMenuItem>
-                ))}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={ribbonStub('More Borders…')}>More Borders…</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <RibbonButton label="Strikethrough" shortcut="Ctrl+5" icon={<Strikethrough className="h-3.5 w-3.5" />} active={activeFormatting.strikethrough} onClick={() => toggle('strikethrough')} />
+            {/* Borders dropdown (R2.3) — visual grid + line color + line style.
+                Replaces the previous text-only DropdownMenu list. */}
+            <BordersDropdown />
             <ColorPicker
               value={activeFormatting.backgroundColor ?? '#ffff00'}
               onChange={setBgColor}
               label="Fill color"
+              allowNoFill
               trigger={
-                <span className="flex flex-col items-center">
-                  <span className="text-[10px] font-bold leading-none text-zinc-700 dark:text-zinc-300">▣</span>
-                  <span className="mt-[1px] block h-[3px] w-[12px] rounded-[1px]" style={{ backgroundColor: activeFormatting.backgroundColor ?? '#ffff00' }} />
-                </span>
+                <span className="text-[10px] font-bold leading-none text-zinc-700 dark:text-zinc-300">▣</span>
               }
             />
             <ColorPicker
               value={activeFormatting.textColor ?? '#FF0000'}
               onChange={setTextColor}
               label="Text color"
+              allowNoFill
               trigger={
-                <span className="flex flex-col items-center">
-                  <span className="text-[10px] font-bold leading-none" style={{ color: activeFormatting.textColor ?? '#000000' }}>A</span>
-                  <span className="mt-[1px] block h-[3px] w-[12px] rounded-[1px]" style={{ backgroundColor: activeFormatting.textColor ?? '#FF0000' }} />
-                </span>
+                <span className="text-[10px] font-bold leading-none" style={{ color: activeFormatting.textColor ?? '#000000' }}>A</span>
               }
             />
           </div>
@@ -294,7 +287,7 @@ export function HomeTab(props: HomeTabProps) {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start">
                 <DropdownMenuItem onSelect={() => { props.onMergeCells(); setAlign('center') }}>Merge &amp; Center</DropdownMenuItem>
-                <DropdownMenuItem onSelect={ribbonStub('Merge Across')}>Merge Across</DropdownMenuItem>
+                <DropdownMenuItem onSelect={mergeAcross}>Merge Across</DropdownMenuItem>
                 <DropdownMenuItem onSelect={props.onMergeCells}>Merge Cells</DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={props.onUnmergeCells}>Unmerge Cells</DropdownMenuItem>
@@ -313,7 +306,13 @@ export function HomeTab(props: HomeTabProps) {
           </div>
           {/* Bottom row: 3 narrow buttons (26px) + 2 wider buttons (32px) = ~138px */}
           <div className="flex items-center gap-0.5">
-            <RibbonButton label="Accounting Format"  icon={<DollarSign className="h-3.5 w-3.5" />} active={activeFormatting.numberFormat === 'currency' || activeFormatting.numberFormat === 'accounting'} onClick={() => setNumberFormat('accounting')} />
+            {/* Accounting split-button (R4.1): icon applies the last-picked
+                currency symbol; caret opens the currency selector. Default
+                derived from system locale (`₹` for en-IN). */}
+            <AccountingDropdown
+              active={activeFormatting.numberFormat === 'currency' || activeFormatting.numberFormat === 'accounting'}
+              onApply={applyCustomNumberFormat}
+            />
             <RibbonButton label="Percent Style"       shortcut="Ctrl+Shift+%" icon={<Percent className="h-3.5 w-3.5" />} active={activeFormatting.numberFormat === 'percentage'} onClick={() => setNumberFormat('percentage')} />
             <RibbonButton label="Comma Style"          icon={<span className="text-[13px] font-semibold leading-none">,</span>} active={activeFormatting.numberFormat === 'number'} onClick={() => setNumberFormat('number')} />
             {/* Increase / Decrease decimal — wider buttons (34px) to fit ".0→.00" text without wrapping */}
@@ -379,7 +378,14 @@ export function HomeTab(props: HomeTabProps) {
             <DropdownMenuItem onSelect={() => applyAutoSumOp('MAX')}>Max</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => applyAutoSumOp('MIN')}>Min</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={ribbonStub('More Functions')}>More Functions…</DropdownMenuItem>
+            {/* R7.1 — open the Insert Function dialog (Shift+F3) which is
+                already built. Was previously a stub showing a "coming soon"
+                toast even though the dialog has shipped for months. */}
+            <DropdownMenuItem
+              onSelect={() => useInsertFunctionStore.getState().setOpen(true)}
+            >
+              More Functions…
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <div className="flex flex-col gap-0.5">
@@ -398,8 +404,12 @@ export function HomeTab(props: HomeTabProps) {
               <DropdownMenuItem onSelect={fillUp}>Up</DropdownMenuItem>
               <DropdownMenuItem onSelect={fillLeft}>Left</DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={fillSeries}>Series…</DropdownMenuItem>
-              <DropdownMenuItem onSelect={ribbonStub('Flash Fill')}>Flash Fill</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setSeriesDialogOpen(true)}>
+                Series…
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void flashFill()}>
+                Flash Fill <span className="ml-auto text-[10px] text-zinc-400">Ctrl+E</span>
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           {/* Clear dropdown */}
@@ -472,14 +482,22 @@ export function HomeTab(props: HomeTabProps) {
             <DropdownMenuItem onSelect={selectCellsWithValidation}>Data Validation</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        {/* History — Undo/Redo (compact) */}
+        {/* Undo/Redo — compact column.
+            Previously had 4 buttons (Undo/Redo/Sort/Filter) but Sort
+            and Filter were duplicates of the Sort & Filter dropdown
+            immediately to the left, AND 4*26+3*2 = 110px overflowed
+            the 80px content area. Trimmed to just Undo/Redo so the
+            column is 2*26+2 = 54px and fits comfortably with the
+            group label visible below. */}
         <div className="ml-1 flex flex-col gap-0.5 border-l border-zinc-200 pl-2 dark:border-zinc-700">
           <RibbonButton label="Undo" shortcut="Ctrl+Z" icon={<Undo2 className="h-3.5 w-3.5" />} disabled={!gridInstance} onClick={() => gridInstance?.handleUndo()} />
           <RibbonButton label="Redo" shortcut="Ctrl+Y" icon={<Redo2 className="h-3.5 w-3.5" />} disabled={!gridInstance} onClick={() => gridInstance?.handleRedo()} />
-          <RibbonButton label="Sort A→Z" icon={<ArrowDownAZ className="h-3.5 w-3.5" />} onClick={props.onSortAsc} />
-          <RibbonButton label="Filter"   icon={<FilterIcon className="h-3.5 w-3.5" />} onClick={props.onFilter} />
         </div>
       </RibbonGroup>
+
+      {/* R7.2 — Fill > Series dialog. Mounted at the ribbon root so it
+          renders above the grid. Open state is local to HomeTab. */}
+      <SeriesDialog open={seriesDialogOpen} onOpenChange={setSeriesDialogOpen} />
     </div>
   )
 }

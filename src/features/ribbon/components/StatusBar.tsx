@@ -88,7 +88,7 @@ export function StatusBar() {
   }, [selectedRange, activeGridSheet])
 
   return (
-    <div className="flex h-6 shrink-0 items-center justify-between border-t border-zinc-200 bg-white px-3 dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="relative z-[5] flex h-6 shrink-0 items-center justify-between border-t border-zinc-200 bg-white px-3 dark:border-zinc-800 dark:bg-zinc-900">
       {/* ── Left: address + sheet + filter badge ─────────────────────────── */}
       <div className="flex items-center gap-3">
         {cellAddress && (

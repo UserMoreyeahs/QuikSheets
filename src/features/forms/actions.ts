@@ -35,7 +35,12 @@ export async function createFormAction(input: z.input<typeof createSchema>) {
   const parsed = createSchema.safeParse(input)
   if (!parsed.success) return { ok: false as const, error: 'Invalid form definition' }
 
-  await assertCanEdit(parsed.data.workbookId).catch(() => null)
+  // Require editor permission before creating a form binding.
+  try {
+    await assertCanEdit(parsed.data.workbookId)
+  } catch {
+    return { ok: false as const, error: 'Forbidden' }
+  }
 
   const supabase = await getServerSupabase()
   if (!supabase) return { ok: false as const, error: 'Supabase not configured' }

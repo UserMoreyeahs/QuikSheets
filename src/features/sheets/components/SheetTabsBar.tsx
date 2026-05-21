@@ -57,7 +57,10 @@ export function SheetTabsBar() {
   }
 
   return (
-    <div className="flex h-9 shrink-0 items-stretch border-t border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900">
+    <div
+      data-testid="sheet-tabs-bar"
+      className="flex h-9 shrink-0 items-stretch border-t border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900"
+    >
       {/* Scrollable tab list */}
       <div
         ref={scrollRef}

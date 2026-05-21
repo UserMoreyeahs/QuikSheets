@@ -12,7 +12,7 @@
  */
 
 import { test, expect } from '@playwright/test'
-import { gotoSheet, waitForGrid, capturePageErrors } from './helpers'
+import { gotoSheet, capturePageErrors } from './helpers'
 
 // Skip entire suite if Supabase env vars ARE set (auth would redirect us)
 // In that case, the full auth tests in auth.spec.ts cover the flows.

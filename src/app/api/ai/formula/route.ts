@@ -1,5 +1,5 @@
 import { GROQ_MODEL, groq } from '@/lib/groq'
-import { jsonError, readJsonBody } from '@/lib/aiRoute'
+import { enforceAiRateLimit, jsonError, readJsonBody } from '@/lib/aiRoute'
 
 interface FormulaRouteRequest {
   instruction?: string
@@ -48,6 +48,10 @@ function cleanFormula(value: string): string {
 }
 
 export async function POST(request: Request) {
+  // Per-user/IP rate limit — returns 429 with Retry-After when exceeded.
+  const limited = await enforceAiRateLimit(request)
+  if (limited) return limited
+
   const body = await readJsonBody<FormulaRouteRequest>(request)
   if (!body) {
     return jsonError('Invalid JSON body.', 400)

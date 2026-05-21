@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { publicEnv } from '@/lib/env'
+import { enforceAiRateLimit } from '@/lib/aiRoute'
 
 const requestSchema = z.object({
   series: z.array(z.number()).min(3).max(120),
@@ -11,6 +12,9 @@ export async function POST(req: Request) {
   if (!publicEnv.NEXT_PUBLIC_FF_FORECAST) {
     return NextResponse.json({ error: 'Feature disabled' }, { status: 404 })
   }
+
+  const limited = await enforceAiRateLimit(req)
+  if (limited) return limited
 
   let body: unknown
   try {

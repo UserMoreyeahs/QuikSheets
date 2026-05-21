@@ -196,17 +196,89 @@ function buildCellStyle(
   return Object.keys(s).length > 0 ? s : undefined
 }
 
+/** Named range definition exported to Excel's Workbook.Names array. */
+export interface ExportNamedRange {
+  /** Excel-valid name (no spaces, must start with letter/underscore). */
+  name: string
+  /** Range in `Sheet1!A1:C10` form (or plain `A1:C10` for workbook-scoped). */
+  range: string
+  /** When set, name is scoped to a specific sheet rather than the workbook. */
+  scopeSheetName?: string
+  comment?: string
+}
+
+/** A single data-validation rule exported into xlsx-js-style's !dataValidation array. */
+export interface ExportDataValidation {
+  /** Sheet (by name) this rule applies to. */
+  sheetName: string
+  /** A1-notation range string, e.g. "B2:B100". */
+  range: string
+  /** Validation kind. We map our types onto the Excel set. */
+  type: 'list' | 'whole' | 'decimal' | 'date' | 'time' | 'textLength'
+  /** Comparison operator. Excel default is 'between' for numeric/date types. */
+  operator?: 'between' | 'notBetween' | 'equal' | 'notEqual' | 'lessThan' | 'lessThanOrEqual' | 'greaterThan' | 'greaterThanOrEqual'
+  /** Primary formula1 — either a literal value or, for `list`, a comma-separated string of options. */
+  formula1: string
+  /** Secondary bound for `between`/`notBetween`. */
+  formula2?: string
+  /** User-facing error message when validation fails. */
+  errorMessage?: string
+}
+
+/** Standard CF rule exported into the worksheet's conditionalFormatting block. */
+export interface ExportCFRule {
+  sheetName: string
+  range: string
+  /** Limited to the operator subset Excel natively understands. */
+  type:
+    | 'cellIs'
+    | 'containsText'
+    | 'notContainsText'
+    | 'beginsWith'
+    | 'endsWith'
+    | 'duplicateValues'
+    | 'uniqueValues'
+    | 'aboveAverage'
+    | 'belowAverage'
+    | 'top10'
+  operator?: 'between' | 'equal' | 'greaterThan' | 'lessThan' | 'greaterThanOrEqual' | 'lessThanOrEqual'
+  formula1?: string
+  formula2?: string
+  /** Hex background fill (without #), e.g. "FFEB9C". */
+  fill?: string
+  /** Hex text color (without #), e.g. "9C5700". */
+  color?: string
+  bold?: boolean
+  italic?: boolean
+}
+
+/** Optional extras for round-trip fidelity. */
+export interface ExportExtras {
+  namedRanges?: ExportNamedRange[]
+  dataValidations?: ExportDataValidation[]
+  conditionalFormatting?: ExportCFRule[]
+}
+
 /**
  * High-fidelity export: writes a FortuneSheet workbook to .xlsx preserving
  * formulas, number formats, merges, column widths, row heights, AND cell-
  * level visual styles (background color, font, bold/italic/underline/
  * strikethrough, alignment, wrap text).
  *
+ * When `extras` is provided, the export also round-trips:
+ *   - Named Ranges  (Excel Workbook.Names)
+ *   - Data Validation rules (worksheet !dataValidation array)
+ *   - Standard Conditional Formatting rules (worksheet conditionalFormatting)
+ *
+ * Visual CF rules (data bars, color scales, icon sets) are not yet
+ * serialized — they remain in cfStore and will re-apply on next load.
+ *
  * Uses xlsx-js-style for the write path (see hexNoHash + buildCellStyle).
  */
 export async function exportToExcelFidelity(
   sheets: Sheet[],
   fileName: string = 'Quiksheets Export',
+  extras: ExportExtras = {},
 ): Promise<void> {
   const workbook = XLSX.utils.book_new()
 
@@ -327,7 +399,82 @@ export async function exportToExcelFidelity(
       ws['!rows'] = rows
     }
 
+    // Per-sheet extras: data validation + conditional formatting
+    // attached to this worksheet only. We collect them after both
+    // structures know the sheet's final name.
+    const dvForSheet = (extras.dataValidations ?? []).filter((d) => d.sheetName === sheetName)
+    if (dvForSheet.length > 0) {
+      ;(ws as Record<string, unknown>)['!dataValidation'] = dvForSheet.map((dv) => ({
+        sqref: dv.range,
+        type: dv.type,
+        operator: dv.operator ?? 'between',
+        formula1: dv.formula1,
+        ...(dv.formula2 ? { formula2: dv.formula2 } : {}),
+        ...(dv.errorMessage ? { error: dv.errorMessage, errorStyle: 'stop' } : {}),
+      }))
+    }
+
+    const cfForSheet = (extras.conditionalFormatting ?? []).filter((r) => r.sheetName === sheetName)
+    if (cfForSheet.length > 0) {
+      // Group rules by range — Excel's conditionalFormatting block has
+      // one entry per range (`sqref`) with a list of `cfRule` children.
+      const byRange = new Map<string, ExportCFRule[]>()
+      for (const rule of cfForSheet) {
+        const arr = byRange.get(rule.range) ?? []
+        arr.push(rule)
+        byRange.set(rule.range, arr)
+      }
+      ;(ws as Record<string, unknown>)['!condfmt'] = Array.from(byRange.entries()).map(
+        ([range, rules]) => ({
+          ref: range,
+          rules: rules.map((r, i) => ({
+            type: r.type,
+            ...(r.operator ? { operator: r.operator } : {}),
+            ...(r.formula1 !== undefined ? { formula1: r.formula1 } : {}),
+            ...(r.formula2 !== undefined ? { formula2: r.formula2 } : {}),
+            priority: i + 1,
+            dxf: {
+              ...(r.fill ? { fill: { bgColor: { rgb: r.fill } } } : {}),
+              ...(r.color || r.bold || r.italic
+                ? {
+                    font: {
+                      ...(r.color ? { color: { rgb: r.color } } : {}),
+                      ...(r.bold ? { bold: true } : {}),
+                      ...(r.italic ? { italic: true } : {}),
+                    },
+                  }
+                : {}),
+            },
+          })),
+        }),
+      )
+    }
+
     XLSX.utils.book_append_sheet(workbook, ws as XLSX.WorkSheet, sheetName)
+  }
+
+  // Workbook-level extras: Named Ranges. Excel stores these in
+  // Workbook.Names (the same place Excel reads when you open the
+  // Name Manager). When `scopeSheetName` is set the name is scoped
+  // to that sheet; otherwise it's workbook-scoped.
+  const namedRanges = extras.namedRanges ?? []
+  if (namedRanges.length > 0) {
+    // xlsx's Workbook type is the WBProps interface; we attach Names to
+    // it but TypeScript doesn't know about that field. Cast through
+    // `unknown` to bypass the structural check — this is the same
+    // pattern xlsx-js-style's own examples use.
+    const wbAny = workbook as unknown as { Workbook?: Record<string, unknown> }
+    wbAny.Workbook ??= {}
+    const sheetIdByName = new Map<string, number>()
+    sheets.forEach((s, i) => sheetIdByName.set(s.name ?? `Sheet${i + 1}`, i))
+    wbAny.Workbook.Names = namedRanges.map((nr) => ({
+      Name: nr.name,
+      Ref: nr.range,
+      ...(nr.scopeSheetName !== undefined && sheetIdByName.has(nr.scopeSheetName)
+        ? { Sheet: sheetIdByName.get(nr.scopeSheetName) }
+        : {}),
+      ...(nr.comment ? { Comment: nr.comment } : {}),
+    }))
   }
 
   // Use xlsx-js-style for the write so cell.s styles persist into the .xlsx

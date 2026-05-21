@@ -1,9 +1,11 @@
 'use server'
 
 import { z } from 'zod'
+import { randomBytes } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
 import { getServerSupabase, getServiceRoleSupabase } from '@/lib/supabase/server'
 import { assertCanManage } from '@/lib/permissions'
+import { consumeToken } from '@/lib/rateLimit'
 
 const createSchema = z.object({
   workbookId: z.string().uuid(),
@@ -13,11 +15,23 @@ const createSchema = z.object({
 
 const tokenSchema = z.object({ token: z.string().min(1).max(80) })
 
-function randomToken(length = 24): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-  let out = ''
-  for (let i = 0; i < length; i++) out += chars[Math.floor(Math.random() * chars.length)]!
-  return out
+/**
+ * Generate a cryptographically-secure URL-safe share token.
+ *
+ * Uses `crypto.randomBytes()` instead of `Math.random()` so an attacker
+ * cannot enumerate the token space by predicting the PRNG seed. The
+ * base64url alphabet keeps the token URL-safe and roughly the same
+ * length as the previous Math.random version (~24 chars).
+ *
+ * Security review note: 16 bytes = 128 bits of entropy, well above the
+ * collision threshold for any realistic number of share links.
+ */
+function randomToken(byteLength = 16): string {
+  return randomBytes(byteLength)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '')
 }
 
 export async function createShareLinkAction(input: z.input<typeof createSchema>) {
@@ -62,6 +76,14 @@ export async function resolveShareTokenAction(
 ): Promise<ShareLinkResolution> {
   const parsed = tokenSchema.safeParse(input)
   if (!parsed.success) return { ok: false, reason: 'not_found' }
+
+  // Rate-limit token resolution to prevent brute-force enumeration.
+  // Bucket keyed by the FIRST 8 chars of the token so the limit
+  // applies per-attacker / per-token-prefix rather than globally.
+  // Even with the new 128-bit entropy tokens, defence-in-depth keeps
+  // a misconfigured client from hammering Supabase.
+  const rl = consumeToken(`share-token:${parsed.data.token.slice(0, 8)}`)
+  if (!rl.ok) return { ok: false, reason: 'not_found' }
 
   const service = getServiceRoleSupabase()
   if (!service) return { ok: false, reason: 'not_found' }

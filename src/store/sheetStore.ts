@@ -636,7 +636,15 @@ export const useSheetStore = create<SheetState & SheetActions>()(
           const data = getSheetMatrix(activeSheet)
           if (data.length === 0) return
 
-          const rows = data.map((row, rowIndex) => ({
+          // When hasHeader is true (Quick Sort default), pin row 0 in
+          // place and only sort rows 1+. Otherwise treat every row as
+          // data — preserves the existing behaviour for callers that
+          // truly want a full sort.
+          const headerRowCount = config.hasHeader === false ? 0 : 1
+          const fixedRows = data.slice(0, headerRowCount)
+          const sortableData = data.slice(headerRowCount)
+
+          const rows = sortableData.map((row, rowIndex) => ({
             rowIndex,
             cells: Object.fromEntries(
               (row ?? []).map((cell, columnIndex) => [columnIndex, getCellDisplayValue(cell)])
@@ -644,9 +652,13 @@ export const useSheetStore = create<SheetState & SheetActions>()(
           }))
 
           const sortedRows = sortRows(rows, config)
-          const sortedData = sortedRows.map(({ rowIndex }) =>
-            (data[rowIndex] ?? []).map((cell) => (cell ? { ...cell } : null))
+          const sortedSortable = sortedRows.map(({ rowIndex }) =>
+            (sortableData[rowIndex] ?? []).map((cell) => (cell ? { ...cell } : null))
           )
+          const sortedData = [
+            ...fixedRows.map((row) => (row ?? []).map((cell) => (cell ? { ...cell } : null))),
+            ...sortedSortable,
+          ]
 
           const newGridSheets = state.gridSheets.map((sheet, index) =>
             index === activeIndex ? cloneSheetWithData(sheet, sortedData) : sheet

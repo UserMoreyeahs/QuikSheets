@@ -36,10 +36,99 @@
 - [x] Session 21: Starter Templates + Conditional Formatting
 
 ## Current Session
-- None - Session 21 complete locally
+- None - Quiksheets MVP completion session complete (May 2026)
 
 ## Next Session
-- Session 22: Form Builder from Sheet
+- Session 22+: Optional follow-ups — Timeline slicer rendering, Live Formula Preview verification, Cell History full Supabase path
+
+## Quiksheets MVP completion session — patterns + bugs fixed
+Highlights from the 59-task verification + feature-build sweep. The patterns
+below are non-obvious and have already caused multiple bugs — keep them in
+mind when writing or reviewing code that touches the grid.
+
+### Pattern: `data` + `celldata` must update in lockstep
+FortuneSheet renders from the 2-D `data` matrix when the workbook hydrates
+via the `data` prop. Operations that only mutate `celldata` (the sparse
+{r,c,v}[] format) leave duplicate/sorted/dedupe rows visible on screen
+even though the underlying state thinks they're gone. Always use
+`cloneSheetWithData(sheet, nextMatrix)` from `@/lib/fortuneSheet` — it
+deletes `celldata` and rebuilds `data`. Bugs caused by violating this:
+- Remove Duplicates toasted success but rows stayed visible (fixed)
+- Chart "No numeric data" with seeded values (caused by `__qsSeed` only
+  writing celldata; also fixed)
+- Anything that filters/compacts rows is suspect
+
+### Pattern: Row 0 is always the header
+Sort, Filter, and similar row-iterating utilities default to treating
+row 0 as a header. `SortConfig.hasHeader` defaults to true at the
+Quick Sort call site. `computeHiddenRows` starts iteration at row 1.
+Don't add a row-iteration that starts at 0 without thinking about
+whether that's a header.
+
+### Pattern: ECharts 6 lifecycle
+- `import * as echarts from 'echarts/core'` + explicit `echarts.use([...])`
+  for the chart kinds you need. The umbrella `import 'echarts'` re-imports
+  on HMR with an empty registry → "Unknown series [object Object]".
+- echarts-for-react 3.0.6 calls setOption inside componentDidUpdate which
+  trips ECharts 6's "setOption should not be called during main process"
+  guard. Roll your own thin wrapper that owns init/setOption/dispose
+  via refs (see `ChartRenderer`).
+- zrender clone explodes on React fiber refs that leak into options
+  (e.g. when an event handler is mistakenly passed as a config value).
+  ChartRenderer deep-strips DOM/Fiber via `stripNonSerializable`.
+
+### Pattern: Store actions called as event handlers leak the event
+`onClick={openBuilder}` calls `openBuilder(reactEvent)` — if `openBuilder`
+accepts an optional first arg, the event becomes that arg. Cost us R8.3:
+`useChartPanelStore.openBuilder(initialKind?)` started accepting events
+as `initialKind`, which leaked the event into `config.kind`, which made
+ECharts log "Unknown series [object Object]". Guard with a typeof check
+or always wrap in an arrow function: `onClick={() => openBuilder()}`.
+
+### Pattern: Typed-columns enforcement must revert on clear
+`useTypedColumnsEnforcement` short-circuited when a sheet had no type
+map, leaving previously-typed cells stuck on the formatter output
+(☑/☐ for checkbox) forever after the type was cleared. Walk every
+column on every sheet and revert cells whose `m` matches a known
+formatter output but whose column is no longer typed.
+
+### Bugs fixed (11 total)
+1. R8.3 — `openBuilder` treated React click events as `ChartKind`
+2. ECharts 6 + echarts-for-react incompatibility (setOption guard)
+3. zrender clone recursion through React FiberNode refs
+4. HMR-stale chart-type registry (`import * as echarts from 'echarts'`)
+5. `__qsSeed` only wrote celldata, not the `data` matrix
+6. `__qsSeed` didn't sync the React store mirror
+7. Remove Duplicates toasted success but `data` matrix stayed unchanged
+8. Sort A→Z sorted the header row into the data
+9. Filter hid the header row (row 0)
+10. Typed-columns persistence: cleared columns kept ☑/☐ display
+11. Build-time: dev helpers used `require()` (ESLint blocks in prod)
+
+### Features built this session (7)
+- Insert > Symbol — Unicode picker dialog
+- Insert > Pictures > This Device — file upload + floating image overlay
+- Data > Text to Columns — delimiter wizard with live preview
+- Review > Workbook Statistics — sheets/cells/formulas count
+- Insert > Slicer — pivot-attached filter dialog (was a stub)
+- Insert > Sparklines — Line / Column / Win-Loss tiny in-cell charts
+- Insert > Recommended PivotTables — auto-analyse + 2-4 suggestions
+
+### Dev helpers exposed in non-prod
+Under `process.env.NODE_ENV !== 'production'` guard in `src/app/sheet/[id]/page.tsx`:
+- `window.__qsGrid` — live WorkbookInstance reference
+- `window.__qsSeed(rows)` — 2-D array → seed both `data` and `celldata`
+- `window.__qsSetColType(sheetId, col, type)` — set column type
+- `window.__qsClearColType(sheetId, col)` — clear column type
+- `window.__qsAddName(name, range)` — define named range
+- `window.__qsListNames()` — read named ranges
+- `window.__qsAddFilter(col, op, value)` / `__qsClearFilters()` — filter ops
+- `window.__qsAddCFGreaterThan(sheetId, range, threshold, bg)` — CF rule
+- `window.__qsListPivots()` — pivot IDs + names
+- `window.__qsAddSlicer(pivotId, columnIndex, label, allValues)` — slicer
+- `window.__qsParseClipboard(text)` — Smart Paste parser
+
+Each helper goes through the real store/action — no shadow state.
 
 ## Key File Locations
 - Supabase client: src/lib/supabase.ts

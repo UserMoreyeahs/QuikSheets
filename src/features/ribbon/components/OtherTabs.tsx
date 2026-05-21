@@ -101,6 +101,8 @@ import {
   unhideSheetPicker,
   insertHyperlink,
   applyTablePalette,
+  clearFilter,
+  reapplyFilter,
   setOrientationPreset,
   setMarginPreset,
   setPaperSizePreset,
@@ -116,6 +118,23 @@ import {
   evaluateFormula,
 } from '../utils/cellOps'
 import { useInsertFunctionStore } from '@/features/formula-engine/stores/insertFunctionStore'
+import type { FormulaCategory } from '@/features/formula-engine/formulaList'
+import { ColumnTypeRibbonButton, useColumnTypesStore } from '@/features/typed-columns'
+import { useCommentsUiStore } from '@/features/comments/store/commentsUiStore'
+import { useSheetStore } from '@/store/sheetStore'
+import { useWorkbookStore } from '@/store/workbookStore'
+import { colIndexToLetter } from '@/lib/cellAddress'
+import { usePrintSettingsStore } from '@/features/page-layout/printSettingsStore'
+import { useChartPanelStore } from '@/features/charts/store/chartPanelStore'
+import { flashFill } from '../utils/flashFill'
+import { useTextToColsStore } from '@/features/data/store/textToColsStore'
+import { useSlicerBuilderStore } from '@/features/slicers/store/slicerBuilderStore'
+import { useSparklineBuilderStore } from '@/features/sparklines/store/sparklineStore'
+import { useRecommendedPivotsStore } from '@/features/pivot/store/recommendedPivotsStore'
+import type { ChartKind } from '@/features/charts/types'
+import { useSymbolPickerStore } from '@/features/symbols/store/symbolPickerStore'
+import { insertImageFromDevice } from '@/features/images/utils/insertImageFromDevice'
+import { toast } from 'sonner'
 
 // ─── Insert ──────────────────────────────────────────────────────────────────
 
@@ -132,13 +151,65 @@ interface InsertTabProps {
   onImport?: (() => void) | undefined
 }
 
+/**
+ * R8.1 — Insert > Comment: open the CommentComposer for the active cell.
+ * Reuses the existing comments feature; only the menu wire was missing.
+ */
+function insertCommentForActiveCell(): void {
+  const { selectedCell } = useSheetStore.getState()
+  const { activeSheetId } = useWorkbookStore.getState()
+  if (!selectedCell || !activeSheetId) {
+    toast.message('Select a cell to add a comment')
+    return
+  }
+  const cellAddress = `${colIndexToLetter(selectedCell.col)}${selectedCell.row + 1}`
+  useCommentsUiStore.getState().openComposer({ sheetId: activeSheetId, cellAddress })
+}
+
+/**
+ * R8.3 — Open ChartBuilder pre-selected to a specific chart kind.
+ * The Excel chart sub-dropdowns (Column/Bar, Line/Area, etc.) used to
+ * open the builder with no type info — now they pass the chosen kind
+ * so the builder lands on the right type with tab='all'.
+ */
+function openChartBuilderWithKind(kind: ChartKind): void {
+  useChartPanelStore.getState().openBuilder(kind)
+}
+
+/**
+ * R8.2 — Insert > Checkbox: set the active column's type to "checkbox",
+ * reusing the typed-columns infrastructure shipped in Phase 3a. Every
+ * cell in the column becomes a ☐ / ☑ toggle with validation.
+ */
+function insertCheckboxForActiveColumn(): void {
+  const { selectedCell } = useSheetStore.getState()
+  const { activeSheetId } = useWorkbookStore.getState()
+  if (!selectedCell || !activeSheetId) {
+    toast.message('Select a cell in the target column first')
+    return
+  }
+  const col = selectedCell.col
+  useColumnTypesStore.getState().setColumnType(activeSheetId, col, {
+    type: 'checkbox',
+  })
+  toast.success(`Column ${colIndexToLetter(col)} set to Checkbox`, {
+    action: {
+      label: 'Undo',
+      onClick: () => {
+        useColumnTypesStore.getState().clearColumnType(activeSheetId, col)
+        toast.message(`Column ${colIndexToLetter(col)} reverted to plain text`)
+      },
+    },
+  })
+}
+
 export function InsertTab(props: InsertTabProps) {
   return (
-    <div className="flex h-full items-stretch overflow-x-auto">
+    <div className="flex h-full items-stretch overflow-x-auto scrollbar-hide">
       {/* Tables */}
       <RibbonGroup label="Tables">
         <RibbonLargeButton label="PivotTable"            icon={<TableIcon className="text-violet-500" />} onClick={props.onInsertPivot} showCaret />
-        <RibbonLargeButton label="Recommended Pivots"    icon={<LayoutDashboard className="text-violet-500" />} onClick={ribbonStub('Recommended PivotTables')} />
+        <RibbonLargeButton label="Recommended Pivots"    icon={<LayoutDashboard className="text-violet-500" />} onClick={() => useRecommendedPivotsStore.getState().openPicker()} />
         <RibbonLargeButton label="Table"                  icon={<TableIcon className="text-blue-500" />} onClick={() => applyTablePalette()} />
         <RibbonLargeButton label="Forms"                  icon={<FormInput className="text-emerald-500" />} onClick={props.onInsertForm} showCaret />
       </RibbonGroup>
@@ -153,7 +224,7 @@ export function InsertTab(props: InsertTabProps) {
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            <DropdownMenuItem onSelect={ribbonStub('This Device…')}>This Device…</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => insertImageFromDevice()}>This Device…</DropdownMenuItem>
             <DropdownMenuItem onSelect={ribbonStub('Stock Images…')}>Stock Images…</DropdownMenuItem>
             <DropdownMenuItem onSelect={ribbonStub('Online Pictures…')}>Online Pictures…</DropdownMenuItem>
           </DropdownMenuContent>
@@ -167,7 +238,7 @@ export function InsertTab(props: InsertTabProps) {
 
       {/* Controls */}
       <RibbonGroup label="Controls">
-        <RibbonLargeButton label="Checkbox" icon={<CheckSquare className="text-emerald-500" />} onClick={ribbonStub('Checkbox')} />
+        <RibbonLargeButton label="Checkbox" icon={<CheckSquare className="text-emerald-500" />} onClick={insertCheckboxForActiveColumn} />
       </RibbonGroup>
 
       {/* Charts */}
@@ -181,11 +252,19 @@ export function InsertTab(props: InsertTabProps) {
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            <DropdownMenuItem onSelect={() => props.onInsertChart?.()}>Column / Bar</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => props.onInsertChart?.()}>Line / Area</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => props.onInsertChart?.()}>Pie / Doughnut</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => props.onInsertChart?.()}>Scatter / Bubble</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => props.onInsertChart?.()}>Combo</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('bar')}>Column / Bar</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('stacked_bar')}>Stacked Bar</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('line')}>Line / Area</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('pie')}>Pie</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('doughnut')}>Doughnut</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('scatter')}>Scatter / Bubble</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('combo')}>Combo</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('radar')}>Radar</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('treemap')}>Treemap</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('funnel')}>Funnel</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('waterfall')}>Waterfall</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('heatmap')}>Heatmap</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('gauge')}>Gauge</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <DropdownMenu>
@@ -196,25 +275,24 @@ export function InsertTab(props: InsertTabProps) {
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            <DropdownMenuItem onSelect={() => props.onInsertChart?.()}>Line</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => props.onInsertChart?.()}>Area</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => props.onInsertChart?.()}>Stacked Area</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('line')}>Line</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openChartBuilderWithKind('area')}>Area</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <RibbonLargeButton label="Maps"        icon={<MapIcon className="text-rose-500" />}    onClick={ribbonStub('Maps')} showCaret />
-        <RibbonLargeButton label="PivotChart"  icon={<ChartPie className="text-violet-500" />} onClick={props.onInsertChart} showCaret />
+        <RibbonLargeButton label="PivotChart"  icon={<ChartPie className="text-violet-500" />} onClick={() => openChartBuilderWithKind('bar')} showCaret />
       </RibbonGroup>
 
       {/* Sparklines */}
       <RibbonGroup label="Sparklines">
-        <RibbonLargeButton label="Line"     icon={<Spline className="text-blue-500" />}      onClick={ribbonStub('Line Sparkline')} />
-        <RibbonLargeButton label="Column"   icon={<BarChart3 className="text-blue-500" />}   onClick={ribbonStub('Column Sparkline')} />
-        <RibbonLargeButton label="Win/Loss" icon={<Activity className="text-rose-500" />}    onClick={ribbonStub('Win/Loss Sparkline')} />
+        <RibbonLargeButton label="Line"     icon={<Spline className="text-blue-500" />}      onClick={() => useSparklineBuilderStore.getState().openBuilder('line')} />
+        <RibbonLargeButton label="Column"   icon={<BarChart3 className="text-blue-500" />}   onClick={() => useSparklineBuilderStore.getState().openBuilder('column')} />
+        <RibbonLargeButton label="Win/Loss" icon={<Activity className="text-rose-500" />}    onClick={() => useSparklineBuilderStore.getState().openBuilder('win_loss')} />
       </RibbonGroup>
 
       {/* Filters */}
       <RibbonGroup label="Filters">
-        <RibbonLargeButton label="Slicer"   icon={<Filter className="text-blue-500" />}   onClick={ribbonStub('Slicer')} />
+        <RibbonLargeButton label="Slicer"   icon={<Filter className="text-blue-500" />}   onClick={() => useSlicerBuilderStore.getState().openBuilder()} />
         <RibbonLargeButton label="Timeline" icon={<Calendar className="text-amber-500" />} onClick={ribbonStub('Timeline')} />
       </RibbonGroup>
 
@@ -225,7 +303,7 @@ export function InsertTab(props: InsertTabProps) {
 
       {/* Comments */}
       <RibbonGroup label="Comments">
-        <RibbonLargeButton label="Comment" icon={<MessageSquare className="text-blue-500" />} onClick={ribbonStub('New Comment')} />
+        <RibbonLargeButton label="Comment" icon={<MessageSquare className="text-blue-500" />} onClick={insertCommentForActiveCell} />
       </RibbonGroup>
 
       {/* Text */}
@@ -237,7 +315,7 @@ export function InsertTab(props: InsertTabProps) {
       {/* Symbols */}
       <RibbonGroup label="Symbols" className="border-r-0">
         <RibbonLargeButton label="Equation" icon={<Pi className="text-zinc-500" />}   onClick={ribbonStub('Equation')} showCaret />
-        <RibbonLargeButton label="Symbol"   icon={<Equal className="text-zinc-500" />} onClick={ribbonStub('Symbol')} />
+        <RibbonLargeButton label="Symbol"   icon={<Equal className="text-zinc-500" />} onClick={() => useSymbolPickerStore.getState().openPicker()} />
       </RibbonGroup>
 
       {/* AI shortcuts (kept as sheet-specific power tools) */}
@@ -253,13 +331,27 @@ export function InsertTab(props: InsertTabProps) {
 // ─── Page Layout ─────────────────────────────────────────────────────────────
 
 interface PageLayoutTabProps {
-  // intentionally empty — all stubbed for now
-  _placeholder?: never
+  /** On-screen gridlines visibility — shared with View tab. */
+  gridlinesVisible?: boolean
+  onToggleGridlines?: () => void
+  /** On-screen row/column headings visibility. */
+  headingsVisible?: boolean
+  onToggleHeadings?: () => void
 }
 
-export function PageLayoutTab(_props: PageLayoutTabProps) {
+export function PageLayoutTab(props: PageLayoutTabProps) {
+  // R9 — Sheet Options + Scale to Fit are now functional. View toggles
+  // are owned by the sheet page (passed in as props); print toggles +
+  // scale live in the printSettings store so they survive xlsx export.
+  const printGridlines = usePrintSettingsStore((s) => s.printGridlines)
+  const printHeadings = usePrintSettingsStore((s) => s.printHeadings)
+  const setPrintGridlines = usePrintSettingsStore((s) => s.setPrintGridlines)
+  const setPrintHeadings = usePrintSettingsStore((s) => s.setPrintHeadings)
+  const scalePct = usePrintSettingsStore((s) => s.scalePct)
+  const setScalePct = usePrintSettingsStore((s) => s.setScalePct)
+
   return (
-    <div className="flex h-full items-stretch overflow-x-auto">
+    <div className="flex h-full items-stretch overflow-x-auto scrollbar-hide">
       {/* Themes */}
       <RibbonGroup label="Themes">
         <RibbonLargeButton label="Themes"  icon={<Palette className="text-violet-500" />}     onClick={ribbonStub('Themes')} showCaret />
@@ -341,41 +433,90 @@ export function PageLayoutTab(_props: PageLayoutTabProps) {
         <RibbonLargeButton label="Print Titles" icon={<Bookmark className="text-violet-500" />} onClick={ribbonStub('Print Titles')} />
       </RibbonGroup>
 
-      {/* Scale to Fit */}
+      {/* Scale to Fit — R9.4: Scale% input is now functional and writes
+          to printSettingsStore.scalePct, which the PDF exporter reads.
+          Width/Height (in pages) require a page-break engine, so they
+          stay disabled with an explanatory title until that ships. */}
       <RibbonGroup label="Scale to Fit">
         <div className="flex flex-col gap-1 px-1 py-1 text-[11px]">
-          <label className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-200">
+          <label className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-200" title="Fit to N pages wide — coming soon">
             <span className="w-12">Width:</span>
             <select disabled className="h-6 rounded border border-zinc-200 bg-white px-1 text-[11px] dark:border-zinc-700 dark:bg-zinc-900">
               <option>Automatic</option>
             </select>
           </label>
-          <label className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-200">
+          <label className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-200" title="Fit to N pages tall — coming soon">
             <span className="w-12">Height:</span>
             <select disabled className="h-6 rounded border border-zinc-200 bg-white px-1 text-[11px] dark:border-zinc-700 dark:bg-zinc-900">
               <option>Automatic</option>
             </select>
           </label>
-          <label className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-200">
+          <label className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-200" title="Scale the printed output (10–400%)">
             <span className="w-12">Scale:</span>
-            <input disabled type="number" defaultValue={100} className="h-6 w-14 rounded border border-zinc-200 bg-white px-1 text-[11px] dark:border-zinc-700 dark:bg-zinc-900" />
+            <input
+              type="number"
+              min={10}
+              max={400}
+              step={5}
+              value={scalePct}
+              onChange={(e) => {
+                const n = Number(e.target.value)
+                if (Number.isFinite(n)) setScalePct(n)
+              }}
+              className="h-6 w-14 rounded border border-zinc-200 bg-white px-1 text-[11px] focus:border-blue-400 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900"
+            />
             <span>%</span>
           </label>
         </div>
       </RibbonGroup>
 
-      {/* Sheet Options */}
+      {/* Sheet Options — R9.1/R9.2/R9.3: checkboxes are now fully wired.
+          View toggles affect what the user sees in the grid (shared
+          state with the View tab); Print toggles affect the PDF/print
+          output via printSettingsStore. */}
       <RibbonGroup label="Sheet Options">
         <div className="flex flex-col gap-1.5 px-1 py-1 text-[11px]">
           <div className="flex items-center gap-2">
             <span className="w-16 text-zinc-700 dark:text-zinc-200">Gridlines</span>
-            <label className="flex items-center gap-1"><input type="checkbox" defaultChecked className="h-3 w-3" /> View</label>
-            <label className="flex items-center gap-1"><input type="checkbox" className="h-3 w-3" /> Print</label>
+            <label className="flex items-center gap-1">
+              <input
+                type="checkbox"
+                className="h-3 w-3"
+                checked={props.gridlinesVisible ?? true}
+                onChange={() => props.onToggleGridlines?.()}
+              />
+              View
+            </label>
+            <label className="flex items-center gap-1">
+              <input
+                type="checkbox"
+                className="h-3 w-3"
+                checked={printGridlines}
+                onChange={(e) => setPrintGridlines(e.target.checked)}
+              />
+              Print
+            </label>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-16 text-zinc-700 dark:text-zinc-200">Headings</span>
-            <label className="flex items-center gap-1"><input type="checkbox" defaultChecked className="h-3 w-3" /> View</label>
-            <label className="flex items-center gap-1"><input type="checkbox" className="h-3 w-3" /> Print</label>
+            <label className="flex items-center gap-1">
+              <input
+                type="checkbox"
+                className="h-3 w-3"
+                checked={props.headingsVisible ?? true}
+                onChange={() => props.onToggleHeadings?.()}
+              />
+              View
+            </label>
+            <label className="flex items-center gap-1">
+              <input
+                type="checkbox"
+                className="h-3 w-3"
+                checked={printHeadings}
+                onChange={(e) => setPrintHeadings(e.target.checked)}
+              />
+              Print
+            </label>
           </div>
         </div>
       </RibbonGroup>
@@ -406,21 +547,60 @@ interface FormulasTabProps {
   workbookId: string
 }
 
+/** Open the Insert Function dialog scoped to a single category. */
+function openFunctionsByCategory(category: 'All' | FormulaCategory): void {
+  useInsertFunctionStore.getState().setOpen(true, category)
+}
+
+/**
+ * Workbook Statistics — Excel's Review > Workbook Statistics. Counts
+ * sheets, cells with values, cells with formulas, named ranges, and
+ * conditional-format rules in the current workbook.
+ */
+function showWorkbookStatistics(): void {
+  const { gridSheets } = useSheetStore.getState()
+  let cellsWithValues = 0
+  let cellsWithFormulas = 0
+  for (const sheet of gridSheets) {
+    for (const entry of sheet.celldata ?? []) {
+      const v = entry.v as { v?: unknown; f?: unknown } | null | undefined
+      if (!v) continue
+      if (v.f) cellsWithFormulas++
+      if (v.v !== undefined && v.v !== null && v.v !== '') cellsWithValues++
+    }
+  }
+  toast.success(
+    `${gridSheets.length} sheet${gridSheets.length > 1 ? 's' : ''} · ${cellsWithValues} cell${cellsWithValues !== 1 ? 's' : ''} with values · ${cellsWithFormulas} formula${cellsWithFormulas !== 1 ? 's' : ''}`,
+    { duration: 6000 },
+  )
+}
+
+/**
+ * "Calculate Now / Calculate Sheet" in Excel forces a recompute when
+ * Calculation Options is set to Manual. Quiksheets always runs in
+ * auto-calc mode (formulajs evaluates on cell change), so the most
+ * truthful behaviour is to confirm to the user that their formulas
+ * are already up to date.
+ */
+function calculateNowToast(): void {
+  toast.message('Auto-calc is on — formulas already up to date.')
+}
+
 export function FormulasTab(props: FormulasTabProps) {
   return (
-    <div className="flex h-full items-stretch overflow-x-auto">
+    <div className="flex h-full items-stretch overflow-x-auto scrollbar-hide">
       {/* Function Library */}
       <RibbonGroup label="Function Library">
         <RibbonLargeButton label="Insert Function" icon={<Calculator className="text-emerald-600" />} onClick={() => useInsertFunctionStore.getState().setOpen(true)} />
         <RibbonLargeButton label="AutoSum" icon={<Sigma className="text-orange-500" />} onClick={props.onAutoSum} showCaret />
-        <RibbonLargeButton label="Recently Used" icon={<History className="text-zinc-500" />} onClick={ribbonStub('Recently Used')} showCaret />
-        <RibbonLargeButton label="Financial" icon={<Briefcase className="text-emerald-500" />} onClick={ribbonStub('Financial')} showCaret />
-        <RibbonLargeButton label="Logical" icon={<GitBranch className="text-amber-500" />} onClick={ribbonStub('Logical')} showCaret />
-        <RibbonLargeButton label="Text" icon={<Type className="text-blue-500" />} onClick={ribbonStub('Text')} showCaret />
-        <RibbonLargeButton label="Date & Time" icon={<Calendar className="text-violet-500" />} onClick={ribbonStub('Date & Time')} showCaret />
-        <RibbonLargeButton label="Lookup & Ref" icon={<Search className="text-blue-500" />} onClick={ribbonStub('Lookup & Reference')} showCaret />
-        <RibbonLargeButton label="Math & Trig" icon={<Pi className="text-rose-500" />} onClick={ribbonStub('Math & Trig')} showCaret />
-        <RibbonLargeButton label="More Functions" icon={<PlusSquare className="text-zinc-500" />} onClick={ribbonStub('More Functions')} showCaret />
+        <RibbonLargeButton label="Recently Used" icon={<History className="text-zinc-500" />} onClick={() => openFunctionsByCategory('All')} showCaret />
+        <RibbonLargeButton label="Financial" icon={<Briefcase className="text-emerald-500" />} onClick={() => openFunctionsByCategory('Financial')} showCaret />
+        <RibbonLargeButton label="Logical" icon={<GitBranch className="text-amber-500" />} onClick={() => openFunctionsByCategory('Logical')} showCaret />
+        <RibbonLargeButton label="Text" icon={<Type className="text-blue-500" />} onClick={() => openFunctionsByCategory('Text')} showCaret />
+        <RibbonLargeButton label="Date & Time" icon={<Calendar className="text-violet-500" />} onClick={() => openFunctionsByCategory('Date')} showCaret />
+        <RibbonLargeButton label="Lookup & Ref" icon={<Search className="text-blue-500" />} onClick={() => openFunctionsByCategory('Lookup')} showCaret />
+        <RibbonLargeButton label="Math & Trig" icon={<Pi className="text-rose-500" />} onClick={() => openFunctionsByCategory('Math')} showCaret />
+        <RibbonLargeButton label="More Functions" icon={<PlusSquare className="text-zinc-500" />} onClick={() => useInsertFunctionStore.getState().setOpen(true)} showCaret />
       </RibbonGroup>
 
       {/* Defined Names */}
@@ -455,10 +635,22 @@ export function FormulasTab(props: FormulasTabProps) {
 
       {/* Calculation */}
       <RibbonGroup label="Calculation" className="border-r-0">
-        <RibbonLargeButton label="Calc Options" icon={<RefreshCcw className="text-amber-500" />} onClick={ribbonStub('Calculation Options')} showCaret />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" title="Calculation Options" className="flex h-[68px] w-[64px] shrink-0 flex-col items-center justify-center gap-1 rounded px-1 py-1 text-[11px] hover:bg-zinc-100 dark:hover:bg-zinc-800">
+              <RefreshCcw className="h-6 w-6 text-amber-500" />
+              <span className="flex items-center gap-0.5">Calc Options <ChevronDown className="h-3 w-3 text-zinc-400" /></span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onSelect={() => toast.success('Automatic calculation is on')}>Automatic (current)</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => toast.message('Manual calculation mode is not supported yet')} disabled>Manual</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => toast.success('Auto except for tables is on')} disabled>Automatic Except for Data Tables</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <div className="flex flex-col gap-0.5">
-          <RibbonButton label="Calculate Now"   shortcut="F9"        icon={<Calculator className="h-3.5 w-3.5" />} onClick={ribbonStub('Calculate Now')} />
-          <RibbonButton label="Calculate Sheet" shortcut="Shift+F9" icon={<FileSpreadsheet className="h-3.5 w-3.5" />} onClick={ribbonStub('Calculate Sheet')} />
+          <RibbonButton label="Calculate Now"   shortcut="F9"        icon={<Calculator className="h-3.5 w-3.5" />} onClick={calculateNowToast} />
+          <RibbonButton label="Calculate Sheet" shortcut="Shift+F9" icon={<FileSpreadsheet className="h-3.5 w-3.5" />} onClick={calculateNowToast} />
         </div>
       </RibbonGroup>
 
@@ -485,7 +677,7 @@ interface DataTabProps {
 
 export function DataTab(props: DataTabProps) {
   return (
-    <div className="flex h-full items-stretch overflow-x-auto">
+    <div className="flex h-full items-stretch overflow-x-auto scrollbar-hide">
       {/* Get & Transform Data */}
       <RibbonGroup label="Get & Transform Data">
         <RibbonLargeButton label="Get Data" icon={<Database className="text-emerald-500" />} onClick={props.onImport} showCaret />
@@ -526,17 +718,18 @@ export function DataTab(props: DataTabProps) {
         <RibbonLargeButton label="Sort" icon={<SortAsc className="text-blue-500" />} onClick={props.onSortAsc} />
         <RibbonLargeButton label="Filter" icon={<Filter className="text-blue-500" />} onClick={props.onFilter} />
         <div className="flex flex-col gap-0.5">
-          <RibbonButton label="Clear"    icon={<EyeOff className="h-3.5 w-3.5" />}      onClick={ribbonStub('Clear Filter')} />
-          <RibbonButton label="Reapply"  icon={<RefreshCcw className="h-3.5 w-3.5" />}  onClick={ribbonStub('Reapply Filter')} />
+          <RibbonButton label="Clear"    icon={<EyeOff className="h-3.5 w-3.5" />}      onClick={clearFilter} />
+          <RibbonButton label="Reapply"  icon={<RefreshCcw className="h-3.5 w-3.5" />}  onClick={reapplyFilter} />
           <RibbonButton label="Advanced" icon={<WandSparkles className="h-3.5 w-3.5" />} onClick={ribbonStub('Advanced Filter')} />
         </div>
       </RibbonGroup>
 
       {/* Data Tools */}
       <RibbonGroup label="Data Tools">
-        <RibbonLargeButton label="Text to Cols"   icon={<SquareStack className="text-blue-500" />} onClick={ribbonStub('Text to Columns')} />
+        <ColumnTypeRibbonButton />
+        <RibbonLargeButton label="Text to Cols"   icon={<SquareStack className="text-blue-500" />} onClick={() => useTextToColsStore.getState().setOpen(true)} />
         <div className="flex flex-col gap-0.5">
-          <RibbonButton label="Flash Fill"        icon={<WandSparkles className="h-3.5 w-3.5" />} onClick={ribbonStub('Flash Fill (Ctrl+E)')} />
+          <RibbonButton label="Flash Fill"        icon={<WandSparkles className="h-3.5 w-3.5" />} shortcut="Ctrl+E" onClick={() => { void flashFill() }} />
           <RibbonButton label="Remove Duplicates" icon={<Minus className="h-3.5 w-3.5" />}        onClick={props.onDedupe} />
           <RibbonButton label="Data Validation"   icon={<ShieldCheck className="h-3.5 w-3.5 text-amber-500" />} onClick={props.onValidation} />
         </div>
@@ -579,12 +772,12 @@ interface ReviewTabProps {
 
 export function ReviewTab(props: ReviewTabProps) {
   return (
-    <div className="flex h-full items-stretch overflow-x-auto">
+    <div className="flex h-full items-stretch overflow-x-auto scrollbar-hide">
       {/* Proofing */}
       <RibbonGroup label="Proofing">
         <RibbonLargeButton label="Spelling"            icon={<BookOpen className="text-emerald-500" />} onClick={ribbonStub('Spelling (F7)')} />
         <RibbonLargeButton label="Thesaurus"           icon={<BookOpen className="text-blue-500" />}    onClick={ribbonStub('Thesaurus')} />
-        <RibbonLargeButton label="Workbook Statistics" icon={<FileBarChart className="text-violet-500" />} onClick={ribbonStub('Workbook Statistics')} />
+        <RibbonLargeButton label="Workbook Statistics" icon={<FileBarChart className="text-violet-500" />} onClick={showWorkbookStatistics} />
       </RibbonGroup>
 
       {/* Performance */}
@@ -663,7 +856,7 @@ interface ViewTabProps {
 
 export function ViewTab(props: ViewTabProps) {
   return (
-    <div className="flex h-full items-stretch overflow-x-auto">
+    <div className="flex h-full items-stretch overflow-x-auto scrollbar-hide">
       {/* Sheet View */}
       <RibbonGroup label="Sheet View">
         <DropdownMenu>
@@ -790,7 +983,7 @@ export function ViewTab(props: ViewTabProps) {
 
 export function AutomateTab() {
   return (
-    <div className="flex h-full items-stretch overflow-x-auto">
+    <div className="flex h-full items-stretch overflow-x-auto scrollbar-hide">
       <RibbonGroup label="Office Scripts">
         <RibbonLargeButton label="New Script"   icon={<Plus className="text-emerald-500" />}     onClick={ribbonStub('New Script')} showCaret />
         <RibbonLargeButton label="View Scripts" icon={<Code2 className="text-blue-500" />}        onClick={ribbonStub('View Scripts')} showCaret />
@@ -826,7 +1019,7 @@ interface HelpTabProps {
 
 export function HelpTab({ onShortcuts }: HelpTabProps) {
   return (
-    <div className="flex h-full items-stretch overflow-x-auto">
+    <div className="flex h-full items-stretch overflow-x-auto scrollbar-hide">
       <RibbonGroup label="Help">
         <RibbonLargeButton label="Help"           icon={<CircleHelp className="text-blue-500" />}  onClick={onShortcuts} />
         <RibbonLargeButton label="Contact Support" icon={<MessageCircle className="text-emerald-500" />} onClick={ribbonStub('Contact Support')} />

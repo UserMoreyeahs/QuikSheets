@@ -14,8 +14,9 @@ import { cn } from '@/lib/utils'
 import { isValidValue } from '@/lib/validation'
 import { FormulaAutocomplete } from '@/features/formula-engine'
 import { AICellPrompt, useAIFormula } from '@/features/ai-cell'
-import { Sparkles } from 'lucide-react'
+import { Sparkles, ListFilter } from 'lucide-react'
 import { useLivePreview } from '@/features/live-preview'
+import { useNLFilterUiStore } from '@/features/nl-filter/store/nlFilterUiStore'
 import type { FormulaEntry } from '@/features/formula-engine'
 
 function isFormulaNameQuery(value: string): boolean {
@@ -319,6 +320,8 @@ export function FormulaBar() {
         <Sparkles size={14} />
       </button>
 
+      <NLFilterToggleButton />
+
       {/* Undo Button */}
       <button
         onClick={() => gridInstance?.handleUndo()}
@@ -375,5 +378,33 @@ export function FormulaBar() {
         </svg>
       </button>
     </div>
+  )
+}
+
+/**
+ * UX-1: small chip on the formula bar that toggles the natural-language
+ * filter bar. Defaults hidden so the grid gets the extra ~36px of
+ * vertical real estate. Active state pulses blue so it's easy to spot
+ * once the user opens it.
+ */
+function NLFilterToggleButton() {
+  const visible = useNLFilterUiStore((s) => s.visible)
+  const toggle = useNLFilterUiStore((s) => s.toggle)
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      title={visible ? 'Hide filter bar' : 'Show filter bar (Ctrl+Shift+L)'}
+      aria-pressed={visible}
+      className={cn(
+        'mr-1 flex h-7 w-7 items-center justify-center rounded',
+        'transition-colors duration-100',
+        visible
+          ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300'
+          : 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-100',
+      )}
+    >
+      <ListFilter size={14} />
+    </button>
   )
 }
