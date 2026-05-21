@@ -101,6 +101,8 @@ import {
   unhideSheetPicker,
   insertHyperlink,
   applyTablePalette,
+  clearFilter,
+  reapplyFilter,
   setOrientationPreset,
   setMarginPreset,
   setPaperSizePreset,
@@ -124,6 +126,7 @@ import { useWorkbookStore } from '@/store/workbookStore'
 import { colIndexToLetter } from '@/lib/cellAddress'
 import { usePrintSettingsStore } from '@/features/page-layout/printSettingsStore'
 import { useChartPanelStore } from '@/features/charts/store/chartPanelStore'
+import { flashFill } from '../utils/flashFill'
 import type { ChartKind } from '@/features/charts/types'
 import { useSymbolPickerStore } from '@/features/symbols/store/symbolPickerStore'
 import { insertImageFromDevice } from '@/features/images/utils/insertImageFromDevice'
@@ -679,8 +682,8 @@ export function DataTab(props: DataTabProps) {
         <RibbonLargeButton label="Sort" icon={<SortAsc className="text-blue-500" />} onClick={props.onSortAsc} />
         <RibbonLargeButton label="Filter" icon={<Filter className="text-blue-500" />} onClick={props.onFilter} />
         <div className="flex flex-col gap-0.5">
-          <RibbonButton label="Clear"    icon={<EyeOff className="h-3.5 w-3.5" />}      onClick={ribbonStub('Clear Filter')} />
-          <RibbonButton label="Reapply"  icon={<RefreshCcw className="h-3.5 w-3.5" />}  onClick={ribbonStub('Reapply Filter')} />
+          <RibbonButton label="Clear"    icon={<EyeOff className="h-3.5 w-3.5" />}      onClick={clearFilter} />
+          <RibbonButton label="Reapply"  icon={<RefreshCcw className="h-3.5 w-3.5" />}  onClick={reapplyFilter} />
           <RibbonButton label="Advanced" icon={<WandSparkles className="h-3.5 w-3.5" />} onClick={ribbonStub('Advanced Filter')} />
         </div>
       </RibbonGroup>
@@ -690,7 +693,7 @@ export function DataTab(props: DataTabProps) {
         <ColumnTypeRibbonButton />
         <RibbonLargeButton label="Text to Cols"   icon={<SquareStack className="text-blue-500" />} onClick={ribbonStub('Text to Columns')} />
         <div className="flex flex-col gap-0.5">
-          <RibbonButton label="Flash Fill"        icon={<WandSparkles className="h-3.5 w-3.5" />} onClick={ribbonStub('Flash Fill (Ctrl+E)')} />
+          <RibbonButton label="Flash Fill"        icon={<WandSparkles className="h-3.5 w-3.5" />} shortcut="Ctrl+E" onClick={() => { void flashFill() }} />
           <RibbonButton label="Remove Duplicates" icon={<Minus className="h-3.5 w-3.5" />}        onClick={props.onDedupe} />
           <RibbonButton label="Data Validation"   icon={<ShieldCheck className="h-3.5 w-3.5 text-amber-500" />} onClick={props.onValidation} />
         </div>
