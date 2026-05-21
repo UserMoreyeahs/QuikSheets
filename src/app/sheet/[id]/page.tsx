@@ -394,6 +394,11 @@ export default function SheetPage() {
         const { useColumnTypesStore } = require('@/features/typed-columns/store/columnTypesStore') as typeof import('@/features/typed-columns/store/columnTypesStore')
         useColumnTypesStore.getState().clearColumnType(sheetId, col)
       }
+    // Pivot helper — list IDs so __qsAddSlicer can target one.
+    ;(window as unknown as { __qsListPivots?: () => Array<{ id: string; name: string }> }).__qsListPivots = () => {
+      const { usePivotUiStore } = require('@/features/pivot/store/pivotUiStore') as typeof import('@/features/pivot/store/pivotUiStore')
+      return usePivotUiStore.getState().pivots.map((p) => ({ id: p.id, name: p.name }))
+    }
     // Slicer helper — programmatically attach a slicer to a pivot.
     ;(window as unknown as { __qsAddSlicer?: (pivotId: string, columnIndex: number, label: string, allValues: string[]) => string }).__qsAddSlicer =
       (pivotId, columnIndex, label, allValues) => {
