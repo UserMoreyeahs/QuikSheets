@@ -122,6 +122,14 @@ const SlicerBuilderDialog = dynamic(
   () => import('@/features/slicers/components/SlicerBuilderDialog').then((m) => ({ default: m.SlicerBuilderDialog })),
   { ssr: false },
 )
+const SparklineBuilderDialog = dynamic(
+  () => import('@/features/sparklines/components/SparklineBuilderDialog').then((m) => ({ default: m.SparklineBuilderDialog })),
+  { ssr: false },
+)
+const SparklinesLayer = dynamic(
+  () => import('@/features/sparklines/components/SparklinesLayer').then((m) => ({ default: m.SparklinesLayer })),
+  { ssr: false },
+)
 import { useTextToColsStore } from '@/features/data/store/textToColsStore'
 const FormBuilder = dynamic(
   () => import('@/features/forms/components/FormBuilder').then((m) => ({ default: m.FormBuilder })),
@@ -1523,6 +1531,7 @@ export default function SheetPage() {
             (e.g. chart render, pivot aggregation) doesn't freeze the grid. */}
         <ErrorBoundary silent><ChartsLayer /></ErrorBoundary>
         <ErrorBoundary silent><ImagesLayer /></ErrorBoundary>
+        <ErrorBoundary silent><SparklinesLayer /></ErrorBoundary>
         <ErrorBoundary silent><PivotsLayer /></ErrorBoundary>
         <ErrorBoundary silent><SlicersLayer /></ErrorBoundary>
         <ErrorBoundary silent><FillHandle /></ErrorBoundary>
@@ -1616,6 +1625,7 @@ export default function SheetPage() {
         />
       </ErrorBoundary>
       <ErrorBoundary><SlicerBuilderDialog /></ErrorBoundary>
+      <ErrorBoundary><SparklineBuilderDialog /></ErrorBoundary>
       <ErrorBoundary><FormBuilder workbookId={workbookId} /></ErrorBoundary>
       <ErrorBoundary><PivotBuilder /></ErrorBoundary>
       <ErrorBoundary><ForecastPanel /></ErrorBoundary>

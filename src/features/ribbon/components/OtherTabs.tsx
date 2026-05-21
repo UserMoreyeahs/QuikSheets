@@ -129,6 +129,7 @@ import { useChartPanelStore } from '@/features/charts/store/chartPanelStore'
 import { flashFill } from '../utils/flashFill'
 import { useTextToColsStore } from '@/features/data/store/textToColsStore'
 import { useSlicerBuilderStore } from '@/features/slicers/store/slicerBuilderStore'
+import { useSparklineBuilderStore } from '@/features/sparklines/store/sparklineStore'
 import type { ChartKind } from '@/features/charts/types'
 import { useSymbolPickerStore } from '@/features/symbols/store/symbolPickerStore'
 import { insertImageFromDevice } from '@/features/images/utils/insertImageFromDevice'
@@ -283,9 +284,9 @@ export function InsertTab(props: InsertTabProps) {
 
       {/* Sparklines */}
       <RibbonGroup label="Sparklines">
-        <RibbonLargeButton label="Line"     icon={<Spline className="text-blue-500" />}      onClick={ribbonStub('Line Sparkline')} />
-        <RibbonLargeButton label="Column"   icon={<BarChart3 className="text-blue-500" />}   onClick={ribbonStub('Column Sparkline')} />
-        <RibbonLargeButton label="Win/Loss" icon={<Activity className="text-rose-500" />}    onClick={ribbonStub('Win/Loss Sparkline')} />
+        <RibbonLargeButton label="Line"     icon={<Spline className="text-blue-500" />}      onClick={() => useSparklineBuilderStore.getState().openBuilder('line')} />
+        <RibbonLargeButton label="Column"   icon={<BarChart3 className="text-blue-500" />}   onClick={() => useSparklineBuilderStore.getState().openBuilder('column')} />
+        <RibbonLargeButton label="Win/Loss" icon={<Activity className="text-rose-500" />}    onClick={() => useSparklineBuilderStore.getState().openBuilder('win_loss')} />
       </RibbonGroup>
 
       {/* Filters */}
