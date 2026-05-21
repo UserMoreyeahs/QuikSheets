@@ -128,6 +128,7 @@ import { usePrintSettingsStore } from '@/features/page-layout/printSettingsStore
 import { useChartPanelStore } from '@/features/charts/store/chartPanelStore'
 import { flashFill } from '../utils/flashFill'
 import { useTextToColsStore } from '@/features/data/store/textToColsStore'
+import { useSlicerBuilderStore } from '@/features/slicers/store/slicerBuilderStore'
 import type { ChartKind } from '@/features/charts/types'
 import { useSymbolPickerStore } from '@/features/symbols/store/symbolPickerStore'
 import { insertImageFromDevice } from '@/features/images/utils/insertImageFromDevice'
@@ -289,7 +290,7 @@ export function InsertTab(props: InsertTabProps) {
 
       {/* Filters */}
       <RibbonGroup label="Filters">
-        <RibbonLargeButton label="Slicer"   icon={<Filter className="text-blue-500" />}   onClick={ribbonStub('Slicer')} />
+        <RibbonLargeButton label="Slicer"   icon={<Filter className="text-blue-500" />}   onClick={() => useSlicerBuilderStore.getState().openBuilder()} />
         <RibbonLargeButton label="Timeline" icon={<Calendar className="text-amber-500" />} onClick={ribbonStub('Timeline')} />
       </RibbonGroup>
 

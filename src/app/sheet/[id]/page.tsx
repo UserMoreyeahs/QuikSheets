@@ -118,6 +118,10 @@ const TextToColumnsDialog = dynamic(
   () => import('@/features/data/components/TextToColumnsDialog').then((m) => ({ default: m.TextToColumnsDialog })),
   { ssr: false },
 )
+const SlicerBuilderDialog = dynamic(
+  () => import('@/features/slicers/components/SlicerBuilderDialog').then((m) => ({ default: m.SlicerBuilderDialog })),
+  { ssr: false },
+)
 import { useTextToColsStore } from '@/features/data/store/textToColsStore'
 const FormBuilder = dynamic(
   () => import('@/features/forms/components/FormBuilder').then((m) => ({ default: m.FormBuilder })),
@@ -1611,6 +1615,7 @@ export default function SheetPage() {
           onOpenChange={(open) => useTextToColsStore.getState().setOpen(open)}
         />
       </ErrorBoundary>
+      <ErrorBoundary><SlicerBuilderDialog /></ErrorBoundary>
       <ErrorBoundary><FormBuilder workbookId={workbookId} /></ErrorBoundary>
       <ErrorBoundary><PivotBuilder /></ErrorBoundary>
       <ErrorBoundary><ForecastPanel /></ErrorBoundary>
