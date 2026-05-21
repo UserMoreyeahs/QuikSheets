@@ -88,6 +88,9 @@ const NameManagerDialog = dynamic(
 )
 import { useNamedRangesStore } from '@/features/named-ranges/namedRangesStore'
 import { useCFStore } from '@/features/conditional-formatting/store/cfStore'
+import { useColumnTypesStore } from '@/features/typed-columns/store/columnTypesStore'
+import { useSlicerStore } from '@/features/slicers/store/slicerStore'
+import { parseClipboardText } from '@/features/smart-paste/utils/clipboardParser'
 import { applyRulesToSheet, evaluateRules } from '@/features/conditional-formatting/utils/cfEvaluator'
 import * as cellOps from '@/features/ribbon/utils/cellOps'
 import { installHyperlinkFollow } from '@/features/ribbon/utils/cellOps'
@@ -362,7 +365,6 @@ export default function SheetPage() {
       const targetSheetIdx = Math.max(0, sheets.findIndex((s) => s.status === 1))
       const target = sheets[targetSheetIdx]
       if (!target) {
-        console.warn('[qs] no active sheet to seed')
         return
       }
       const buildCell = (v: unknown) =>
@@ -397,74 +399,33 @@ export default function SheetPage() {
       )
       state.replaceGridSheets(nextSheets)
     }
-    // Dev helpers for the typed-columns store — used to verify the
-    // enforcement hook reverts cells correctly when a column type is
-    // cleared. Reaches into the same store the picker chips use.
+    // Dev helpers — verification surface that mirrors the real stores
+    // so scripted tests can drive features without window.prompt() etc.
+    // Stripped from production via the process.env.NODE_ENV guard at
+    // the top of this useEffect.
     ;(window as unknown as { __qsSetColType?: (sheetId: string, col: number, type: string) => void }).__qsSetColType =
-      (sheetId, col, type) => {
-        const { useColumnTypesStore } = require('@/features/typed-columns/store/columnTypesStore') as typeof import('@/features/typed-columns/store/columnTypesStore')
-        useColumnTypesStore.getState().setColumnType(sheetId, col, { type: type as never })
-      }
+      (sheetId, col, type) => useColumnTypesStore.getState().setColumnType(sheetId, col, { type: type as never })
     ;(window as unknown as { __qsClearColType?: (sheetId: string, col: number) => void }).__qsClearColType =
-      (sheetId, col) => {
-        const { useColumnTypesStore } = require('@/features/typed-columns/store/columnTypesStore') as typeof import('@/features/typed-columns/store/columnTypesStore')
-        useColumnTypesStore.getState().clearColumnType(sheetId, col)
-      }
-    // Pivot helper — list IDs so __qsAddSlicer can target one.
-    ;(window as unknown as { __qsListPivots?: () => Array<{ id: string; name: string }> }).__qsListPivots = () => {
-      const { usePivotUiStore } = require('@/features/pivot/store/pivotUiStore') as typeof import('@/features/pivot/store/pivotUiStore')
-      return usePivotUiStore.getState().pivots.map((p) => ({ id: p.id, name: p.name }))
-    }
-    // Smart-paste helper — runs the parser on a string and returns the
-    // detected shape, so we can verify the parsing layer without
-    // needing a real ClipboardEvent (browsers refuse to populate
-    // synthetic ClipboardEvent.clipboardData for security reasons).
-    ;(window as unknown as { __qsParseClipboard?: (text: string) => unknown }).__qsParseClipboard = (text) => {
-      const { parseClipboardText } = require('@/features/smart-paste/utils/clipboardParser') as typeof import('@/features/smart-paste/utils/clipboardParser')
-      return parseClipboardText(text)
-    }
-    // Slicer helper — programmatically attach a slicer to a pivot.
+      (sheetId, col) => useColumnTypesStore.getState().clearColumnType(sheetId, col)
+    ;(window as unknown as { __qsListPivots?: () => Array<{ id: string; name: string }> }).__qsListPivots = () =>
+      usePivotUiStore.getState().pivots.map((p) => ({ id: p.id, name: p.name }))
+    ;(window as unknown as { __qsParseClipboard?: (text: string) => unknown }).__qsParseClipboard = (text) =>
+      parseClipboardText(text)
     ;(window as unknown as { __qsAddSlicer?: (pivotId: string, columnIndex: number, label: string, allValues: string[]) => string }).__qsAddSlicer =
-      (pivotId, columnIndex, label, allValues) => {
-        const { useSlicerStore } = require('@/features/slicers/store/slicerStore') as typeof import('@/features/slicers/store/slicerStore')
-        return useSlicerStore.getState().addSlicer({
-          label,
-          kind: 'list',
-          pivotId,
-          columnIndex,
-          allValues,
-          selected: [],
-          x: 200,
-          y: 600,
-          width: 200,
-          height: 240,
+      (pivotId, columnIndex, label, allValues) =>
+        useSlicerStore.getState().addSlicer({
+          label, kind: 'list', pivotId, columnIndex, allValues,
+          selected: [], x: 200, y: 600, width: 200, height: 240,
         })
-      }
-    // Named-ranges helper — define a name programmatically (skips the
-    // window.prompt() in defineNameFromSelection so we can test the
-    // store / Name Manager without UI driver flakiness).
     ;(window as unknown as { __qsAddName?: (name: string, range: string) => void }).__qsAddName =
-      (name, range) => {
-        const { useNamedRangesStore } = require('@/features/named-ranges/namedRangesStore') as typeof import('@/features/named-ranges/namedRangesStore')
-        useNamedRangesStore.getState().addName(workbookId, { name, range, scope: 'workbook' })
-      }
-    ;(window as unknown as { __qsListNames?: () => Array<{ name: string; range: string }> }).__qsListNames = () => {
-      const { useNamedRangesStore } = require('@/features/named-ranges/namedRangesStore') as typeof import('@/features/named-ranges/namedRangesStore')
-      return useNamedRangesStore.getState().getNamesForWorkbook(workbookId) as unknown as Array<{ name: string; range: string }>
-    }
-    // Filter helper — add a single equals-filter on a column.
+      (name, range) => useNamedRangesStore.getState().addName(workbookId, { name, range, scope: 'workbook' })
+    ;(window as unknown as { __qsListNames?: () => Array<{ name: string; range: string }> }).__qsListNames = () =>
+      useNamedRangesStore.getState().getNamesForWorkbook(workbookId) as unknown as Array<{ name: string; range: string }>
     ;(window as unknown as { __qsAddFilter?: (col: number, operator: string, value: string) => void }).__qsAddFilter =
-      (col, operator, value) => {
-        const state = useSheetStore.getState()
-        state.addFilter({ columnIndex: col, operator: operator as never, value })
-      }
-    ;(window as unknown as { __qsClearFilters?: () => void }).__qsClearFilters = () => {
-      useSheetStore.getState().clearFilters()
-    }
-    // CF helper — add a "highlight cells > value" rule and re-apply.
+      (col, operator, value) => useSheetStore.getState().addFilter({ columnIndex: col, operator: operator as never, value })
+    ;(window as unknown as { __qsClearFilters?: () => void }).__qsClearFilters = () => useSheetStore.getState().clearFilters()
     ;(window as unknown as { __qsAddCFGreaterThan?: (sheetId: string, range: string, threshold: number, bgColor: string) => void }).__qsAddCFGreaterThan =
       (sheetId, range, threshold, bgColor) => {
-        const { useCFStore } = require('@/features/conditional-formatting/store/cfStore') as typeof import('@/features/conditional-formatting/store/cfStore')
         useCFStore.getState().addRule(sheetId, {
           range,
           condition: { type: 'cell_value', operator: 'greater', value: String(threshold) },
@@ -473,7 +434,7 @@ export default function SheetPage() {
         })
         useCFStore.getState().applyToActiveSheet()
       }
-  }, [gridInstance, activeSheetId])
+  }, [gridInstance, activeSheetId, workbookId])
   const [showFormulaBarUI, setShowFormulaBarUI] = useState(true)
   const [showGridlines, setShowGridlines] = useState(true)
   const [zoomLevel, setZoomLevel] = useState(1.0)
