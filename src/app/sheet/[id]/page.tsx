@@ -394,6 +394,15 @@ export default function SheetPage() {
         const { useColumnTypesStore } = require('@/features/typed-columns/store/columnTypesStore') as typeof import('@/features/typed-columns/store/columnTypesStore')
         useColumnTypesStore.getState().clearColumnType(sheetId, col)
       }
+    // Filter helper — add a single equals-filter on a column.
+    ;(window as unknown as { __qsAddFilter?: (col: number, operator: string, value: string) => void }).__qsAddFilter =
+      (col, operator, value) => {
+        const state = useSheetStore.getState()
+        state.addFilter({ columnIndex: col, operator: operator as never, value })
+      }
+    ;(window as unknown as { __qsClearFilters?: () => void }).__qsClearFilters = () => {
+      useSheetStore.getState().clearFilters()
+    }
     // CF helper — add a "highlight cells > value" rule and re-apply.
     ;(window as unknown as { __qsAddCFGreaterThan?: (sheetId: string, range: string, threshold: number, bgColor: string) => void }).__qsAddCFGreaterThan =
       (sheetId, range, threshold, bgColor) => {
