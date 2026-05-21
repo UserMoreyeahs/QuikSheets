@@ -114,6 +114,11 @@ const SymbolPicker = dynamic(
   () => import('@/features/symbols/components/SymbolPicker').then((m) => ({ default: m.SymbolPicker })),
   { ssr: false },
 )
+const TextToColumnsDialog = dynamic(
+  () => import('@/features/data/components/TextToColumnsDialog').then((m) => ({ default: m.TextToColumnsDialog })),
+  { ssr: false },
+)
+import { useTextToColsStore } from '@/features/data/store/textToColsStore'
 const FormBuilder = dynamic(
   () => import('@/features/forms/components/FormBuilder').then((m) => ({ default: m.FormBuilder })),
   { ssr: false },
@@ -235,6 +240,7 @@ export default function SheetPage() {
   // Hoist dialog-open flags to the component top level so the hook calls
   // always execute in a stable order and are never inside JSX expressions.
   const insertFunctionOpen = useInsertFunctionStore((s) => s.open)
+  const textToColsOpen = useTextToColsStore((s) => s.open)
   const nameManagerOpen = useNamedRangesStore((s) => s.dialogOpen)
 
   // Broadcast cursor position to other users via Realtime.
@@ -1544,6 +1550,12 @@ export default function SheetPage() {
       <ErrorBoundary><CleanDataPanel /></ErrorBoundary>
       <ErrorBoundary><ChartBuilder /></ErrorBoundary>
       <ErrorBoundary><SymbolPicker /></ErrorBoundary>
+      <ErrorBoundary>
+        <TextToColumnsDialog
+          open={textToColsOpen}
+          onOpenChange={(open) => useTextToColsStore.getState().setOpen(open)}
+        />
+      </ErrorBoundary>
       <ErrorBoundary><FormBuilder workbookId={workbookId} /></ErrorBoundary>
       <ErrorBoundary><PivotBuilder /></ErrorBoundary>
       <ErrorBoundary><ForecastPanel /></ErrorBoundary>

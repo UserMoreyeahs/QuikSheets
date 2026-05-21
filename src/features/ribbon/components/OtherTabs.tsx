@@ -127,6 +127,7 @@ import { colIndexToLetter } from '@/lib/cellAddress'
 import { usePrintSettingsStore } from '@/features/page-layout/printSettingsStore'
 import { useChartPanelStore } from '@/features/charts/store/chartPanelStore'
 import { flashFill } from '../utils/flashFill'
+import { useTextToColsStore } from '@/features/data/store/textToColsStore'
 import type { ChartKind } from '@/features/charts/types'
 import { useSymbolPickerStore } from '@/features/symbols/store/symbolPickerStore'
 import { insertImageFromDevice } from '@/features/images/utils/insertImageFromDevice'
@@ -723,7 +724,7 @@ export function DataTab(props: DataTabProps) {
       {/* Data Tools */}
       <RibbonGroup label="Data Tools">
         <ColumnTypeRibbonButton />
-        <RibbonLargeButton label="Text to Cols"   icon={<SquareStack className="text-blue-500" />} onClick={ribbonStub('Text to Columns')} />
+        <RibbonLargeButton label="Text to Cols"   icon={<SquareStack className="text-blue-500" />} onClick={() => useTextToColsStore.getState().setOpen(true)} />
         <div className="flex flex-col gap-0.5">
           <RibbonButton label="Flash Fill"        icon={<WandSparkles className="h-3.5 w-3.5" />} shortcut="Ctrl+E" onClick={() => { void flashFill() }} />
           <RibbonButton label="Remove Duplicates" icon={<Minus className="h-3.5 w-3.5" />}        onClick={props.onDedupe} />
