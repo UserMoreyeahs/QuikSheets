@@ -39,6 +39,14 @@ export function useTypedColumnsEnforcement(workbookId: string): void {
   }, [workbookId, loadFromWorkbook])
 
   // Reapply display formatting when column types change.
+  //
+  // Walk every column on every sheet — NOT just the typed ones — because
+  // clearing a type also needs to revert the cell's display field back to
+  // the raw value. The previous version short-circuited when a sheet had
+  // no type map, which left the formatted display (e.g. ☑ for checkbox)
+  // baked into every cell long after the column type was removed. The
+  // user would see checkboxes forever with no way to recover except
+  // editing each cell by hand.
   useEffect(() => {
     const sheetState = useSheetStore.getState()
     const workbookState = useWorkbookStore.getState()
@@ -46,26 +54,45 @@ export function useTypedColumnsEnforcement(workbookId: string): void {
 
     if (gridSheets.length === 0) return
 
+    /** Display strings that the typed-columns formatter is known to emit.
+     *  When a cell's `m` matches one of these AND the column is no longer
+     *  typed, we know the formatter wrote it and it's safe to drop. */
+    const formatterOutputs = new Set(['☑', '☐'])
+
     let didChange = false
     const nextSheets: Sheet[] = gridSheets.map((sheet) => {
       const sheetId = typeof sheet.id === 'string' ? sheet.id : null
       if (!sheetId) return sheet
-      const colMap = byWorkbook[sheetId]
-      if (!colMap || Object.keys(colMap).length === 0) return sheet
+      const colMap = byWorkbook[sheetId] ?? {}
 
       const matrix = getSheetMatrix(sheet)
       let sheetChanged = false
       const nextMatrix = matrix.map((row, _r) =>
         (row ?? []).map((cell, c) => {
+          if (!cell) return cell
           const meta = colMap[String(c)]
-          if (!meta || !cell) return cell
           const raw = (cell as { v?: unknown }).v
           if (raw === null || raw === undefined || raw === '') return cell
-          const newDisplay = formatForDisplay(raw, meta)
           const current = (cell as { m?: string }).m
-          if (current === newDisplay) return cell
-          sheetChanged = true
-          return { ...(cell as Cell), m: newDisplay }
+
+          if (meta) {
+            // Apply current type's formatting.
+            const newDisplay = formatForDisplay(raw, meta)
+            if (current === newDisplay) return cell
+            sheetChanged = true
+            return { ...(cell as Cell), m: newDisplay }
+          }
+
+          // No meta for this column. If `m` looks like a formatter output
+          // we recognise (e.g. checkbox ☑/☐), drop it so FortuneSheet
+          // re-renders from `v + ct`.
+          if (current && formatterOutputs.has(current) && current !== String(raw)) {
+            sheetChanged = true
+            const next: Record<string, unknown> = { ...(cell as Cell) }
+            delete next.m
+            return next as Cell
+          }
+          return cell
         }),
       )
 

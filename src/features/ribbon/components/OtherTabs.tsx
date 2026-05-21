@@ -184,10 +184,19 @@ function insertCheckboxForActiveColumn(): void {
     toast.message('Select a cell in the target column first')
     return
   }
-  useColumnTypesStore.getState().setColumnType(activeSheetId, selectedCell.col, {
+  const col = selectedCell.col
+  useColumnTypesStore.getState().setColumnType(activeSheetId, col, {
     type: 'checkbox',
   })
-  toast.success(`Column ${colIndexToLetter(selectedCell.col)} set to Checkbox`)
+  toast.success(`Column ${colIndexToLetter(col)} set to Checkbox`, {
+    action: {
+      label: 'Undo',
+      onClick: () => {
+        useColumnTypesStore.getState().clearColumnType(activeSheetId, col)
+        toast.message(`Column ${colIndexToLetter(col)} reverted to plain text`)
+      },
+    },
+  })
 }
 
 export function InsertTab(props: InsertTabProps) {
