@@ -394,6 +394,23 @@ export default function SheetPage() {
         const { useColumnTypesStore } = require('@/features/typed-columns/store/columnTypesStore') as typeof import('@/features/typed-columns/store/columnTypesStore')
         useColumnTypesStore.getState().clearColumnType(sheetId, col)
       }
+    // Slicer helper — programmatically attach a slicer to a pivot.
+    ;(window as unknown as { __qsAddSlicer?: (pivotId: string, columnIndex: number, label: string, allValues: string[]) => string }).__qsAddSlicer =
+      (pivotId, columnIndex, label, allValues) => {
+        const { useSlicerStore } = require('@/features/slicers/store/slicerStore') as typeof import('@/features/slicers/store/slicerStore')
+        return useSlicerStore.getState().addSlicer({
+          label,
+          kind: 'list',
+          pivotId,
+          columnIndex,
+          allValues,
+          selected: [],
+          x: 200,
+          y: 600,
+          width: 200,
+          height: 240,
+        })
+      }
     // Named-ranges helper — define a name programmatically (skips the
     // window.prompt() in defineNameFromSelection so we can test the
     // store / Name Manager without UI driver flakiness).
