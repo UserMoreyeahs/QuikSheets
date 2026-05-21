@@ -677,7 +677,10 @@ export default function SheetPage() {
   const handleQuickSort = useCallback(
     (direction: SortDirection) => {
       if (selectedCell) {
-        applySort({ columnIndex: selectedCell.col, direction })
+        // Excel's Sort A→Z / Sort Z→A default to "my data has a header",
+        // i.e. row 0 is pinned in place. Set hasHeader: true explicitly so
+        // we don't sort the header into the middle of the data.
+        applySort({ columnIndex: selectedCell.col, direction, hasHeader: true })
         return
       }
 

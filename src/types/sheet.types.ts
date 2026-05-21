@@ -121,6 +121,12 @@ export type SortDirection = 'asc' | 'desc'
 export interface SortConfig {
   columnIndex: number
   direction: SortDirection
+  /**
+   * If true, row 0 is treated as a header and held in place; only rows
+   * 1+ are sorted. Quick Sort (Sort A→Z / Sort Z→A) defaults to true to
+   * match Excel's behaviour of preserving the header row.
+   */
+  hasHeader?: boolean
 }
 
 export type FilterOperator =
