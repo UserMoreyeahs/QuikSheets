@@ -415,6 +415,14 @@ export default function SheetPage() {
       const { usePivotUiStore } = require('@/features/pivot/store/pivotUiStore') as typeof import('@/features/pivot/store/pivotUiStore')
       return usePivotUiStore.getState().pivots.map((p) => ({ id: p.id, name: p.name }))
     }
+    // Smart-paste helper — runs the parser on a string and returns the
+    // detected shape, so we can verify the parsing layer without
+    // needing a real ClipboardEvent (browsers refuse to populate
+    // synthetic ClipboardEvent.clipboardData for security reasons).
+    ;(window as unknown as { __qsParseClipboard?: (text: string) => unknown }).__qsParseClipboard = (text) => {
+      const { parseClipboardText } = require('@/features/smart-paste/utils/clipboardParser') as typeof import('@/features/smart-paste/utils/clipboardParser')
+      return parseClipboardText(text)
+    }
     // Slicer helper — programmatically attach a slicer to a pivot.
     ;(window as unknown as { __qsAddSlicer?: (pivotId: string, columnIndex: number, label: string, allValues: string[]) => string }).__qsAddSlicer =
       (pivotId, columnIndex, label, allValues) => {
