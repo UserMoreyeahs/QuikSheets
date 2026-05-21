@@ -130,6 +130,7 @@ import { flashFill } from '../utils/flashFill'
 import { useTextToColsStore } from '@/features/data/store/textToColsStore'
 import { useSlicerBuilderStore } from '@/features/slicers/store/slicerBuilderStore'
 import { useSparklineBuilderStore } from '@/features/sparklines/store/sparklineStore'
+import { useRecommendedPivotsStore } from '@/features/pivot/store/recommendedPivotsStore'
 import type { ChartKind } from '@/features/charts/types'
 import { useSymbolPickerStore } from '@/features/symbols/store/symbolPickerStore'
 import { insertImageFromDevice } from '@/features/images/utils/insertImageFromDevice'
@@ -208,7 +209,7 @@ export function InsertTab(props: InsertTabProps) {
       {/* Tables */}
       <RibbonGroup label="Tables">
         <RibbonLargeButton label="PivotTable"            icon={<TableIcon className="text-violet-500" />} onClick={props.onInsertPivot} showCaret />
-        <RibbonLargeButton label="Recommended Pivots"    icon={<LayoutDashboard className="text-violet-500" />} onClick={ribbonStub('Recommended PivotTables')} />
+        <RibbonLargeButton label="Recommended Pivots"    icon={<LayoutDashboard className="text-violet-500" />} onClick={() => useRecommendedPivotsStore.getState().openPicker()} />
         <RibbonLargeButton label="Table"                  icon={<TableIcon className="text-blue-500" />} onClick={() => applyTablePalette()} />
         <RibbonLargeButton label="Forms"                  icon={<FormInput className="text-emerald-500" />} onClick={props.onInsertForm} showCaret />
       </RibbonGroup>

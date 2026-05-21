@@ -130,6 +130,10 @@ const SparklinesLayer = dynamic(
   () => import('@/features/sparklines/components/SparklinesLayer').then((m) => ({ default: m.SparklinesLayer })),
   { ssr: false },
 )
+const RecommendedPivotsDialog = dynamic(
+  () => import('@/features/pivot/components/RecommendedPivotsDialog').then((m) => ({ default: m.RecommendedPivotsDialog })),
+  { ssr: false },
+)
 import { useTextToColsStore } from '@/features/data/store/textToColsStore'
 const FormBuilder = dynamic(
   () => import('@/features/forms/components/FormBuilder').then((m) => ({ default: m.FormBuilder })),
@@ -1626,6 +1630,7 @@ export default function SheetPage() {
       </ErrorBoundary>
       <ErrorBoundary><SlicerBuilderDialog /></ErrorBoundary>
       <ErrorBoundary><SparklineBuilderDialog /></ErrorBoundary>
+      <ErrorBoundary><RecommendedPivotsDialog /></ErrorBoundary>
       <ErrorBoundary><FormBuilder workbookId={workbookId} /></ErrorBoundary>
       <ErrorBoundary><PivotBuilder /></ErrorBoundary>
       <ErrorBoundary><ForecastPanel /></ErrorBoundary>
