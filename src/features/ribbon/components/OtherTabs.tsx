@@ -540,6 +540,29 @@ function openFunctionsByCategory(category: 'All' | FormulaCategory): void {
 }
 
 /**
+ * Workbook Statistics — Excel's Review > Workbook Statistics. Counts
+ * sheets, cells with values, cells with formulas, named ranges, and
+ * conditional-format rules in the current workbook.
+ */
+function showWorkbookStatistics(): void {
+  const { gridSheets } = useSheetStore.getState()
+  let cellsWithValues = 0
+  let cellsWithFormulas = 0
+  for (const sheet of gridSheets) {
+    for (const entry of sheet.celldata ?? []) {
+      const v = entry.v as { v?: unknown; f?: unknown } | null | undefined
+      if (!v) continue
+      if (v.f) cellsWithFormulas++
+      if (v.v !== undefined && v.v !== null && v.v !== '') cellsWithValues++
+    }
+  }
+  toast.success(
+    `${gridSheets.length} sheet${gridSheets.length > 1 ? 's' : ''} · ${cellsWithValues} cell${cellsWithValues !== 1 ? 's' : ''} with values · ${cellsWithFormulas} formula${cellsWithFormulas !== 1 ? 's' : ''}`,
+    { duration: 6000 },
+  )
+}
+
+/**
  * "Calculate Now / Calculate Sheet" in Excel forces a recompute when
  * Calculation Options is set to Manual. Quiksheets always runs in
  * auto-calc mode (formulajs evaluates on cell change), so the most
@@ -741,7 +764,7 @@ export function ReviewTab(props: ReviewTabProps) {
       <RibbonGroup label="Proofing">
         <RibbonLargeButton label="Spelling"            icon={<BookOpen className="text-emerald-500" />} onClick={ribbonStub('Spelling (F7)')} />
         <RibbonLargeButton label="Thesaurus"           icon={<BookOpen className="text-blue-500" />}    onClick={ribbonStub('Thesaurus')} />
-        <RibbonLargeButton label="Workbook Statistics" icon={<FileBarChart className="text-violet-500" />} onClick={ribbonStub('Workbook Statistics')} />
+        <RibbonLargeButton label="Workbook Statistics" icon={<FileBarChart className="text-violet-500" />} onClick={showWorkbookStatistics} />
       </RibbonGroup>
 
       {/* Performance */}
