@@ -1149,8 +1149,31 @@ export default function SheetPage() {
       .filter((cell) => keepRows.has(cell.r))
       .map((cell) => ({ ...cell, r: rowMap.get(cell.r) ?? cell.r }))
 
+    // FortuneSheet renders from the 2-D `data` matrix, not from `celldata`.
+    // If we only rebuild `celldata`, the duplicate rows stay visible on
+    // screen even though the toast claims success — same shape as the
+    // chart-rendering bug from earlier in this session. Rebuild `data`
+    // by compacting rows from the same matrix the dedupe scan ran on.
+    const existingData = activeSheet.data
+    let newData: typeof existingData | undefined
+    if (Array.isArray(existingData) && existingData.length > 0) {
+      const cols = existingData[0]?.length ?? 26
+      const newRows = sortedKeepRows.map(
+        (oldR) => existingData[oldR] ?? (Array(cols).fill(null) as typeof existingData[number]),
+      )
+      // Pad back up to the original height with empty rows so the
+      // grid's overall row count doesn't shrink (and trailing rows
+      // don't suddenly show as missing).
+      while (newRows.length < existingData.length) {
+        newRows.push(Array(cols).fill(null) as typeof existingData[number])
+      }
+      newData = newRows
+    }
+
     const updatedSheets = gridSheets.map((s) =>
-      s.id === activeSheet.id ? { ...s, celldata: newCelldata } : s
+      s.id === activeSheet.id
+        ? { ...s, celldata: newCelldata, ...(newData ? { data: newData } : {}) }
+        : s,
     )
     replaceGridSheets(updatedSheets)
     toast.success(`Removed ${duplicateCount} duplicate row${duplicateCount === 1 ? '' : 's'}`)
