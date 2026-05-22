@@ -138,6 +138,7 @@ import { insertImageFromUrl } from '@/features/images/utils/insertImageFromUrl'
 import { useStockImagePickerStore } from '@/features/images/store/stockImagePickerStore'
 import { insertScreenshot } from '@/features/images/utils/insertScreenshot'
 import { useHeaderFooterDialogStore } from '@/features/page-layout/store/headerFooterDialogStore'
+import { useThemeStore } from '@/features/themes/store/themeStore'
 import { useShapePickerStore, useIconPickerStore } from '@/features/overlays/store/overlayStore'
 import { insertTextBox } from '@/features/overlays/utils/insertTextBox'
 import { toast } from 'sonner'
@@ -360,10 +361,10 @@ export function PageLayoutTab(props: PageLayoutTabProps) {
     <div className="flex h-full items-stretch overflow-x-auto scrollbar-hide">
       {/* Themes */}
       <RibbonGroup label="Themes">
-        <RibbonLargeButton label="Themes"  icon={<Palette className="text-violet-500" />}     onClick={ribbonStub('Themes')} showCaret />
+        <RibbonLargeButton label="Themes"  icon={<Palette className="text-violet-500" />}     onClick={() => useThemeStore.getState().openPicker()} />
         <div className="flex flex-col gap-0.5">
-          <RibbonButton label="Colors" icon={<PaintBucket className="h-3.5 w-3.5 text-amber-500" />} onClick={ribbonStub('Colors')} />
-          <RibbonButton label="Fonts"  icon={<Type className="h-3.5 w-3.5" />}                       onClick={ribbonStub('Fonts')} />
+          <RibbonButton label="Colors" icon={<PaintBucket className="h-3.5 w-3.5 text-amber-500" />} onClick={() => useThemeStore.getState().openPicker()} />
+          <RibbonButton label="Fonts"  icon={<Type className="h-3.5 w-3.5" />}                       onClick={() => useThemeStore.getState().openPicker()} />
           <RibbonButton label="Effects" icon={<WandSparkles className="h-3.5 w-3.5" />}              onClick={ribbonStub('Effects')} />
         </div>
       </RibbonGroup>

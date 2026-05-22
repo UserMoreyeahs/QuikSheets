@@ -1604,7 +1604,31 @@ interface TablePalette {
   alt: string
 }
 
-export function applyTablePalette(palette: TablePalette = DEFAULT_TABLE_PALETTE): void {
+/**
+ * Build a table palette from the currently-active workbook theme so
+ * Format-as-Table picks up the user's Themes / Colors / Fonts choice.
+ * Lazy-loaded via dynamic import to avoid a circular module dep with
+ * the themes feature.
+ */
+function paletteFromActiveTheme(): TablePalette {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('@/features/themes/store/themeStore') as {
+      getActiveTheme(): { colors: { primary: string; accent: string; surface: string } }
+    }
+    const theme = mod.getActiveTheme()
+    return {
+      header: theme.colors.primary,
+      bg:     theme.colors.accent,
+      alt:    theme.colors.surface,
+    }
+  } catch {
+    return DEFAULT_TABLE_PALETTE
+  }
+}
+
+export function applyTablePalette(palette?: TablePalette): void {
+  const resolvedPalette: TablePalette = palette ?? paletteFromActiveTheme()
   const inst = getInstance()
   const { selectedCell, selectedRange, applyFormatToSelection } = useSheetStore.getState()
   if (!inst || !selectedCell) {
@@ -1627,18 +1651,18 @@ export function applyTablePalette(palette: TablePalette = DEFAULT_TABLE_PALETTE)
       setCellFormatByRange: (attr: string, value: unknown, range: unknown) => void
     }
     // Header row
-    gi.setCellFormatByRange('bg', palette.header, [{ row: [sr, sr], column: [sc, ec] }])
-    gi.setCellFormatByRange('fc', '#FFFFFF',       [{ row: [sr, sr], column: [sc, ec] }])
-    gi.setCellFormatByRange('bl', 1,                [{ row: [sr, sr], column: [sc, ec] }])
+    gi.setCellFormatByRange('bg', resolvedPalette.header, [{ row: [sr, sr], column: [sc, ec] }])
+    gi.setCellFormatByRange('fc', '#FFFFFF',              [{ row: [sr, sr], column: [sc, ec] }])
+    gi.setCellFormatByRange('bl', 1,                       [{ row: [sr, sr], column: [sc, ec] }])
     // Body rows: alternate
     for (let row = sr + 1; row <= er; row += 1) {
-      const bg = (row - sr) % 2 === 1 ? palette.bg : palette.alt
+      const bg = (row - sr) % 2 === 1 ? resolvedPalette.bg : resolvedPalette.alt
       gi.setCellFormatByRange('bg', bg, [{ row: [row, row], column: [sc, ec] }])
     }
     toast.success(`Table style applied to ${colIndexToLetter(sc)}${sr + 1}:${colIndexToLetter(ec)}${er + 1}`)
   } catch (e) {
     // Fallback for grids without the format API
-    applyFormatToSelection({ backgroundColor: palette.bg })
+    applyFormatToSelection({ backgroundColor: resolvedPalette.bg })
     toast.error(`Partial table format: ${String(e)}`)
   }
 }
