@@ -12,17 +12,24 @@
  * shared registration in @/features/charts/components/ChartRenderer.
  */
 
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import * as echarts from 'echarts/core'
 import { LineChart, BarChart, CustomChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent } from 'echarts/components'
 import { SVGRenderer } from 'echarts/renderers'
+import { X } from 'lucide-react'
 import { useSparklineStore, type InsertedSparkline, type SparklineKind } from '../store/sparklineStore'
 import { useSheetStore } from '@/store/sheetStore'
 import { useGridScroll, cellToPixelPosition } from '@/features/grid/hooks/useGridScroll'
-import { DEFAULT_CELL_HEIGHT, DEFAULT_CELL_WIDTH } from '@/lib/constants'
 import { getCellDisplayValue, getSheetMatrix } from '@/lib/fortuneSheet'
 import { parseA1Range } from '@/features/charts/utils/rangeUtils'
+
+// Match the cell dimensions that cellToPixelPosition uses internally —
+// FortuneSheet renders cells at 73x20 even though DEFAULT_CELL_WIDTH/HEIGHT
+// in our constants are 100x24. Using the position-math constants keeps
+// the sparkline glued to the actual visual cell rect.
+const SPARK_CELL_W = 73
+const SPARK_CELL_H = 20
 
 echarts.use([LineChart, BarChart, CustomChart, GridComponent, TooltipComponent, SVGRenderer])
 
@@ -34,6 +41,7 @@ export function SparklinesLayer() {
 
 function SparklinesLayerInner() {
   const sparklines = useSparklineStore((s) => s.sparklines)
+  const remove = useSparklineStore((s) => s.remove)
   const gridSheets = useSheetStore((s) => s.gridSheets)
   const scrollOffset = useGridScroll()
 
@@ -50,6 +58,7 @@ function SparklinesLayerInner() {
             x={pos.x}
             y={pos.y}
             values={readSourceValues(sheet, sp.sourceRange)}
+            onRemove={() => remove(sp.id)}
           />
         )
       })}
@@ -78,43 +87,94 @@ interface SparklineCellProps {
   x: number
   y: number
   values: number[]
+  onRemove: () => void
 }
 
-function SparklineCell({ sparkline, x, y, values }: SparklineCellProps) {
-  const ref = useRef<HTMLDivElement | null>(null)
+function SparklineCell({ sparkline, x, y, values, onRemove }: SparklineCellProps) {
+  const chartRef = useRef<HTMLDivElement | null>(null)
   const instanceRef = useRef<echarts.ECharts | null>(null)
+  const [hovered, setHovered] = useState(false)
 
-  // Init the mini chart on first render. We size to fit the cell minus a
-  // 2-px breathing margin so the spark doesn't visually crowd the borders.
+  // Init the mini chart on first render. SPARK_CELL_W/H match the cell
+  // dimensions that cellToPixelPosition uses internally (73x20) so the
+  // sparkline stays inside the actual visual cell rect.
   useEffect(() => {
-    if (!ref.current) return
-    instanceRef.current = echarts.init(ref.current, undefined, { renderer: 'svg' })
+    if (!chartRef.current) return
+    instanceRef.current = echarts.init(chartRef.current, undefined, { renderer: 'svg' })
     return () => {
       instanceRef.current?.dispose()
       instanceRef.current = null
     }
   }, [])
 
-  const option = useMemo(() => buildOption(sparkline.kind, values, sparkline.color), [sparkline.kind, sparkline.color, values])
+  const option = useMemo(
+    () => buildOption(sparkline.kind, values, sparkline.color),
+    [sparkline.kind, sparkline.color, values],
+  )
 
   useEffect(() => {
     instanceRef.current?.setOption(option, { notMerge: true })
   }, [option])
 
+  // Wrapper has pointerEvents:auto so we can detect hover for the × button.
+  // The chart itself sets pointerEvents:none so cell-selection still works
+  // when the user clicks inside the sparkline area. Only the × button
+  // captures clicks.
   return (
     <div
-      ref={ref}
       data-sparkline-id={sparkline.id}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
         position: 'absolute',
-        left: x + 2,
-        top: y + 2,
-        width: DEFAULT_CELL_WIDTH - 4,
-        height: DEFAULT_CELL_HEIGHT - 4,
-        pointerEvents: 'none',
-        zIndex: 10,
+        left: x + 1,
+        top: y + 1,
+        width: SPARK_CELL_W - 2,
+        height: SPARK_CELL_H - 2,
+        zIndex: 15,
+        pointerEvents: 'auto',
       }}
-    />
+      title={`${sparkline.kind} sparkline from ${sparkline.sourceRange} — hover to remove`}
+    >
+      <div
+        ref={chartRef}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          pointerEvents: 'none',
+        }}
+      />
+      {hovered && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onRemove()
+          }}
+          aria-label="Remove sparkline"
+          title="Remove sparkline"
+          style={{
+            position: 'absolute',
+            top: -2,
+            right: -2,
+            width: 14,
+            height: 14,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: '50%',
+            background: '#ef4444',
+            color: 'white',
+            border: '1px solid white',
+            cursor: 'pointer',
+            padding: 0,
+            zIndex: 16,
+          }}
+        >
+          <X size={9} />
+        </button>
+      )}
+    </div>
   )
 }
 
