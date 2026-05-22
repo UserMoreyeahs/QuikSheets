@@ -173,6 +173,10 @@ const WatchWindow = dynamic(
   () => import('@/features/watch-window/components/WatchWindow').then((m) => ({ default: m.WatchWindow })),
   { ssr: false },
 )
+const FromWebDialog = dynamic(
+  () => import('@/features/data/components/FromWebDialog').then((m) => ({ default: m.FromWebDialog })),
+  { ssr: false },
+)
 import { useTextToColsStore } from '@/features/data/store/textToColsStore'
 const FormBuilder = dynamic(
   () => import('@/features/forms/components/FormBuilder').then((m) => ({ default: m.FormBuilder })),
@@ -1645,6 +1649,7 @@ export default function SheetPage() {
       <ErrorBoundary><StockImagePicker /></ErrorBoundary>
       <ErrorBoundary><ThemePicker /></ErrorBoundary>
       <ErrorBoundary><PrintTitlesDialog /></ErrorBoundary>
+      <ErrorBoundary><FromWebDialog /></ErrorBoundary>
       <ErrorBoundary><FormBuilder workbookId={workbookId} /></ErrorBoundary>
       <ErrorBoundary><PivotBuilder /></ErrorBoundary>
       <ErrorBoundary><ForecastPanel /></ErrorBoundary>

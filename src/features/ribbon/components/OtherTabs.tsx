@@ -128,6 +128,7 @@ import { usePrintSettingsStore } from '@/features/page-layout/printSettingsStore
 import { useChartPanelStore } from '@/features/charts/store/chartPanelStore'
 import { flashFill } from '../utils/flashFill'
 import { useTextToColsStore } from '@/features/data/store/textToColsStore'
+import { useFromWebDialogStore } from '@/features/data/store/fromWebDialogStore'
 import { useSlicerBuilderStore } from '@/features/slicers/store/slicerBuilderStore'
 import { useSparklineBuilderStore } from '@/features/sparklines/store/sparklineStore'
 import { useRecommendedPivotsStore } from '@/features/pivot/store/recommendedPivotsStore'
@@ -694,7 +695,7 @@ export function DataTab(props: DataTabProps) {
         <RibbonLargeButton label="Get Data" icon={<Database className="text-emerald-500" />} onClick={props.onImport} showCaret />
         <div className="flex flex-col gap-0.5">
           <RibbonButton label="From Text/CSV"  icon={<FileText className="h-3.5 w-3.5" />}      onClick={props.onImport} />
-          <RibbonButton label="From Web"        icon={<Globe className="h-3.5 w-3.5" />}         onClick={ribbonStub('From Web')} />
+          <RibbonButton label="From Web"        icon={<Globe className="h-3.5 w-3.5" />}         onClick={() => useFromWebDialogStore.getState().openDialog()} />
           <RibbonButton label="From Picture"   icon={<ImageIcon className="h-3.5 w-3.5" />}     onClick={ribbonStub('From Picture')} />
         </div>
         <div className="flex flex-col gap-0.5">
