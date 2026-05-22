@@ -134,6 +134,7 @@ import { useRecommendedPivotsStore } from '@/features/pivot/store/recommendedPiv
 import type { ChartKind } from '@/features/charts/types'
 import { useSymbolPickerStore } from '@/features/symbols/store/symbolPickerStore'
 import { insertImageFromDevice } from '@/features/images/utils/insertImageFromDevice'
+import { insertScreenshot } from '@/features/images/utils/insertScreenshot'
 import { useShapePickerStore, useIconPickerStore } from '@/features/overlays/store/overlayStore'
 import { insertTextBox } from '@/features/overlays/utils/insertTextBox'
 import { toast } from 'sonner'
@@ -235,7 +236,7 @@ export function InsertTab(props: InsertTabProps) {
         <RibbonLargeButton label="Icons"       icon={<Sparkles className="text-blue-500" />} onClick={() => useIconPickerStore.getState().openPicker()} />
         <RibbonLargeButton label="3D Models"   icon={<Box className="text-violet-500" />}    onClick={ribbonStub('3D Models')} />
         <RibbonLargeButton label="SmartArt"    icon={<Workflow className="text-rose-500" />} onClick={ribbonStub('SmartArt')} />
-        <RibbonLargeButton label="Screenshot"  icon={<Camera className="text-emerald-500" />} onClick={ribbonStub('Screenshot')} showCaret />
+        <RibbonLargeButton label="Screenshot"  icon={<Camera className="text-emerald-500" />} onClick={() => { void insertScreenshot() }} />
       </RibbonGroup>
 
       {/* Controls */}
