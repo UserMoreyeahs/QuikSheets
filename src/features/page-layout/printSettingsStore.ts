@@ -26,6 +26,36 @@ export interface PrintArea {
   range: string
 }
 
+/**
+ * Excel-style header/footer sections.
+ *
+ * Each of the 6 fields supports literal text plus tokens that the PDF
+ * exporter substitutes per-page:
+ *   &[Page]    current page number
+ *   &[Pages]   total page count
+ *   &[Date]    today's date (locale-formatted)
+ *   &[Time]    current time (locale-formatted)
+ *   &[Sheet]   active sheet name
+ *   &[File]    workbook name
+ */
+export interface HeaderFooterSections {
+  headerLeft: string
+  headerCenter: string
+  headerRight: string
+  footerLeft: string
+  footerCenter: string
+  footerRight: string
+}
+
+export const EMPTY_HEADER_FOOTER: HeaderFooterSections = {
+  headerLeft: '',
+  headerCenter: '',
+  headerRight: '',
+  footerLeft: '',
+  footerCenter: '',
+  footerRight: '',
+}
+
 interface PrintSettingsState {
   orientation: Orientation
   marginPreset: MarginPreset
@@ -38,6 +68,8 @@ interface PrintSettingsState {
   printGridlines: boolean
   /** Whether to print row numbers + column letters on the printed page. */
   printHeadings: boolean
+  /** Page header / footer text, with token substitution at export time. */
+  headerFooter: HeaderFooterSections
 }
 
 interface PrintSettingsActions {
@@ -49,6 +81,8 @@ interface PrintSettingsActions {
   setScalePct: (pct: number) => void
   setPrintGridlines: (v: boolean) => void
   setPrintHeadings: (v: boolean) => void
+  setHeaderFooter: (patch: Partial<HeaderFooterSections>) => void
+  clearHeaderFooter: () => void
   reset: () => void
 }
 
@@ -61,6 +95,7 @@ const initialState: PrintSettingsState = {
   scalePct: 100,
   printGridlines: false,
   printHeadings: false,
+  headerFooter: EMPTY_HEADER_FOOTER,
 }
 
 export const usePrintSettingsStore = create<PrintSettingsState & PrintSettingsActions>()(
@@ -96,6 +131,16 @@ export const usePrintSettingsStore = create<PrintSettingsState & PrintSettingsAc
 
       setPrintHeadings: (printHeadings) =>
         set({ printHeadings }, false, 'print/setPrintHeadings'),
+
+      setHeaderFooter: (patch) =>
+        set(
+          (state) => ({ headerFooter: { ...state.headerFooter, ...patch } }),
+          false,
+          'print/setHeaderFooter',
+        ),
+
+      clearHeaderFooter: () =>
+        set({ headerFooter: EMPTY_HEADER_FOOTER }, false, 'print/clearHeaderFooter'),
 
       reset: () => set(initialState, false, 'print/reset'),
     }),

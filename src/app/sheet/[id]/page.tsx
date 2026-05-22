@@ -149,6 +149,10 @@ const IconPicker = dynamic(
   () => import('@/features/overlays/components/IconPicker').then((m) => ({ default: m.IconPicker })),
   { ssr: false },
 )
+const HeaderFooterDialog = dynamic(
+  () => import('@/features/page-layout/components/HeaderFooterDialog').then((m) => ({ default: m.HeaderFooterDialog })),
+  { ssr: false },
+)
 import { useTextToColsStore } from '@/features/data/store/textToColsStore'
 const FormBuilder = dynamic(
   () => import('@/features/forms/components/FormBuilder').then((m) => ({ default: m.FormBuilder })),
@@ -1615,6 +1619,7 @@ export default function SheetPage() {
       <ErrorBoundary><RecommendedPivotsDialog /></ErrorBoundary>
       <ErrorBoundary><ShapePicker /></ErrorBoundary>
       <ErrorBoundary><IconPicker /></ErrorBoundary>
+      <ErrorBoundary><HeaderFooterDialog /></ErrorBoundary>
       <ErrorBoundary><FormBuilder workbookId={workbookId} /></ErrorBoundary>
       <ErrorBoundary><PivotBuilder /></ErrorBoundary>
       <ErrorBoundary><ForecastPanel /></ErrorBoundary>

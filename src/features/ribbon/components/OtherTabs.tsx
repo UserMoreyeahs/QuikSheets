@@ -135,6 +135,7 @@ import type { ChartKind } from '@/features/charts/types'
 import { useSymbolPickerStore } from '@/features/symbols/store/symbolPickerStore'
 import { insertImageFromDevice } from '@/features/images/utils/insertImageFromDevice'
 import { insertScreenshot } from '@/features/images/utils/insertScreenshot'
+import { useHeaderFooterDialogStore } from '@/features/page-layout/store/headerFooterDialogStore'
 import { useShapePickerStore, useIconPickerStore } from '@/features/overlays/store/overlayStore'
 import { insertTextBox } from '@/features/overlays/utils/insertTextBox'
 import { toast } from 'sonner'
@@ -312,7 +313,7 @@ export function InsertTab(props: InsertTabProps) {
       {/* Text */}
       <RibbonGroup label="Text">
         <RibbonLargeButton label="Text Box"      icon={<TextCursorInput className="text-zinc-500" />}  onClick={insertTextBox} />
-        <RibbonLargeButton label="Header & Footer" icon={<FileText className="text-zinc-500" />}      onClick={ribbonStub('Header & Footer')} />
+        <RibbonLargeButton label="Header & Footer" icon={<FileText className="text-zinc-500" />}      onClick={() => useHeaderFooterDialogStore.getState().openDialog()} />
       </RibbonGroup>
 
       {/* Symbols */}
@@ -434,6 +435,7 @@ export function PageLayoutTab(props: PageLayoutTabProps) {
         <RibbonLargeButton label="Breaks"      icon={<GitBranch className="text-rose-500" />}    onClick={ribbonStub('Breaks')} showCaret />
         <RibbonLargeButton label="Background"  icon={<ImageIcon className="text-blue-500" />}    onClick={ribbonStub('Background')} />
         <RibbonLargeButton label="Print Titles" icon={<Bookmark className="text-violet-500" />} onClick={ribbonStub('Print Titles')} />
+        <RibbonLargeButton label="Header & Footer" icon={<FileText className="text-zinc-500" />} onClick={() => useHeaderFooterDialogStore.getState().openDialog()} />
       </RibbonGroup>
 
       {/* Scale to Fit — R9.4: Scale% input is now functional and writes
