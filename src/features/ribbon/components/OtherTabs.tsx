@@ -139,6 +139,7 @@ import { useStockImagePickerStore } from '@/features/images/store/stockImagePick
 import { insertScreenshot } from '@/features/images/utils/insertScreenshot'
 import { useHeaderFooterDialogStore } from '@/features/page-layout/store/headerFooterDialogStore'
 import { usePrintTitlesDialogStore } from '@/features/page-layout/store/printTitlesDialogStore'
+import { useSelectionPaneStore } from '@/features/page-layout/store/selectionPaneStore'
 import { useThemeStore } from '@/features/themes/store/themeStore'
 import { useShapePickerStore, useIconPickerStore } from '@/features/overlays/store/overlayStore'
 import { insertTextBox } from '@/features/overlays/utils/insertTextBox'
@@ -533,9 +534,9 @@ export function PageLayoutTab(props: PageLayoutTabProps) {
       {/* Arrange */}
       <RibbonGroup label="Arrange" className="border-r-0">
         <div className="flex flex-col gap-0.5">
-          <RibbonButton label="Bring Forward"   icon={<ArrowUpToLine className="h-3.5 w-3.5" />}   onClick={ribbonStub('Bring Forward')} />
-          <RibbonButton label="Send Backward"   icon={<ArrowDownToLine className="h-3.5 w-3.5" />} onClick={ribbonStub('Send Backward')} />
-          <RibbonButton label="Selection Pane"  icon={<LayoutList className="h-3.5 w-3.5" />}      onClick={ribbonStub('Selection Pane')} />
+          <RibbonButton label="Bring Forward"   icon={<ArrowUpToLine className="h-3.5 w-3.5" />}   onClick={() => useSelectionPaneStore.getState().openPane()} />
+          <RibbonButton label="Send Backward"   icon={<ArrowDownToLine className="h-3.5 w-3.5" />} onClick={() => useSelectionPaneStore.getState().openPane()} />
+          <RibbonButton label="Selection Pane"  icon={<LayoutList className="h-3.5 w-3.5" />}      onClick={() => useSelectionPaneStore.getState().togglePane()} />
         </div>
         <div className="flex flex-col gap-0.5">
           <RibbonButton label="Align"  icon={<AlignVerticalSpaceAround className="h-3.5 w-3.5" />} onClick={ribbonStub('Align')} />

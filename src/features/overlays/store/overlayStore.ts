@@ -74,6 +74,10 @@ interface OverlayStoreState {
   resizeOverlay: (id: string, w: number, h: number) => void
   /** Mutate type-specific fields (text content, color, etc). */
   updateOverlay: (id: string, patch: Partial<InsertedOverlay>) => void
+  /** Reorder: move the overlay one slot later in the array (render on top). */
+  bringForward: (id: string) => void
+  /** Reorder: move the overlay one slot earlier in the array (render behind). */
+  sendBackward: (id: string) => void
 }
 
 let nextOffset = 0
@@ -141,6 +145,26 @@ export const useOverlayStore = create<OverlayStoreState>((set) => ({
         return { ...o, ...patch } as InsertedOverlay
       }),
     })),
+  bringForward: (id) =>
+    set((state) => {
+      const idx = state.overlays.findIndex((o) => o.id === id)
+      if (idx < 0 || idx >= state.overlays.length - 1) return state
+      const next = state.overlays.slice()
+      const tmp = next[idx]!
+      next[idx] = next[idx + 1]!
+      next[idx + 1] = tmp
+      return { overlays: next }
+    }),
+  sendBackward: (id) =>
+    set((state) => {
+      const idx = state.overlays.findIndex((o) => o.id === id)
+      if (idx <= 0) return state
+      const next = state.overlays.slice()
+      const tmp = next[idx]!
+      next[idx] = next[idx - 1]!
+      next[idx - 1] = tmp
+      return { overlays: next }
+    }),
 }))
 
 // ─── Pickers ────────────────────────────────────────────────────────────

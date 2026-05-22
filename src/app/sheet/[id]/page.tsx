@@ -165,6 +165,10 @@ const PrintTitlesDialog = dynamic(
   () => import('@/features/page-layout/components/PrintTitlesDialog').then((m) => ({ default: m.PrintTitlesDialog })),
   { ssr: false },
 )
+const SelectionPane = dynamic(
+  () => import('@/features/page-layout/components/SelectionPane').then((m) => ({ default: m.SelectionPane })),
+  { ssr: false },
+)
 import { useTextToColsStore } from '@/features/data/store/textToColsStore'
 const FormBuilder = dynamic(
   () => import('@/features/forms/components/FormBuilder').then((m) => ({ default: m.FormBuilder })),
@@ -1534,6 +1538,7 @@ export default function SheetPage() {
         <ErrorBoundary silent><ImagesLayer /></ErrorBoundary>
         <ErrorBoundary silent><SparklinesLayer /></ErrorBoundary>
         <ErrorBoundary silent><OverlaysLayer /></ErrorBoundary>
+        <ErrorBoundary silent><SelectionPane /></ErrorBoundary>
         <ErrorBoundary silent><PivotsLayer /></ErrorBoundary>
         <ErrorBoundary silent><SlicersLayer /></ErrorBoundary>
         <ErrorBoundary silent><FillHandle /></ErrorBoundary>
