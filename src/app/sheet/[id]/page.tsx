@@ -169,6 +169,10 @@ const SelectionPane = dynamic(
   () => import('@/features/page-layout/components/SelectionPane').then((m) => ({ default: m.SelectionPane })),
   { ssr: false },
 )
+const WatchWindow = dynamic(
+  () => import('@/features/watch-window/components/WatchWindow').then((m) => ({ default: m.WatchWindow })),
+  { ssr: false },
+)
 import { useTextToColsStore } from '@/features/data/store/textToColsStore'
 const FormBuilder = dynamic(
   () => import('@/features/forms/components/FormBuilder').then((m) => ({ default: m.FormBuilder })),
@@ -1539,6 +1543,7 @@ export default function SheetPage() {
         <ErrorBoundary silent><SparklinesLayer /></ErrorBoundary>
         <ErrorBoundary silent><OverlaysLayer /></ErrorBoundary>
         <ErrorBoundary silent><SelectionPane /></ErrorBoundary>
+        <ErrorBoundary silent><WatchWindow /></ErrorBoundary>
         <ErrorBoundary silent><PivotsLayer /></ErrorBoundary>
         <ErrorBoundary silent><SlicersLayer /></ErrorBoundary>
         <ErrorBoundary silent><FillHandle /></ErrorBoundary>

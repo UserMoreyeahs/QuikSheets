@@ -140,6 +140,7 @@ import { insertScreenshot } from '@/features/images/utils/insertScreenshot'
 import { useHeaderFooterDialogStore } from '@/features/page-layout/store/headerFooterDialogStore'
 import { usePrintTitlesDialogStore } from '@/features/page-layout/store/printTitlesDialogStore'
 import { useSelectionPaneStore } from '@/features/page-layout/store/selectionPaneStore'
+import { useWatchWindowStore } from '@/features/watch-window/store/watchWindowStore'
 import { useThemeStore } from '@/features/themes/store/themeStore'
 import { useShapePickerStore, useIconPickerStore } from '@/features/overlays/store/overlayStore'
 import { insertTextBox } from '@/features/overlays/utils/insertTextBox'
@@ -628,7 +629,7 @@ export function FormulasTab(props: FormulasTabProps) {
         <div className="flex flex-col gap-0.5">
           <RibbonButton label="Trace Precedents" icon={<ArrowUpToLine className="h-3.5 w-3.5" />}   onClick={openDependencyMap} />
           <RibbonButton label="Trace Dependents" icon={<ArrowDownToLine className="h-3.5 w-3.5" />} onClick={openDependencyMap} />
-          <RibbonButton label="Remove Arrows"     icon={<Minus className="h-3.5 w-3.5" />}            onClick={ribbonStub('Remove Arrows')} />
+          <RibbonButton label="Remove Arrows"     icon={<Minus className="h-3.5 w-3.5" />}            onClick={() => toast.message('Quiksheets shows dependencies in the Map View. Open it with Trace Precedents/Dependents and close it via the X in the map header.')} />
         </div>
         <div className="flex flex-col gap-0.5">
           <RibbonButton label="Show Formulas"   icon={<Eye className="h-3.5 w-3.5" />}            onClick={toggleShowFormulas} />
@@ -640,7 +641,7 @@ export function FormulasTab(props: FormulasTabProps) {
 
       {/* Watch Window */}
       <RibbonGroup label="Watch Window">
-        <RibbonLargeButton label="Watch Window" icon={<Eye className="text-blue-500" />} onClick={ribbonStub('Watch Window')} />
+        <RibbonLargeButton label="Watch Window" icon={<Eye className="text-blue-500" />} onClick={() => useWatchWindowStore.getState().togglePanel()} />
       </RibbonGroup>
 
       {/* Calculation */}
