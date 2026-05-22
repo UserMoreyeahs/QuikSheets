@@ -161,6 +161,10 @@ const ThemePicker = dynamic(
   () => import('@/features/themes/components/ThemePicker').then((m) => ({ default: m.ThemePicker })),
   { ssr: false },
 )
+const PrintTitlesDialog = dynamic(
+  () => import('@/features/page-layout/components/PrintTitlesDialog').then((m) => ({ default: m.PrintTitlesDialog })),
+  { ssr: false },
+)
 import { useTextToColsStore } from '@/features/data/store/textToColsStore'
 const FormBuilder = dynamic(
   () => import('@/features/forms/components/FormBuilder').then((m) => ({ default: m.FormBuilder })),
@@ -1630,6 +1634,7 @@ export default function SheetPage() {
       <ErrorBoundary><HeaderFooterDialog /></ErrorBoundary>
       <ErrorBoundary><StockImagePicker /></ErrorBoundary>
       <ErrorBoundary><ThemePicker /></ErrorBoundary>
+      <ErrorBoundary><PrintTitlesDialog /></ErrorBoundary>
       <ErrorBoundary><FormBuilder workbookId={workbookId} /></ErrorBoundary>
       <ErrorBoundary><PivotBuilder /></ErrorBoundary>
       <ErrorBoundary><ForecastPanel /></ErrorBoundary>

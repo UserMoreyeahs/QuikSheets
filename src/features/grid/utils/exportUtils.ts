@@ -532,13 +532,15 @@ const EMPTY_HF = {
   footerRight: '',
 }
 
-/** Read current print settings (orientation/margins/printArea/paperSize/headerFooter). */
+/** Read current print settings (orientation/margins/printArea/paperSize/headerFooter/printTitles). */
 function readPrintSettings(): {
   orientation: 'portrait' | 'landscape'
   format: string
   marginsMm: { top: number; right: number; bottom: number; left: number }
   printRange: { startRow: number; endRow: number; startCol: number; endCol: number } | null
   headerFooter: typeof EMPTY_HF
+  /** 0-indexed [startRow, endRow] inclusive, or null. Rows repeated on every page. */
+  printTitleRows: [number, number] | null
 } {
   // Lazy import to avoid making exportUtils.ts depend on the page-layout module
   // tree at the top level (keeps the legacy exportToCSV / exportToExcel paths
@@ -550,6 +552,7 @@ function readPrintSettings(): {
       margins: { top: number; right: number; bottom: number; left: number }
       printArea: { range: string } | null
       headerFooter?: typeof EMPTY_HF
+      printTitles?: { rowsRange: string | null }
     }
   }
   let store: PrintStore | null = null
@@ -565,6 +568,7 @@ function readPrintSettings(): {
       marginsMm: { top: 19, right: 18, bottom: 19, left: 18 },
       printRange: null,
       headerFooter: EMPTY_HF,
+      printTitleRows: null,
     }
   }
 
@@ -596,12 +600,24 @@ function readPrintSettings(): {
     }
   }
 
+  // Parse Print Titles "1:3" → [0, 2] (0-indexed inclusive).
+  let printTitleRows: [number, number] | null = null
+  if (s.printTitles?.rowsRange) {
+    const m = s.printTitles.rowsRange.match(/^(\d+):(\d+)$/)
+    if (m) {
+      const start = parseInt(m[1]!, 10) - 1
+      const end = parseInt(m[2]!, 10) - 1
+      if (start >= 0 && end >= start) printTitleRows = [start, end]
+    }
+  }
+
   return {
     orientation: s.orientation,
     format: s.paperSize,
     marginsMm,
     printRange,
     headerFooter: s.headerFooter ?? EMPTY_HF,
+    printTitleRows,
   }
 }
 
@@ -670,11 +686,31 @@ export function exportToPDF(
       .map((row) => row.slice(startCol, endCol + 1))
   }
 
-  const firstRow = workingData[0] ?? []
-  const headers = firstRow.map((header) => (header !== null ? String(header) : ''))
+  // Resolve Print Titles into autoTable head rows so they repeat on
+  // every page. If the user set rows 1:3, those rows become the head;
+  // the body picks up from row 4 onwards. If no Print Titles, the
+  // first row of working data acts as the head (Excel-default).
+  const cellToStr = (cell: ExportSheet['data'][number][number]) =>
+    cell !== null ? String(cell) : ''
+  let headRows: string[][]
+  let bodyStartIndex: number
+  if (settings.printTitleRows) {
+    const [tStart, tEnd] = settings.printTitleRows
+    headRows = workingData.slice(tStart, tEnd + 1).map((row) => row.map(cellToStr))
+    bodyStartIndex = tEnd + 1
+    // Edge case: user picks rows beyond the data length — fall back to
+    // the existing first-row-as-head behaviour so the PDF still renders.
+    if (headRows.length === 0) {
+      headRows = [(workingData[0] ?? []).map(cellToStr)]
+      bodyStartIndex = 1
+    }
+  } else {
+    headRows = [(workingData[0] ?? []).map(cellToStr)]
+    bodyStartIndex = 1
+  }
   const body = workingData
-    .slice(1)
-    .map((row) => row.map((cell) => (cell !== null ? String(cell) : '')))
+    .slice(bodyStartIndex)
+    .map((row) => row.map(cellToStr))
 
   // Reserve vertical space at the top/bottom for the header/footer rows.
   // 8mm fits a single-line 9pt header with comfortable padding; the
@@ -689,7 +725,7 @@ export function exportToPDF(
     : settings.marginsMm.bottom
 
   autoTable(doc, {
-    head: [headers],
+    head: headRows,
     body,
     startY: hasCustomHF ? reserveTop : 28,
     styles: { fontSize: 9, cellPadding: 3 },

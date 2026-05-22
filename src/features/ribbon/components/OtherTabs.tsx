@@ -138,6 +138,7 @@ import { insertImageFromUrl } from '@/features/images/utils/insertImageFromUrl'
 import { useStockImagePickerStore } from '@/features/images/store/stockImagePickerStore'
 import { insertScreenshot } from '@/features/images/utils/insertScreenshot'
 import { useHeaderFooterDialogStore } from '@/features/page-layout/store/headerFooterDialogStore'
+import { usePrintTitlesDialogStore } from '@/features/page-layout/store/printTitlesDialogStore'
 import { useThemeStore } from '@/features/themes/store/themeStore'
 import { useShapePickerStore, useIconPickerStore } from '@/features/overlays/store/overlayStore'
 import { insertTextBox } from '@/features/overlays/utils/insertTextBox'
@@ -437,7 +438,7 @@ export function PageLayoutTab(props: PageLayoutTabProps) {
 
         <RibbonLargeButton label="Breaks"      icon={<GitBranch className="text-rose-500" />}    onClick={ribbonStub('Breaks')} showCaret />
         <RibbonLargeButton label="Background"  icon={<ImageIcon className="text-blue-500" />}    onClick={ribbonStub('Background')} />
-        <RibbonLargeButton label="Print Titles" icon={<Bookmark className="text-violet-500" />} onClick={ribbonStub('Print Titles')} />
+        <RibbonLargeButton label="Print Titles" icon={<Bookmark className="text-violet-500" />} onClick={() => usePrintTitlesDialogStore.getState().openDialog()} />
         <RibbonLargeButton label="Header & Footer" icon={<FileText className="text-zinc-500" />} onClick={() => useHeaderFooterDialogStore.getState().openDialog()} />
       </RibbonGroup>
 
