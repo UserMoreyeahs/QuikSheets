@@ -137,6 +137,18 @@ const RecommendedPivotsDialog = dynamic(
   () => import('@/features/pivot/components/RecommendedPivotsDialog').then((m) => ({ default: m.RecommendedPivotsDialog })),
   { ssr: false },
 )
+const OverlaysLayer = dynamic(
+  () => import('@/features/overlays/components/OverlaysLayer').then((m) => ({ default: m.OverlaysLayer })),
+  { ssr: false },
+)
+const ShapePicker = dynamic(
+  () => import('@/features/overlays/components/ShapePicker').then((m) => ({ default: m.ShapePicker })),
+  { ssr: false },
+)
+const IconPicker = dynamic(
+  () => import('@/features/overlays/components/IconPicker').then((m) => ({ default: m.IconPicker })),
+  { ssr: false },
+)
 import { useTextToColsStore } from '@/features/data/store/textToColsStore'
 const FormBuilder = dynamic(
   () => import('@/features/forms/components/FormBuilder').then((m) => ({ default: m.FormBuilder })),
@@ -1505,6 +1517,7 @@ export default function SheetPage() {
         <ErrorBoundary silent><ChartsLayer /></ErrorBoundary>
         <ErrorBoundary silent><ImagesLayer /></ErrorBoundary>
         <ErrorBoundary silent><SparklinesLayer /></ErrorBoundary>
+        <ErrorBoundary silent><OverlaysLayer /></ErrorBoundary>
         <ErrorBoundary silent><PivotsLayer /></ErrorBoundary>
         <ErrorBoundary silent><SlicersLayer /></ErrorBoundary>
         <ErrorBoundary silent><FillHandle /></ErrorBoundary>
@@ -1600,6 +1613,8 @@ export default function SheetPage() {
       <ErrorBoundary><SlicerBuilderDialog /></ErrorBoundary>
       <ErrorBoundary><SparklineBuilderDialog /></ErrorBoundary>
       <ErrorBoundary><RecommendedPivotsDialog /></ErrorBoundary>
+      <ErrorBoundary><ShapePicker /></ErrorBoundary>
+      <ErrorBoundary><IconPicker /></ErrorBoundary>
       <ErrorBoundary><FormBuilder workbookId={workbookId} /></ErrorBoundary>
       <ErrorBoundary><PivotBuilder /></ErrorBoundary>
       <ErrorBoundary><ForecastPanel /></ErrorBoundary>

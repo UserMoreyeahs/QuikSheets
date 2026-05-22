@@ -134,6 +134,8 @@ import { useRecommendedPivotsStore } from '@/features/pivot/store/recommendedPiv
 import type { ChartKind } from '@/features/charts/types'
 import { useSymbolPickerStore } from '@/features/symbols/store/symbolPickerStore'
 import { insertImageFromDevice } from '@/features/images/utils/insertImageFromDevice'
+import { useShapePickerStore, useIconPickerStore } from '@/features/overlays/store/overlayStore'
+import { insertTextBox } from '@/features/overlays/utils/insertTextBox'
 import { toast } from 'sonner'
 
 // ─── Insert ──────────────────────────────────────────────────────────────────
@@ -229,8 +231,8 @@ export function InsertTab(props: InsertTabProps) {
             <DropdownMenuItem onSelect={ribbonStub('Online Pictures…')}>Online Pictures…</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <RibbonLargeButton label="Shapes"      icon={<Frame className="text-amber-500" />}   onClick={ribbonStub('Shapes')} showCaret />
-        <RibbonLargeButton label="Icons"       icon={<Sparkles className="text-blue-500" />} onClick={ribbonStub('Icons')} />
+        <RibbonLargeButton label="Shapes"      icon={<Frame className="text-amber-500" />}   onClick={() => useShapePickerStore.getState().openPicker()} />
+        <RibbonLargeButton label="Icons"       icon={<Sparkles className="text-blue-500" />} onClick={() => useIconPickerStore.getState().openPicker()} />
         <RibbonLargeButton label="3D Models"   icon={<Box className="text-violet-500" />}    onClick={ribbonStub('3D Models')} />
         <RibbonLargeButton label="SmartArt"    icon={<Workflow className="text-rose-500" />} onClick={ribbonStub('SmartArt')} />
         <RibbonLargeButton label="Screenshot"  icon={<Camera className="text-emerald-500" />} onClick={ribbonStub('Screenshot')} showCaret />
@@ -308,7 +310,7 @@ export function InsertTab(props: InsertTabProps) {
 
       {/* Text */}
       <RibbonGroup label="Text">
-        <RibbonLargeButton label="Text Box"      icon={<TextCursorInput className="text-zinc-500" />}  onClick={ribbonStub('Text Box')} />
+        <RibbonLargeButton label="Text Box"      icon={<TextCursorInput className="text-zinc-500" />}  onClick={insertTextBox} />
         <RibbonLargeButton label="Header & Footer" icon={<FileText className="text-zinc-500" />}      onClick={ribbonStub('Header & Footer')} />
       </RibbonGroup>
 
