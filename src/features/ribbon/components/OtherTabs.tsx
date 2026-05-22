@@ -134,6 +134,8 @@ import { useRecommendedPivotsStore } from '@/features/pivot/store/recommendedPiv
 import type { ChartKind } from '@/features/charts/types'
 import { useSymbolPickerStore } from '@/features/symbols/store/symbolPickerStore'
 import { insertImageFromDevice } from '@/features/images/utils/insertImageFromDevice'
+import { insertImageFromUrl } from '@/features/images/utils/insertImageFromUrl'
+import { useStockImagePickerStore } from '@/features/images/store/stockImagePickerStore'
 import { insertScreenshot } from '@/features/images/utils/insertScreenshot'
 import { useHeaderFooterDialogStore } from '@/features/page-layout/store/headerFooterDialogStore'
 import { useShapePickerStore, useIconPickerStore } from '@/features/overlays/store/overlayStore'
@@ -229,8 +231,8 @@ export function InsertTab(props: InsertTabProps) {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
             <DropdownMenuItem onSelect={() => insertImageFromDevice()}>This Device…</DropdownMenuItem>
-            <DropdownMenuItem onSelect={ribbonStub('Stock Images…')}>Stock Images…</DropdownMenuItem>
-            <DropdownMenuItem onSelect={ribbonStub('Online Pictures…')}>Online Pictures…</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => useStockImagePickerStore.getState().openPicker()}>Stock Images…</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => { void insertImageFromUrl() }}>Online Pictures…</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <RibbonLargeButton label="Shapes"      icon={<Frame className="text-amber-500" />}   onClick={() => useShapePickerStore.getState().openPicker()} />
