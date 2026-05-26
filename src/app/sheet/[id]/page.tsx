@@ -754,6 +754,12 @@ export default function SheetPage() {
 
       if (didChange) {
         useSheetStore.getState().replaceGridSheets(nextSheets)
+        // MVP T019 fix: persist the merged rows IMMEDIATELY instead of
+        // relying on the 30-second auto-save debounce. If the user
+        // refreshes right after a form submission, we lose the rows
+        // otherwise — they appear in the grid, disappear on reload.
+        const { saveWorkbook } = await import('@/lib/saveService')
+        void saveWorkbook({ id: workbookId, name: workbookName, data: nextSheets })
         toast.success('Form submissions added to the sheet.')
       }
     })()
