@@ -1,12 +1,26 @@
 'use client'
 
-import { useEffect, useState, useTransition } from 'react'
+import { Suspense, useEffect, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { signInAction } from '@/features/auth/actions'
 import { GoogleSignInButton } from '@/features/auth/components/GoogleSignInButton'
 
+/**
+ * useSearchParams() forces dynamic rendering. Next.js 15 strict mode
+ * requires it to be wrapped in <Suspense> for the build to succeed.
+ * The outer LoginPage just provides the boundary; the inner component
+ * owns the form state + URL-error surfacing.
+ */
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageInner />
+    </Suspense>
+  )
+}
+
+function LoginPageInner() {
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const params = useSearchParams()
