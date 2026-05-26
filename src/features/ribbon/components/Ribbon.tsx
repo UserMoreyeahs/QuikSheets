@@ -90,6 +90,10 @@ export interface RibbonHandlers {
   // ── Data ────────────────────────────────────────────
   onMapView: () => void
   onDedupe?: () => void
+  /** Group the currently-selected rows (Data > Outline > Group). */
+  onGroupRows?: () => void
+  /** Ungroup the innermost group at the current row selection. */
+  onUngroupRows?: () => void
   // ── Review / Collab / Sharing ───────────────────────
   onComments?: () => void
   onShareLink?: () => void
@@ -284,6 +288,8 @@ export function Ribbon({ handlers }: { handlers: RibbonHandlers }) {
             onDedupe={handlers.onDedupe}
             onCleanData={handlers.onCleanData}
             onForecast={handlers.onForecast}
+            onGroupRows={handlers.onGroupRows}
+            onUngroupRows={handlers.onUngroupRows}
           />
         )}
         {activeTab === 'review' && (
