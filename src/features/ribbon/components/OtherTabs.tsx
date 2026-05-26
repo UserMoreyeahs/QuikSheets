@@ -128,12 +128,23 @@ import { usePrintSettingsStore } from '@/features/page-layout/printSettingsStore
 import { useChartPanelStore } from '@/features/charts/store/chartPanelStore'
 import { flashFill } from '../utils/flashFill'
 import { useTextToColsStore } from '@/features/data/store/textToColsStore'
+import { useFromWebDialogStore } from '@/features/data/store/fromWebDialogStore'
 import { useSlicerBuilderStore } from '@/features/slicers/store/slicerBuilderStore'
 import { useSparklineBuilderStore } from '@/features/sparklines/store/sparklineStore'
 import { useRecommendedPivotsStore } from '@/features/pivot/store/recommendedPivotsStore'
 import type { ChartKind } from '@/features/charts/types'
 import { useSymbolPickerStore } from '@/features/symbols/store/symbolPickerStore'
 import { insertImageFromDevice } from '@/features/images/utils/insertImageFromDevice'
+import { insertImageFromUrl } from '@/features/images/utils/insertImageFromUrl'
+import { useStockImagePickerStore } from '@/features/images/store/stockImagePickerStore'
+import { insertScreenshot } from '@/features/images/utils/insertScreenshot'
+import { useHeaderFooterDialogStore } from '@/features/page-layout/store/headerFooterDialogStore'
+import { usePrintTitlesDialogStore } from '@/features/page-layout/store/printTitlesDialogStore'
+import { useSelectionPaneStore } from '@/features/page-layout/store/selectionPaneStore'
+import { useWatchWindowStore } from '@/features/watch-window/store/watchWindowStore'
+import { useThemeStore } from '@/features/themes/store/themeStore'
+import { useShapePickerStore, useIconPickerStore } from '@/features/overlays/store/overlayStore'
+import { insertTextBox } from '@/features/overlays/utils/insertTextBox'
 import { toast } from 'sonner'
 
 // ─── Insert ──────────────────────────────────────────────────────────────────
@@ -225,15 +236,15 @@ export function InsertTab(props: InsertTabProps) {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
             <DropdownMenuItem onSelect={() => insertImageFromDevice()}>This Device…</DropdownMenuItem>
-            <DropdownMenuItem onSelect={ribbonStub('Stock Images…')}>Stock Images…</DropdownMenuItem>
-            <DropdownMenuItem onSelect={ribbonStub('Online Pictures…')}>Online Pictures…</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => useStockImagePickerStore.getState().openPicker()}>Stock Images…</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => { void insertImageFromUrl() }}>Online Pictures…</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <RibbonLargeButton label="Shapes"      icon={<Frame className="text-amber-500" />}   onClick={ribbonStub('Shapes')} showCaret />
-        <RibbonLargeButton label="Icons"       icon={<Sparkles className="text-blue-500" />} onClick={ribbonStub('Icons')} />
+        <RibbonLargeButton label="Shapes"      icon={<Frame className="text-amber-500" />}   onClick={() => useShapePickerStore.getState().openPicker()} />
+        <RibbonLargeButton label="Icons"       icon={<Sparkles className="text-blue-500" />} onClick={() => useIconPickerStore.getState().openPicker()} />
         <RibbonLargeButton label="3D Models"   icon={<Box className="text-violet-500" />}    onClick={ribbonStub('3D Models')} />
         <RibbonLargeButton label="SmartArt"    icon={<Workflow className="text-rose-500" />} onClick={ribbonStub('SmartArt')} />
-        <RibbonLargeButton label="Screenshot"  icon={<Camera className="text-emerald-500" />} onClick={ribbonStub('Screenshot')} showCaret />
+        <RibbonLargeButton label="Screenshot"  icon={<Camera className="text-emerald-500" />} onClick={() => { void insertScreenshot() }} />
       </RibbonGroup>
 
       {/* Controls */}
@@ -308,8 +319,8 @@ export function InsertTab(props: InsertTabProps) {
 
       {/* Text */}
       <RibbonGroup label="Text">
-        <RibbonLargeButton label="Text Box"      icon={<TextCursorInput className="text-zinc-500" />}  onClick={ribbonStub('Text Box')} />
-        <RibbonLargeButton label="Header & Footer" icon={<FileText className="text-zinc-500" />}      onClick={ribbonStub('Header & Footer')} />
+        <RibbonLargeButton label="Text Box"      icon={<TextCursorInput className="text-zinc-500" />}  onClick={insertTextBox} />
+        <RibbonLargeButton label="Header & Footer" icon={<FileText className="text-zinc-500" />}      onClick={() => useHeaderFooterDialogStore.getState().openDialog()} />
       </RibbonGroup>
 
       {/* Symbols */}
@@ -354,10 +365,10 @@ export function PageLayoutTab(props: PageLayoutTabProps) {
     <div className="flex h-full items-stretch overflow-x-auto scrollbar-hide">
       {/* Themes */}
       <RibbonGroup label="Themes">
-        <RibbonLargeButton label="Themes"  icon={<Palette className="text-violet-500" />}     onClick={ribbonStub('Themes')} showCaret />
+        <RibbonLargeButton label="Themes"  icon={<Palette className="text-violet-500" />}     onClick={() => useThemeStore.getState().openPicker()} />
         <div className="flex flex-col gap-0.5">
-          <RibbonButton label="Colors" icon={<PaintBucket className="h-3.5 w-3.5 text-amber-500" />} onClick={ribbonStub('Colors')} />
-          <RibbonButton label="Fonts"  icon={<Type className="h-3.5 w-3.5" />}                       onClick={ribbonStub('Fonts')} />
+          <RibbonButton label="Colors" icon={<PaintBucket className="h-3.5 w-3.5 text-amber-500" />} onClick={() => useThemeStore.getState().openPicker()} />
+          <RibbonButton label="Fonts"  icon={<Type className="h-3.5 w-3.5" />}                       onClick={() => useThemeStore.getState().openPicker()} />
           <RibbonButton label="Effects" icon={<WandSparkles className="h-3.5 w-3.5" />}              onClick={ribbonStub('Effects')} />
         </div>
       </RibbonGroup>
@@ -430,7 +441,8 @@ export function PageLayoutTab(props: PageLayoutTabProps) {
 
         <RibbonLargeButton label="Breaks"      icon={<GitBranch className="text-rose-500" />}    onClick={ribbonStub('Breaks')} showCaret />
         <RibbonLargeButton label="Background"  icon={<ImageIcon className="text-blue-500" />}    onClick={ribbonStub('Background')} />
-        <RibbonLargeButton label="Print Titles" icon={<Bookmark className="text-violet-500" />} onClick={ribbonStub('Print Titles')} />
+        <RibbonLargeButton label="Print Titles" icon={<Bookmark className="text-violet-500" />} onClick={() => usePrintTitlesDialogStore.getState().openDialog()} />
+        <RibbonLargeButton label="Header & Footer" icon={<FileText className="text-zinc-500" />} onClick={() => useHeaderFooterDialogStore.getState().openDialog()} />
       </RibbonGroup>
 
       {/* Scale to Fit — R9.4: Scale% input is now functional and writes
@@ -524,9 +536,9 @@ export function PageLayoutTab(props: PageLayoutTabProps) {
       {/* Arrange */}
       <RibbonGroup label="Arrange" className="border-r-0">
         <div className="flex flex-col gap-0.5">
-          <RibbonButton label="Bring Forward"   icon={<ArrowUpToLine className="h-3.5 w-3.5" />}   onClick={ribbonStub('Bring Forward')} />
-          <RibbonButton label="Send Backward"   icon={<ArrowDownToLine className="h-3.5 w-3.5" />} onClick={ribbonStub('Send Backward')} />
-          <RibbonButton label="Selection Pane"  icon={<LayoutList className="h-3.5 w-3.5" />}      onClick={ribbonStub('Selection Pane')} />
+          <RibbonButton label="Bring Forward"   icon={<ArrowUpToLine className="h-3.5 w-3.5" />}   onClick={() => useSelectionPaneStore.getState().openPane()} />
+          <RibbonButton label="Send Backward"   icon={<ArrowDownToLine className="h-3.5 w-3.5" />} onClick={() => useSelectionPaneStore.getState().openPane()} />
+          <RibbonButton label="Selection Pane"  icon={<LayoutList className="h-3.5 w-3.5" />}      onClick={() => useSelectionPaneStore.getState().togglePane()} />
         </div>
         <div className="flex flex-col gap-0.5">
           <RibbonButton label="Align"  icon={<AlignVerticalSpaceAround className="h-3.5 w-3.5" />} onClick={ribbonStub('Align')} />
@@ -618,7 +630,7 @@ export function FormulasTab(props: FormulasTabProps) {
         <div className="flex flex-col gap-0.5">
           <RibbonButton label="Trace Precedents" icon={<ArrowUpToLine className="h-3.5 w-3.5" />}   onClick={openDependencyMap} />
           <RibbonButton label="Trace Dependents" icon={<ArrowDownToLine className="h-3.5 w-3.5" />} onClick={openDependencyMap} />
-          <RibbonButton label="Remove Arrows"     icon={<Minus className="h-3.5 w-3.5" />}            onClick={ribbonStub('Remove Arrows')} />
+          <RibbonButton label="Remove Arrows"     icon={<Minus className="h-3.5 w-3.5" />}            onClick={() => toast.message('Quiksheets shows dependencies in the Map View. Open it with Trace Precedents/Dependents and close it via the X in the map header.')} />
         </div>
         <div className="flex flex-col gap-0.5">
           <RibbonButton label="Show Formulas"   icon={<Eye className="h-3.5 w-3.5" />}            onClick={toggleShowFormulas} />
@@ -630,7 +642,7 @@ export function FormulasTab(props: FormulasTabProps) {
 
       {/* Watch Window */}
       <RibbonGroup label="Watch Window">
-        <RibbonLargeButton label="Watch Window" icon={<Eye className="text-blue-500" />} onClick={ribbonStub('Watch Window')} />
+        <RibbonLargeButton label="Watch Window" icon={<Eye className="text-blue-500" />} onClick={() => useWatchWindowStore.getState().togglePanel()} />
       </RibbonGroup>
 
       {/* Calculation */}
@@ -683,7 +695,7 @@ export function DataTab(props: DataTabProps) {
         <RibbonLargeButton label="Get Data" icon={<Database className="text-emerald-500" />} onClick={props.onImport} showCaret />
         <div className="flex flex-col gap-0.5">
           <RibbonButton label="From Text/CSV"  icon={<FileText className="h-3.5 w-3.5" />}      onClick={props.onImport} />
-          <RibbonButton label="From Web"        icon={<Globe className="h-3.5 w-3.5" />}         onClick={ribbonStub('From Web')} />
+          <RibbonButton label="From Web"        icon={<Globe className="h-3.5 w-3.5" />}         onClick={() => useFromWebDialogStore.getState().openDialog()} />
           <RibbonButton label="From Picture"   icon={<ImageIcon className="h-3.5 w-3.5" />}     onClick={ribbonStub('From Picture')} />
         </div>
         <div className="flex flex-col gap-0.5">

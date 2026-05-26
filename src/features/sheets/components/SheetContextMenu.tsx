@@ -108,9 +108,16 @@ export function SheetContextMenu({ sheetId, x, y, onClose }: SheetContextMenuPro
     switch (action) {
       case 'rename': {
         const current = sheet?.name ?? 'Sheet'
-        const newName = window.prompt('Rename sheet:', current)
-        if (newName && newName.trim()) renameSheet(sheetId, newName.trim())
         onClose()
+        void (async () => {
+          const { promptDialog } = await import('@/components/PromptDialog')
+          const newName = await promptDialog({
+            title: 'Rename sheet',
+            defaultValue: current,
+            placeholder: 'New sheet name',
+          })
+          if (newName && newName.trim()) renameSheet(sheetId, newName.trim())
+        })()
         break
       }
       case 'duplicate': {

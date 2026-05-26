@@ -2,8 +2,6 @@
 
 AI-native browser spreadsheet for analysts, founders, finance/operations teams, students, freelancers, and SMB teams. Built with Next.js 15, React 19, TypeScript strict, FortuneSheet (with a Univer adapter path), HyperFormula, Supabase, Groq, ECharts, and SheetJS.
 
-> Legacy files may mention "SheetForge". That name is historical context only — every new file, component, route, database slug, env name, package name, README, and UI string must use **Quiksheets**.
-
 ## Documentation
 
 - [`AGENTS.md`](AGENTS.md) — Codex/agent operating contract.
@@ -14,7 +12,7 @@ AI-native browser spreadsheet for analysts, founders, finance/operations teams, 
 - [`docs/05_TESTING_AND_QUALITY_GATES.md`](docs/05_TESTING_AND_QUALITY_GATES.md) — required test suites.
 - [`docs/08_SESSION_ROADMAP.md`](docs/08_SESSION_ROADMAP.md) — original 22-session plan.
 - [`docs/09_CODEX_PROMPTS_22_SESSIONS.md`](docs/09_CODEX_PROMPTS_22_SESSIONS.md) — paste-into-Codex prompts.
-- [`docs/REMEDIATION_CODEX_PROMPTS.md`](docs/REMEDIATION_CODEX_PROMPTS.md) — R1–R14 bridge plan from legacy SheetForge work to the Quiksheets target.
+- [`docs/REMEDIATION_CODEX_PROMPTS.md`](docs/REMEDIATION_CODEX_PROMPTS.md) — R1–R14 bridge plan to the current target architecture.
 
 ## Local Development
 

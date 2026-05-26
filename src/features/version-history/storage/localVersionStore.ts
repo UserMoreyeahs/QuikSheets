@@ -5,8 +5,8 @@
  * workbook's gridSheets[] so we can restore them exactly later.
  *
  * Storage layout:
- *   sheetforge_version_index:<workbookId> →  string[] of versionIds
- *   sheetforge_version:<versionId>        →  StoredVersion
+ *   quiksheets_version_index:<workbookId> →  string[] of versionIds
+ *   quiksheets_version:<versionId>        →  StoredVersion
  *
  * We cap at MAX_VERSIONS per workbook (oldest pruned first) to avoid
  * unbounded localStorage growth.
@@ -25,8 +25,8 @@ export interface StoredVersion {
   snapshot: Sheet[]
 }
 
-const INDEX_KEY = (workbookId: string) => `sheetforge_version_index:${workbookId}`
-const VERSION_KEY = (id: string) => `sheetforge_version:${id}`
+const INDEX_KEY = (workbookId: string) => `quiksheets_version_index:${workbookId}`
+const VERSION_KEY = (id: string) => `quiksheets_version:${id}`
 
 function safeParse<T>(raw: string | null): T | null {
   if (!raw) return null

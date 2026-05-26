@@ -6,6 +6,17 @@ import { cn } from '@/lib/utils'
 import { getStubFeatureName } from '../utils/ribbonStub'
 
 /**
+ * Anti-hallucination flag: when NEXT_PUBLIC_HIDE_RIBBON_STUBS=true the
+ * ribbon button primitives skip rendering buttons whose onClick was
+ * tagged via ribbonStub(). This is how we keep the production UI
+ * honest — every visible button does something real.
+ *
+ * Read once at module load so it's tree-shaken by the bundler when
+ * unset (no runtime overhead).
+ */
+const HIDE_RIBBON_STUBS = process.env.NEXT_PUBLIC_HIDE_RIBBON_STUBS === 'true'
+
+/**
  * RibbonGroup — vertical block on the ribbon containing several buttons,
  * with a small label at the bottom and a divider on the right edge (Excel-style).
  *
@@ -63,6 +74,7 @@ export function RibbonButton({
   shortcut?: string
 }) {
   const stubName = getStubFeatureName(onClick)
+  if (stubName && HIDE_RIBBON_STUBS) return null
   const title = stubName
     ? `${label} — coming soon`
     : shortcut
@@ -113,6 +125,7 @@ export function RibbonLargeButton({
   showCaret?: boolean
 }) {
   const stubName = getStubFeatureName(onClick)
+  if (stubName && HIDE_RIBBON_STUBS) return null
   return (
     <button
       type="button"
@@ -221,6 +234,7 @@ export function RibbonSplitButton({
   shortcut?: string
 }) {
   const stubName = getStubFeatureName(onMainClick) ?? getStubFeatureName(onCaretClick)
+  if (stubName && HIDE_RIBBON_STUBS) return null
   return (
     <div className={cn('inline-flex h-[26px] items-stretch overflow-hidden rounded', stubName && 'opacity-60')}>
       <button

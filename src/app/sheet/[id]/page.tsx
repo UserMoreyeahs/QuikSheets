@@ -137,6 +137,50 @@ const RecommendedPivotsDialog = dynamic(
   () => import('@/features/pivot/components/RecommendedPivotsDialog').then((m) => ({ default: m.RecommendedPivotsDialog })),
   { ssr: false },
 )
+const OverlaysLayer = dynamic(
+  () => import('@/features/overlays/components/OverlaysLayer').then((m) => ({ default: m.OverlaysLayer })),
+  { ssr: false },
+)
+const ShapePicker = dynamic(
+  () => import('@/features/overlays/components/ShapePicker').then((m) => ({ default: m.ShapePicker })),
+  { ssr: false },
+)
+const IconPicker = dynamic(
+  () => import('@/features/overlays/components/IconPicker').then((m) => ({ default: m.IconPicker })),
+  { ssr: false },
+)
+const HeaderFooterDialog = dynamic(
+  () => import('@/features/page-layout/components/HeaderFooterDialog').then((m) => ({ default: m.HeaderFooterDialog })),
+  { ssr: false },
+)
+const StockImagePicker = dynamic(
+  () => import('@/features/images/components/StockImagePicker').then((m) => ({ default: m.StockImagePicker })),
+  { ssr: false },
+)
+const ThemePicker = dynamic(
+  () => import('@/features/themes/components/ThemePicker').then((m) => ({ default: m.ThemePicker })),
+  { ssr: false },
+)
+const PrintTitlesDialog = dynamic(
+  () => import('@/features/page-layout/components/PrintTitlesDialog').then((m) => ({ default: m.PrintTitlesDialog })),
+  { ssr: false },
+)
+const SelectionPane = dynamic(
+  () => import('@/features/page-layout/components/SelectionPane').then((m) => ({ default: m.SelectionPane })),
+  { ssr: false },
+)
+const WatchWindow = dynamic(
+  () => import('@/features/watch-window/components/WatchWindow').then((m) => ({ default: m.WatchWindow })),
+  { ssr: false },
+)
+const FromWebDialog = dynamic(
+  () => import('@/features/data/components/FromWebDialog').then((m) => ({ default: m.FromWebDialog })),
+  { ssr: false },
+)
+const PromptDialog = dynamic(
+  () => import('@/components/PromptDialog').then((m) => ({ default: m.PromptDialog })),
+  { ssr: false },
+)
 import { useTextToColsStore } from '@/features/data/store/textToColsStore'
 const FormBuilder = dynamic(
   () => import('@/features/forms/components/FormBuilder').then((m) => ({ default: m.FormBuilder })),
@@ -714,6 +758,12 @@ export default function SheetPage() {
 
       if (didChange) {
         useSheetStore.getState().replaceGridSheets(nextSheets)
+        // MVP T019 fix: persist the merged rows IMMEDIATELY instead of
+        // relying on the 30-second auto-save debounce. If the user
+        // refreshes right after a form submission, we lose the rows
+        // otherwise — they appear in the grid, disappear on reload.
+        const { saveWorkbook } = await import('@/lib/saveService')
+        void saveWorkbook({ id: workbookId, name: workbookName, data: nextSheets })
         toast.success('Form submissions added to the sheet.')
       }
     })()
@@ -1505,6 +1555,9 @@ export default function SheetPage() {
         <ErrorBoundary silent><ChartsLayer /></ErrorBoundary>
         <ErrorBoundary silent><ImagesLayer /></ErrorBoundary>
         <ErrorBoundary silent><SparklinesLayer /></ErrorBoundary>
+        <ErrorBoundary silent><OverlaysLayer /></ErrorBoundary>
+        <ErrorBoundary silent><SelectionPane /></ErrorBoundary>
+        <ErrorBoundary silent><WatchWindow /></ErrorBoundary>
         <ErrorBoundary silent><PivotsLayer /></ErrorBoundary>
         <ErrorBoundary silent><SlicersLayer /></ErrorBoundary>
         <ErrorBoundary silent><FillHandle /></ErrorBoundary>
@@ -1600,6 +1653,14 @@ export default function SheetPage() {
       <ErrorBoundary><SlicerBuilderDialog /></ErrorBoundary>
       <ErrorBoundary><SparklineBuilderDialog /></ErrorBoundary>
       <ErrorBoundary><RecommendedPivotsDialog /></ErrorBoundary>
+      <ErrorBoundary><ShapePicker /></ErrorBoundary>
+      <ErrorBoundary><IconPicker /></ErrorBoundary>
+      <ErrorBoundary><HeaderFooterDialog /></ErrorBoundary>
+      <ErrorBoundary><StockImagePicker /></ErrorBoundary>
+      <ErrorBoundary><ThemePicker /></ErrorBoundary>
+      <ErrorBoundary><PrintTitlesDialog /></ErrorBoundary>
+      <ErrorBoundary><FromWebDialog /></ErrorBoundary>
+      <ErrorBoundary><PromptDialog /></ErrorBoundary>
       <ErrorBoundary><FormBuilder workbookId={workbookId} /></ErrorBoundary>
       <ErrorBoundary><PivotBuilder /></ErrorBoundary>
       <ErrorBoundary><ForecastPanel /></ErrorBoundary>

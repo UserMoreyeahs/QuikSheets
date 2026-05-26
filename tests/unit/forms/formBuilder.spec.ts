@@ -11,6 +11,19 @@ describe('inferFieldKind', () => {
     ['Active', 'checkbox'],
     ['Region', 'select'],
     ['Anything else', 'text'],
+    // Quiksheets MVP polish — common business headers that previously fell
+    // through to 'text' and surfaced wrong inputs in public form embeds.
+    ['Units', 'number'],
+    ['Sales', 'number'],
+    ['Profit', 'number'],
+    ['Orders', 'number'],
+    ['Tax', 'currency'],
+    ['Discount', 'currency'],
+    ['Department', 'select'],
+    ['Country', 'select'],
+    ['Date of Birth', 'date'],
+    ['Created At', 'date'],
+    ['Approved', 'checkbox'],
   ] as const)('maps %s -> %s', (label, expected) => {
     expect(inferFieldKind(label)).toBe(expected)
   })

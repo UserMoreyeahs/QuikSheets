@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { cloneSheetWithData, getCellDisplayValue, getSheetMatrix } from '@/lib/fortuneSheet'
 import { DEFAULT_CELL_HEIGHT, DEFAULT_CELL_WIDTH } from '@/lib/constants'
 import { detectColumnIntent } from '@/features/intent-columns/utils/columnIntent'
+import { promptDialog } from '@/components/PromptDialog'
 import { useSheetStore } from '@/store/sheetStore'
 import { useWorkbookStore } from '@/store/workbookStore'
 import type { Cell, Sheet } from '@fortune-sheet/core'
@@ -163,20 +164,25 @@ export function useColumnIntent(gridSheets: Sheet[]) {
 
   const change = useCallback(() => {
     if (!pendingIntent) return
-
-    const next = window.prompt('Set this column type:', pendingIntent.intent.suggestion)
-    if (!next) {
-      setPendingIntent(null)
-      return
-    }
-
-    const intent = detectColumnIntent(next)
-    if (!intent) {
-      setPendingIntent(null)
-      return
-    }
-
-    setPendingIntent({ ...pendingIntent, intent })
+    // Capture before async — pendingIntent could become null mid-flight.
+    const snapshot = pendingIntent
+    void (async () => {
+      const next = await promptDialog({
+        title: 'Set this column type',
+        message: 'Type a hint like "currency", "date", "email", "url" or a header label. We\'ll re-detect the column intent from your input.',
+        defaultValue: snapshot.intent.suggestion ?? '',
+      })
+      if (!next) {
+        setPendingIntent(null)
+        return
+      }
+      const intent = detectColumnIntent(next)
+      if (!intent) {
+        setPendingIntent(null)
+        return
+      }
+      setPendingIntent({ ...snapshot, intent })
+    })()
   }, [pendingIntent])
 
   return {

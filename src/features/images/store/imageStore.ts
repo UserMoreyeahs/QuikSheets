@@ -27,6 +27,10 @@ interface ImageStoreState {
   removeImage: (id: string) => void
   moveImage:   (id: string, x: number, y: number) => void
   resizeImage: (id: string, w: number, h: number) => void
+  /** Z-order: swap with the next image (render on top). */
+  bringForward: (id: string) => void
+  /** Z-order: swap with the previous image (render behind). */
+  sendBackward: (id: string) => void
 }
 
 let nextOffset = 0
@@ -56,4 +60,24 @@ export const useImageStore = create<ImageStoreState>((set) => ({
     set((state) => ({
       images: state.images.map((i) => (i.id === id ? { ...i, w, h } : i)),
     })),
+  bringForward: (id) =>
+    set((state) => {
+      const idx = state.images.findIndex((i) => i.id === id)
+      if (idx < 0 || idx >= state.images.length - 1) return state
+      const next = state.images.slice()
+      const tmp = next[idx]!
+      next[idx] = next[idx + 1]!
+      next[idx + 1] = tmp
+      return { images: next }
+    }),
+  sendBackward: (id) =>
+    set((state) => {
+      const idx = state.images.findIndex((i) => i.id === id)
+      if (idx <= 0) return state
+      const next = state.images.slice()
+      const tmp = next[idx]!
+      next[idx] = next[idx - 1]!
+      next[idx - 1] = tmp
+      return { images: next }
+    }),
 }))

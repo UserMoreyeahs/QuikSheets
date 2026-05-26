@@ -221,6 +221,7 @@ export function SpreadsheetGrid({
     skipNextTabSync,
     setSkipNextTabSync,
     validationRules,
+    hydrationVersion,
   } = useSheetStore()
   const { sheets: tabSheets, activeSheetId } = useWorkbookStore()
 
@@ -283,11 +284,19 @@ export function SpreadsheetGrid({
 
   const workbookData = useMemo(() => cloneFortuneData(gridSheets), [gridSheets])
   const workbookStructureKey = useMemo(
-    () =>
-      gridSheets
+    () => {
+      // hydrationVersion forces a remount whenever the sheet store does a
+      // wholesale replaceGridSheets / setGridSheets — that's what import,
+      // template-load, and bulk operations like dedupe / paste rely on.
+      // FortuneSheet only hydrates from the `data` prop on initial mount,
+      // so without this counter, importing into the same sheet IDs left
+      // the grid showing the old empty data.
+      const structural = gridSheets
         .map((sheet) => `${sheet.id}:${sheet.name}:${sheet.order}:${sheet.hide ?? 0}`)
-        .join('|'),
-    [gridSheets]
+        .join('|')
+      return `v${hydrationVersion}|${structural}`
+    },
+    [gridSheets, hydrationVersion]
   )
 
   useEffect(() => {

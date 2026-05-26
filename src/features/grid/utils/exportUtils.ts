@@ -519,12 +519,28 @@ export function exportToCSV(
   saveAs(blob, `${fileName}.csv`)
 }
 
-/** Read current print settings (orientation/margins/printArea/paperSize). */
+/**
+ * Empty header/footer used when the print-settings store hasn't been
+ * loaded (e.g. legacy unit tests that import exportUtils directly).
+ */
+const EMPTY_HF = {
+  headerLeft: '',
+  headerCenter: '',
+  headerRight: '',
+  footerLeft: '',
+  footerCenter: '',
+  footerRight: '',
+}
+
+/** Read current print settings (orientation/margins/printArea/paperSize/headerFooter/printTitles). */
 function readPrintSettings(): {
   orientation: 'portrait' | 'landscape'
   format: string
   marginsMm: { top: number; right: number; bottom: number; left: number }
   printRange: { startRow: number; endRow: number; startCol: number; endCol: number } | null
+  headerFooter: typeof EMPTY_HF
+  /** 0-indexed [startRow, endRow] inclusive, or null. Rows repeated on every page. */
+  printTitleRows: [number, number] | null
 } {
   // Lazy import to avoid making exportUtils.ts depend on the page-layout module
   // tree at the top level (keeps the legacy exportToCSV / exportToExcel paths
@@ -535,6 +551,8 @@ function readPrintSettings(): {
       paperSize: string
       margins: { top: number; right: number; bottom: number; left: number }
       printArea: { range: string } | null
+      headerFooter?: typeof EMPTY_HF
+      printTitles?: { rowsRange: string | null }
     }
   }
   let store: PrintStore | null = null
@@ -549,6 +567,8 @@ function readPrintSettings(): {
       format: 'a4',
       marginsMm: { top: 19, right: 18, bottom: 19, left: 18 },
       printRange: null,
+      headerFooter: EMPTY_HF,
+      printTitleRows: null,
     }
   }
 
@@ -580,11 +600,24 @@ function readPrintSettings(): {
     }
   }
 
+  // Parse Print Titles "1:3" → [0, 2] (0-indexed inclusive).
+  let printTitleRows: [number, number] | null = null
+  if (s.printTitles?.rowsRange) {
+    const m = s.printTitles.rowsRange.match(/^(\d+):(\d+)$/)
+    if (m) {
+      const start = parseInt(m[1]!, 10) - 1
+      const end = parseInt(m[2]!, 10) - 1
+      if (start >= 0 && end >= start) printTitleRows = [start, end]
+    }
+  }
+
   return {
     orientation: s.orientation,
     format: s.paperSize,
     marginsMm,
     printRange,
+    headerFooter: s.headerFooter ?? EMPTY_HF,
+    printTitleRows,
   }
 }
 
@@ -594,16 +627,49 @@ export function exportToPDF(
 ): void {
   const settings = readPrintSettings()
   const doc = new jsPDF({ orientation: settings.orientation, unit: 'mm', format: settings.format })
+  const pageW = doc.internal.pageSize.getWidth()
+  const pageH = doc.internal.pageSize.getHeight()
 
-  doc.setFontSize(14)
-  doc.setTextColor(30, 30, 30)
-  doc.text(sheet.name, 14, 15)
+  // Whether the user actually configured a header/footer. If not, we
+  // fall back to the legacy title + "Exported from Quiksheets" line on
+  // page 1 only — keeps existing exports looking the same.
+  const hf = settings.headerFooter
+  const hasCustomHF =
+    !!(hf.headerLeft || hf.headerCenter || hf.headerRight ||
+       hf.footerLeft || hf.footerCenter || hf.footerRight)
 
-  doc.setFontSize(9)
-  doc.setTextColor(120, 120, 120)
-  doc.text(`Exported from Quiksheets - ${new Date().toLocaleDateString()}`, 14, 22)
+  // Lazy require so we don't pull the page-layout module into the
+  // legacy CSV/XLSX export paths.
+  function substitute(template: string, page: number, pages: number): string {
+    if (!template) return ''
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const mod = require('@/features/page-layout/utils/headerFooterTokens') as {
+        substituteHeaderFooterTokens: (t: string, ctx: {
+          page: number; pages: number; sheet: string; file: string
+        }) => string
+      }
+      return mod.substituteHeaderFooterTokens(template, {
+        page,
+        pages,
+        sheet: sheet.name,
+        file: fileName,
+      })
+    } catch {
+      // Fallback: simple inline substitution so the legacy unit test path
+      // still produces sensible output without depending on page-layout.
+      return template
+        .replace(/&\[Page\]/g, String(page))
+        .replace(/&\[Pages\]/g, String(pages))
+    }
+  }
 
   if (sheet.data.length === 0) {
+    if (!hasCustomHF) {
+      doc.setFontSize(14)
+      doc.setTextColor(30, 30, 30)
+      doc.text(sheet.name, 14, 15)
+    }
     doc.setFontSize(11)
     doc.setTextColor(30, 30, 30)
     doc.text('No data to export', 14, 35)
@@ -620,24 +686,83 @@ export function exportToPDF(
       .map((row) => row.slice(startCol, endCol + 1))
   }
 
-  const firstRow = workingData[0] ?? []
-  const headers = firstRow.map((header) => (header !== null ? String(header) : ''))
+  // Resolve Print Titles into autoTable head rows so they repeat on
+  // every page. If the user set rows 1:3, those rows become the head;
+  // the body picks up from row 4 onwards. If no Print Titles, the
+  // first row of working data acts as the head (Excel-default).
+  const cellToStr = (cell: ExportSheet['data'][number][number]) =>
+    cell !== null ? String(cell) : ''
+  let headRows: string[][]
+  let bodyStartIndex: number
+  if (settings.printTitleRows) {
+    const [tStart, tEnd] = settings.printTitleRows
+    headRows = workingData.slice(tStart, tEnd + 1).map((row) => row.map(cellToStr))
+    bodyStartIndex = tEnd + 1
+    // Edge case: user picks rows beyond the data length — fall back to
+    // the existing first-row-as-head behaviour so the PDF still renders.
+    if (headRows.length === 0) {
+      headRows = [(workingData[0] ?? []).map(cellToStr)]
+      bodyStartIndex = 1
+    }
+  } else {
+    headRows = [(workingData[0] ?? []).map(cellToStr)]
+    bodyStartIndex = 1
+  }
   const body = workingData
-    .slice(1)
-    .map((row) => row.map((cell) => (cell !== null ? String(cell) : '')))
+    .slice(bodyStartIndex)
+    .map((row) => row.map(cellToStr))
+
+  // Reserve vertical space at the top/bottom for the header/footer rows.
+  // 8mm fits a single-line 9pt header with comfortable padding; the
+  // autoTable `margin.top` / `margin.bottom` reservation keeps the table
+  // body from overlapping the header/footer band.
+  const HF_BAND_MM = 8
+  const reserveTop = hasCustomHF
+    ? settings.marginsMm.top + HF_BAND_MM
+    : settings.marginsMm.top
+  const reserveBottom = hasCustomHF
+    ? settings.marginsMm.bottom + HF_BAND_MM
+    : settings.marginsMm.bottom
 
   autoTable(doc, {
-    head: [headers],
+    head: headRows,
     body,
-    startY: 28,
+    startY: hasCustomHF ? reserveTop : 28,
     styles: { fontSize: 9, cellPadding: 3 },
     headStyles: { fillColor: [30, 30, 30], textColor: [255, 255, 255], fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [248, 248, 248] },
     margin: {
-      top: settings.marginsMm.top,
+      top: reserveTop,
       right: settings.marginsMm.right,
-      bottom: settings.marginsMm.bottom,
+      bottom: reserveBottom,
       left: settings.marginsMm.left,
+    },
+    didDrawPage: (data) => {
+      const totalPages = doc.getNumberOfPages()
+      const page = data.pageNumber
+      if (hasCustomHF) {
+        // Header band (left / center / right)
+        doc.setFontSize(9)
+        doc.setTextColor(80, 80, 80)
+        const headerY = settings.marginsMm.top + 4
+        if (hf.headerLeft)   doc.text(substitute(hf.headerLeft,   page, totalPages), settings.marginsMm.left, headerY, { align: 'left'   })
+        if (hf.headerCenter) doc.text(substitute(hf.headerCenter, page, totalPages), pageW / 2,                headerY, { align: 'center' })
+        if (hf.headerRight)  doc.text(substitute(hf.headerRight,  page, totalPages), pageW - settings.marginsMm.right, headerY, { align: 'right'  })
+
+        // Footer band (left / center / right)
+        const footerY = pageH - settings.marginsMm.bottom + 4
+        if (hf.footerLeft)   doc.text(substitute(hf.footerLeft,   page, totalPages), settings.marginsMm.left, footerY, { align: 'left'   })
+        if (hf.footerCenter) doc.text(substitute(hf.footerCenter, page, totalPages), pageW / 2,                footerY, { align: 'center' })
+        if (hf.footerRight)  doc.text(substitute(hf.footerRight,  page, totalPages), pageW - settings.marginsMm.right, footerY, { align: 'right'  })
+      } else if (page === 1) {
+        // Legacy fallback — sheet name + export date on page 1 only.
+        doc.setFontSize(14)
+        doc.setTextColor(30, 30, 30)
+        doc.text(sheet.name, 14, 15)
+        doc.setFontSize(9)
+        doc.setTextColor(120, 120, 120)
+        doc.text(`Exported from Quiksheets - ${new Date().toLocaleDateString()}`, 14, 22)
+      }
     },
   })
 

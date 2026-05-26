@@ -26,6 +26,51 @@ export interface PrintArea {
   range: string
 }
 
+/**
+ * Excel-style header/footer sections.
+ *
+ * Each of the 6 fields supports literal text plus tokens that the PDF
+ * exporter substitutes per-page:
+ *   &[Page]    current page number
+ *   &[Pages]   total page count
+ *   &[Date]    today's date (locale-formatted)
+ *   &[Time]    current time (locale-formatted)
+ *   &[Sheet]   active sheet name
+ *   &[File]    workbook name
+ */
+export interface HeaderFooterSections {
+  headerLeft: string
+  headerCenter: string
+  headerRight: string
+  footerLeft: string
+  footerCenter: string
+  footerRight: string
+}
+
+export const EMPTY_HEADER_FOOTER: HeaderFooterSections = {
+  headerLeft: '',
+  headerCenter: '',
+  headerRight: '',
+  footerLeft: '',
+  footerCenter: '',
+  footerRight: '',
+}
+
+/**
+ * Excel-style "Print Titles" — row(s) repeated at the top of every
+ * printed page. Stored as a 1-indexed range string like "1:1" (just
+ * row 1) or "1:3" (rows 1-3). Null = none.
+ *
+ * Note: column print titles are intentionally deferred — jspdf-autotable
+ * repeats the `head` array on every page automatically, so rows are
+ * cheap; per-page repeated columns would require a custom rendering
+ * pass and aren't a common ask.
+ */
+export interface PrintTitles {
+  /** 1-indexed range like "1:1" or "1:3", or null. */
+  rowsRange: string | null
+}
+
 interface PrintSettingsState {
   orientation: Orientation
   marginPreset: MarginPreset
@@ -38,6 +83,10 @@ interface PrintSettingsState {
   printGridlines: boolean
   /** Whether to print row numbers + column letters on the printed page. */
   printHeadings: boolean
+  /** Page header / footer text, with token substitution at export time. */
+  headerFooter: HeaderFooterSections
+  /** Row(s) repeated at the top of every printed page. */
+  printTitles: PrintTitles
 }
 
 interface PrintSettingsActions {
@@ -49,6 +98,9 @@ interface PrintSettingsActions {
   setScalePct: (pct: number) => void
   setPrintGridlines: (v: boolean) => void
   setPrintHeadings: (v: boolean) => void
+  setHeaderFooter: (patch: Partial<HeaderFooterSections>) => void
+  clearHeaderFooter: () => void
+  setPrintTitleRows: (range: string | null) => void
   reset: () => void
 }
 
@@ -61,6 +113,8 @@ const initialState: PrintSettingsState = {
   scalePct: 100,
   printGridlines: false,
   printHeadings: false,
+  headerFooter: EMPTY_HEADER_FOOTER,
+  printTitles: { rowsRange: null },
 }
 
 export const usePrintSettingsStore = create<PrintSettingsState & PrintSettingsActions>()(
@@ -96,6 +150,19 @@ export const usePrintSettingsStore = create<PrintSettingsState & PrintSettingsAc
 
       setPrintHeadings: (printHeadings) =>
         set({ printHeadings }, false, 'print/setPrintHeadings'),
+
+      setHeaderFooter: (patch) =>
+        set(
+          (state) => ({ headerFooter: { ...state.headerFooter, ...patch } }),
+          false,
+          'print/setHeaderFooter',
+        ),
+
+      clearHeaderFooter: () =>
+        set({ headerFooter: EMPTY_HEADER_FOOTER }, false, 'print/clearHeaderFooter'),
+
+      setPrintTitleRows: (range) =>
+        set({ printTitles: { rowsRange: range } }, false, 'print/setPrintTitleRows'),
 
       reset: () => set(initialState, false, 'print/reset'),
     }),

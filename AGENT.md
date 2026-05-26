@@ -1,24 +1,10 @@
 # Quiksheets Agent Context (legacy)
 
-> The canonical agent contract is now [`AGENTS.md`](AGENTS.md) (plural). This file is preserved as legacy context describing the SheetForge → Quiksheets rebrand baseline.
+> The canonical agent contract is now [`AGENTS.md`](AGENTS.md) (plural). This file is preserved as legacy context.
 
 ## Product
 
-Quiksheets (formerly SheetForge) is a spreadsheet web app built as a custom Excel/Google Sheets-like experience with AI helpers. The app owns its own toolbar, formula bar, sheet tabs, import/export, validation, sorting, filtering, and AI surfaces while using FortuneSheet only for the grid canvas/editor (target: behind SpreadsheetEngineAdapter, with Univer as primary engine — see R3).
-
-Current app folder:
-
-```text
-c:\Users\user\Documents\sheetforge\sheetforge
-```
-
-There is also a parent repo folder at:
-
-```text
-c:\Users\user\Documents\sheetforge
-```
-
-Most real app work is in the nested `sheetforge` folder.
+Quiksheets is a spreadsheet web app built as a custom Excel/Google Sheets-like experience with AI helpers. The app owns its own toolbar, formula bar, sheet tabs, import/export, validation, sorting, filtering, and AI surfaces while using FortuneSheet only for the grid canvas/editor (target: behind SpreadsheetEngineAdapter, with Univer as primary engine — see R3).
 
 ## Stack
 
@@ -275,13 +261,7 @@ sheetId:row:col
 
 ## Development Commands
 
-Use from:
-
-```text
-c:\Users\user\Documents\sheetforge\sheetforge
-```
-
-Commands:
+Run from the project root. Commands:
 
 ```bash
 npm.cmd run dev

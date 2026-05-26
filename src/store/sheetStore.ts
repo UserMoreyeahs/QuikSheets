@@ -162,6 +162,15 @@ interface SheetState {
   skipNextTabSync: boolean
   showFindReplace: boolean
   findResults: FoundCell[]
+  /**
+   * Monotonic counter bumped on every wholesale gridSheets replacement
+   * (setGridSheets / replaceGridSheets). FortuneSheet only hydrates from
+   * the `data` prop on initial mount — to force a remount when cell data
+   * changes wholesale (import, template load, undo of a bulk op) we
+   * include this counter in SpreadsheetGrid's React key so the grid
+   * remounts cleanly. See P0 fix for the Excel-import blank-screen bug.
+   */
+  hydrationVersion: number
 }
 
 interface SheetActions {
@@ -235,6 +244,7 @@ const initialState: SheetState = {
   skipNextTabSync: false,
   showFindReplace: false,
   findResults: [],
+  hydrationVersion: 0,
 }
 
 function getActiveSheetIndex(sheets: Sheet[]): number {
@@ -410,18 +420,22 @@ export const useSheetStore = create<SheetState & SheetActions>()(
 
         setGridSheets: (sheets) => {
           const nextSheets = cloneFortuneData(sheets)
-          set({
+          set((state) => ({
             gridSheets: nextSheets,
             activeSheetIndex: getActiveSheetIndex(nextSheets),
-          })
+            // Bump so SpreadsheetGrid remounts FortuneSheet — needed because
+            // FortuneSheet only hydrates from `data` on initial mount.
+            hydrationVersion: state.hydrationVersion + 1,
+          }))
         },
 
         replaceGridSheets: (sheets) => {
           const nextSheets = cloneFortuneData(sheets)
-          set({
+          set((state) => ({
             gridSheets: nextSheets,
             activeSheetIndex: getActiveSheetIndex(nextSheets),
-          })
+            hydrationVersion: state.hydrationVersion + 1,
+          }))
         },
 
         setGridInstance: (instance) => set({ gridInstance: instance }),
