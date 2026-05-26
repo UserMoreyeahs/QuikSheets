@@ -7,19 +7,21 @@
  * grouped by sheet + cell.  Each comment supports resolve / unresolve and
  * delete; clicking a header pings the user back to that cell (visual only).
  *
- * Standalone (localStorage) — see localCommentsStore.ts.
+ * Data path: src/lib/commentsApi.ts — Supabase when signed in, localStorage
+ * fallback otherwise. The panel re-fetches whenever `commentsUiStore.version`
+ * bumps (mutations call bump() so the list refreshes).
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { X, MessageSquare, CheckCircle2, RotateCcw, Trash2, AtSign } from 'lucide-react'
 import { toast } from 'sonner'
 import { useCommentsUiStore } from '@/features/comments/store/commentsUiStore'
 import {
-  listComments,
-  setCommentResolved,
+  loadComments,
+  resolveComment,
   deleteComment,
-  type LocalComment,
-} from '@/features/comments/storage/localCommentsStore'
+  type CommentRecord,
+} from '@/lib/commentsApi'
 import { useWorkbookStore } from '@/store/workbookStore'
 import { useSheetStore } from '@/store/sheetStore'
 import { cn } from '@/lib/utils'
@@ -33,12 +35,21 @@ export function CommentsPanel({ workbookId }: { workbookId: string }) {
   const setSelectedCell = useSheetStore((s) => s.setSelectedCell)
 
   const [filter, setFilter] = useState<'all' | 'open' | 'resolved'>('open')
+  const [all, setAll] = useState<CommentRecord[]>([])
 
-  // re-read whenever the version bumps
-  const all = useMemo<LocalComment[]>(() => {
-    void version
-    return listComments(workbookId)
-  }, [workbookId, version])
+  // Fetch whenever the panel opens, the workbook switches, or a mutation
+  // bumps the version. Skipping the fetch while closed keeps the auth
+  // round-trip off the main paint.
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    void loadComments(workbookId).then((list) => {
+      if (!cancelled) setAll(list)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [open, workbookId, version])
 
   const filtered = useMemo(
     () =>
@@ -49,7 +60,7 @@ export function CommentsPanel({ workbookId }: { workbookId: string }) {
   )
 
   const grouped = useMemo(() => {
-    const map = new Map<string, LocalComment[]>()
+    const map = new Map<string, CommentRecord[]>()
     for (const c of filtered) {
       const key = `${c.sheetId}::${c.cellAddress}`
       const list = map.get(key)
@@ -61,7 +72,7 @@ export function CommentsPanel({ workbookId }: { workbookId: string }) {
 
   if (!open) return null
 
-  function jumpTo(c: LocalComment) {
+  function jumpTo(c: CommentRecord) {
     // best-effort: parse "B3" → row/col, switch sheet if needed, then select.
     const m = c.cellAddress.match(/^([A-Z]+)(\d+)$/)
     if (!m) return
@@ -76,16 +87,36 @@ export function CommentsPanel({ workbookId }: { workbookId: string }) {
     setSelectedCell({ row: rowNum - 1, col, sheet: sheetIdx })
   }
 
-  function handleResolveToggle(c: LocalComment) {
-    setCommentResolved(workbookId, c.id, !c.resolved)
+  async function handleResolveToggle(c: CommentRecord) {
+    // Optimistic update so the toggle feels instant.
+    setAll((prev) =>
+      prev.map((x) => (x.id === c.id ? { ...x, resolved: !c.resolved } : x))
+    )
+    try {
+      await resolveComment(workbookId, c.id, !c.resolved)
+    } catch (err) {
+      toast.error('Could not update comment.')
+      // revert
+      setAll((prev) => prev.map((x) => (x.id === c.id ? { ...x, resolved: c.resolved } : x)))
+      // eslint-disable-next-line no-console
+      console.debug('[CommentsPanel] resolve failed:', err)
+    }
     bump()
   }
 
-  function handleDelete(c: LocalComment) {
+  async function handleDelete(c: CommentRecord) {
     if (!confirm('Delete this comment?')) return
-    deleteComment(workbookId, c.id)
+    // Optimistic remove.
+    setAll((prev) => prev.filter((x) => x.id !== c.id))
+    try {
+      await deleteComment(workbookId, c.id)
+      toast.success('Comment deleted.')
+    } catch (err) {
+      toast.error('Could not delete comment.')
+      // eslint-disable-next-line no-console
+      console.debug('[CommentsPanel] delete failed:', err)
+    }
     bump()
-    toast.success('Comment deleted.')
   }
 
   return (
@@ -175,7 +206,7 @@ export function CommentsPanel({ workbookId }: { workbookId: string }) {
                         <div className="mt-1.5 flex items-center justify-end gap-0.5">
                           <button
                             type="button"
-                            onClick={() => handleResolveToggle(c)}
+                            onClick={() => void handleResolveToggle(c)}
                             aria-label={c.resolved ? 'Reopen' : 'Resolve'}
                             title={c.resolved ? 'Reopen' : 'Resolve'}
                             className="rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
@@ -184,7 +215,7 @@ export function CommentsPanel({ workbookId }: { workbookId: string }) {
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleDelete(c)}
+                            onClick={() => void handleDelete(c)}
                             aria-label="Delete"
                             title="Delete"
                             className="rounded p-1 text-zinc-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-900/30"
