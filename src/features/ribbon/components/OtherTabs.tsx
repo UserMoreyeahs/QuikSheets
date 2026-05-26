@@ -73,6 +73,7 @@ import {
   StickyNote,
   Table as TableIcon,
   Tag,
+  Target,
   TextCursorInput,
   TrendingUp,
   Type,
@@ -685,6 +686,7 @@ interface DataTabProps {
   onDedupe?: (() => void) | undefined
   onCleanData?: (() => void) | undefined
   onForecast?: (() => void) | undefined
+  onGoalSeek?: (() => void) | undefined
 }
 
 export function DataTab(props: DataTabProps) {
@@ -754,7 +756,34 @@ export function DataTab(props: DataTabProps) {
 
       {/* Forecast */}
       <RibbonGroup label="Forecast">
-        <RibbonLargeButton label="What-If Analysis" icon={<Rocket className="text-violet-500" />}   onClick={ribbonStub('What-If Analysis')} showCaret />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              title="What-If Analysis"
+              className="flex h-[68px] w-[68px] flex-col items-center justify-center gap-1 rounded px-1 py-1 text-[11px] hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            >
+              <Rocket className="h-6 w-6 text-violet-500" />
+              <span className="flex items-center gap-0.5 text-center leading-tight">
+                What-If <ChevronDown className="h-3 w-3 text-zinc-400" />
+              </span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-48">
+            <DropdownMenuItem onSelect={() => props.onGoalSeek?.()}>
+              <Target className="mr-2 h-3.5 w-3.5 text-violet-500" />
+              Goal Seek…
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={ribbonStub('Scenario Manager')}>
+              <LayoutList className="mr-2 h-3.5 w-3.5 text-zinc-400" />
+              Scenario Manager…
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={ribbonStub('Data Table')}>
+              <TableIcon className="mr-2 h-3.5 w-3.5 text-zinc-400" />
+              Data Table…
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <RibbonLargeButton label="Forecast Sheet"   icon={<TrendingUp className="text-emerald-500" />} onClick={props.onForecast} />
       </RibbonGroup>
 

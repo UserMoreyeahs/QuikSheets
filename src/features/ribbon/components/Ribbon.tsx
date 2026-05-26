@@ -87,6 +87,7 @@ export interface RibbonHandlers {
   onInsertPivot?: () => void
   onCleanData?: () => void
   onForecast?: () => void
+  onGoalSeek?: () => void
   // ── Data ────────────────────────────────────────────
   onMapView: () => void
   onDedupe?: () => void
@@ -284,6 +285,7 @@ export function Ribbon({ handlers }: { handlers: RibbonHandlers }) {
             onDedupe={handlers.onDedupe}
             onCleanData={handlers.onCleanData}
             onForecast={handlers.onForecast}
+            onGoalSeek={handlers.onGoalSeek}
           />
         )}
         {activeTab === 'review' && (
