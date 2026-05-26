@@ -1,12 +1,16 @@
 /**
  * One-off migration runner for Quiksheets v2 Supabase setup.
  *
- * Reads docs/setup/quiksheets-v2-schema.sql and applies it to the
- * project via a direct Postgres connection (the Supabase REST API
- * doesn't expose arbitrary DDL).
+ * Applies a .sql file to the configured Supabase project via a direct
+ * Postgres connection (the Supabase REST API doesn't expose arbitrary
+ * DDL).
  *
  * Run from repo root:
- *   node docs/setup/apply-migration.js
+ *   node docs/setup/apply-migration.js                                  # default: v2 schema
+ *   node docs/setup/apply-migration.js docs/setup/migrations/forms_tables.sql
+ *
+ * The argument is the path to the .sql file to apply (absolute or
+ * relative to the repo root).
  *
  * Requires PG_HOST / PG_PASSWORD env vars (passed inline by the caller).
  */
@@ -17,7 +21,16 @@ const path = require('path')
 const { Client } = require('pg')
 
 async function main() {
-  const sqlPath = path.join(__dirname, 'quiksheets-v2-schema.sql')
+  const argPath = process.argv[2]
+  const sqlPath = argPath
+    ? (path.isAbsolute(argPath) ? argPath : path.join(process.cwd(), argPath))
+    : path.join(__dirname, 'quiksheets-v2-schema.sql')
+
+  if (!fs.existsSync(sqlPath)) {
+    console.error(`SQL file not found: ${sqlPath}`)
+    process.exit(1)
+  }
+  console.log(`Reading SQL from ${sqlPath}`)
   const sql = fs.readFileSync(sqlPath, 'utf8')
 
   // Supabase moved DB access to regional poolers in 2024. New projects
