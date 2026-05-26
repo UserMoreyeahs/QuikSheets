@@ -178,6 +178,11 @@ const FromWebDialog = dynamic(
   () => import('@/features/data/components/FromWebDialog').then((m) => ({ default: m.FromWebDialog })),
   { ssr: false },
 )
+const AdvancedFilterDialog = dynamic(
+  () => import('@/features/data/components/AdvancedFilterDialog').then((m) => ({ default: m.AdvancedFilterDialog })),
+  { ssr: false },
+)
+import { AdvancedFilterPill } from '@/features/data/components/AdvancedFilterPill'
 const PromptDialog = dynamic(
   () => import('@/components/PromptDialog').then((m) => ({ default: m.PromptDialog })),
   { ssr: false },
@@ -1590,6 +1595,8 @@ export default function SheetPage() {
 
       {nlFilterVisible && <NLFilterBar columnSchema={nlFilterColumnSchema} sampleData={nlFilterSampleData} />}
 
+      <ErrorBoundary silent><AdvancedFilterPill /></ErrorBoundary>
+
       <div className="relative flex-1 overflow-hidden">
         <SpreadsheetGrid
           workbookId={workbookId}
@@ -1711,6 +1718,7 @@ export default function SheetPage() {
       <ErrorBoundary><ThemePicker /></ErrorBoundary>
       <ErrorBoundary><PrintTitlesDialog /></ErrorBoundary>
       <ErrorBoundary><FromWebDialog /></ErrorBoundary>
+      <ErrorBoundary><AdvancedFilterDialog /></ErrorBoundary>
       <ErrorBoundary><PromptDialog /></ErrorBoundary>
       <ErrorBoundary><FormBuilder workbookId={workbookId} /></ErrorBoundary>
       <ErrorBoundary><PivotBuilder /></ErrorBoundary>
