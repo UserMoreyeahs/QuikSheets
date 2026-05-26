@@ -177,6 +177,10 @@ const FromWebDialog = dynamic(
   () => import('@/features/data/components/FromWebDialog').then((m) => ({ default: m.FromWebDialog })),
   { ssr: false },
 )
+const PromptDialog = dynamic(
+  () => import('@/components/PromptDialog').then((m) => ({ default: m.PromptDialog })),
+  { ssr: false },
+)
 import { useTextToColsStore } from '@/features/data/store/textToColsStore'
 const FormBuilder = dynamic(
   () => import('@/features/forms/components/FormBuilder').then((m) => ({ default: m.FormBuilder })),
@@ -1656,6 +1660,7 @@ export default function SheetPage() {
       <ErrorBoundary><ThemePicker /></ErrorBoundary>
       <ErrorBoundary><PrintTitlesDialog /></ErrorBoundary>
       <ErrorBoundary><FromWebDialog /></ErrorBoundary>
+      <ErrorBoundary><PromptDialog /></ErrorBoundary>
       <ErrorBoundary><FormBuilder workbookId={workbookId} /></ErrorBoundary>
       <ErrorBoundary><PivotBuilder /></ErrorBoundary>
       <ErrorBoundary><ForecastPanel /></ErrorBoundary>

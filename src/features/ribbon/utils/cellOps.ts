@@ -11,6 +11,7 @@
 import { toast } from 'sonner'
 import { useSheetStore } from '@/store/sheetStore'
 import { useWorkbookStore } from '@/store/workbookStore'
+import { promptDialog } from '@/components/PromptDialog'
 import type { WorkbookInstance } from '@fortune-sheet/react'
 
 /** Read selection rows or fall back to the active cell's row. */
@@ -846,7 +847,7 @@ export function hideActiveSheet(): void {
   toast.success('Sheet hidden')
 }
 
-export function unhideSheetPicker(): void {
+export async function unhideSheetPicker(): Promise<void> {
   const wb = useWorkbookStore.getState()
   const hidden = wb.sheets.filter((s) => s.isHidden)
   if (hidden.length === 0) {
@@ -854,7 +855,12 @@ export function unhideSheetPicker(): void {
     return
   }
   const labels = hidden.map((s, i) => `${i + 1}. ${s.name}`).join('\n')
-  const choice = window.prompt(`Unhide which sheet?\n${labels}`, '1')
+  const choice = await promptDialog({
+    title: 'Unhide sheet',
+    message: `Type the number of the sheet to unhide:\n${labels}`,
+    defaultValue: '1',
+    inputType: 'number',
+  })
   if (!choice) return
   const idx = parseInt(choice, 10) - 1
   const target = hidden[idx]
@@ -871,7 +877,7 @@ export function unhideSheetPicker(): void {
 // 2-prompt flow: first the URL (or cell ref / email), then optional display
 // text. Empty display text falls back to the URL.
 
-export function insertHyperlink(): void {
+export async function insertHyperlink(): Promise<void> {
   const inst = getInstance()
   const { selectedCell } = useSheetStore.getState()
   if (!inst || !selectedCell) {
@@ -879,10 +885,12 @@ export function insertHyperlink(): void {
     return
   }
 
-  const url = window.prompt(
-    'Hyperlink address (URL, cell reference like "Sheet1!A5", or email "mailto:foo@bar.com"):',
-    'https://',
-  )
+  const url = await promptDialog({
+    title: 'Hyperlink address',
+    message: 'A URL (https://…), a cell reference like Sheet1!A5, or mailto:foo@bar.com.',
+    defaultValue: 'https://',
+    inputType: 'url',
+  })
   if (!url) return
 
   // Read existing display text or fall back to a sensible default
@@ -893,7 +901,11 @@ export function insertHyperlink(): void {
     | { v?: unknown; m?: unknown }
     | undefined
   const currentText = String(cell?.v ?? '')
-  const text = window.prompt('Display text (leave blank to use the URL):', currentText || url)
+  const text = await promptDialog({
+    title: 'Display text',
+    message: 'Leave blank to use the URL itself as the label.',
+    defaultValue: currentText || url,
+  })
   if (text === null) return
 
   const displayText = text.trim() === '' ? url : text
@@ -1040,7 +1052,7 @@ export function fillRight(): void {
  * a 3-prompt flow (start value, step, stop). Generates an arithmetic series
  * down or right depending on selection orientation.
  */
-export function fillSeries(): void {
+export async function fillSeries(): Promise<void> {
   const { selectedCell, selectedRange, gridInstance } = useSheetStore.getState()
   if (!selectedCell || !selectedRange || !gridInstance) {
     toast.message('Select a range first')
@@ -1051,9 +1063,18 @@ export function fillSeries(): void {
   const sc = Math.min(selectedRange.start.col, selectedRange.end.col)
   const ec = Math.max(selectedRange.start.col, selectedRange.end.col)
 
-  const startInput = window.prompt('Start value:', '1')
+  const startInput = await promptDialog({
+    title: 'Fill series — start value',
+    defaultValue: '1',
+    inputType: 'number',
+  })
   if (startInput === null) return
-  const stepInput = window.prompt('Step:', '1')
+  const stepInput = await promptDialog({
+    title: 'Fill series — step',
+    message: 'Each subsequent cell increments by this amount.',
+    defaultValue: '1',
+    inputType: 'number',
+  })
   if (stepInput === null) return
   const start = Number(startInput)
   const step = Number(stepInput)
@@ -1407,7 +1428,7 @@ export function openNameManager(): void {
 /**
  * Define a new name from the current selection (prompt-based).
  */
-export function defineNameFromSelection(workbookId: string): void {
+export async function defineNameFromSelection(workbookId: string): Promise<void> {
   const { selectedCell, selectedRange } = useSheetStore.getState()
   if (!selectedCell) {
     toast.error('Select a range first')
@@ -1419,7 +1440,11 @@ export function defineNameFromSelection(workbookId: string): void {
   const ec = selectedRange ? Math.max(selectedRange.start.col, selectedRange.end.col) : selectedCell.col
   const range = `${colIndexToLetter(sc)}${sr + 1}:${colIndexToLetter(ec)}${er + 1}`
 
-  const name = window.prompt('Define a name for this range:', '')
+  const name = await promptDialog({
+    title: 'Define a name for this range',
+    message: `Range: ${range}. Use letters, digits, and underscores (no spaces).`,
+    placeholder: 'e.g. TotalRevenue',
+  })
   if (!name) return
   const v = validateNamedRangeName(name)
   if (!v.ok) {
@@ -1441,14 +1466,19 @@ export function defineNameFromSelection(workbookId: string): void {
  * range substitution — the foundation is here for a future iter to plumb that
  * through the evaluator.
  */
-export function insertNameIntoFormula(workbookId: string): void {
+export async function insertNameIntoFormula(workbookId: string): Promise<void> {
   const names = useNamedRangesStore.getState().getNamesForWorkbook(workbookId)
   if (names.length === 0) {
     toast.message('No defined names. Open Name Manager (Ctrl+F3) to add one.')
     return
   }
   const labels = names.map((n, i) => `${i + 1}. ${n.name} = ${n.range}`).join('\n')
-  const choice = window.prompt(`Pick a name:\n${labels}`, '1')
+  const choice = await promptDialog({
+    title: 'Insert a named range',
+    message: `Type the number of the name to insert:\n${labels}`,
+    defaultValue: '1',
+    inputType: 'number',
+  })
   if (!choice) return
   const idx = parseInt(choice, 10) - 1
   const target = names[idx]
@@ -1531,15 +1561,32 @@ export function setOrientationPreset(orientation: Orientation): void {
   toast.success(`Orientation: ${orientation === 'portrait' ? 'Portrait' : 'Landscape'}`)
 }
 
-export function setMarginPreset(preset: MarginPreset): void {
+export async function setMarginPreset(preset: MarginPreset): Promise<void> {
   if (preset === 'custom') {
-    const top = window.prompt('Top margin (inches):', '0.75')
+    // 4 sequential prompts. Cleaner than a 4-input modal for a rare action.
+    const top = await promptDialog({
+      title: 'Top margin (inches)',
+      defaultValue: '0.75',
+      inputType: 'number',
+    })
     if (top === null) return
-    const right = window.prompt('Right margin (inches):', '0.7')
+    const right = await promptDialog({
+      title: 'Right margin (inches)',
+      defaultValue: '0.7',
+      inputType: 'number',
+    })
     if (right === null) return
-    const bottom = window.prompt('Bottom margin (inches):', '0.75')
+    const bottom = await promptDialog({
+      title: 'Bottom margin (inches)',
+      defaultValue: '0.75',
+      inputType: 'number',
+    })
     if (bottom === null) return
-    const left = window.prompt('Left margin (inches):', '0.7')
+    const left = await promptDialog({
+      title: 'Left margin (inches)',
+      defaultValue: '0.7',
+      inputType: 'number',
+    })
     if (left === null) return
     const margins = {
       top: parseFloat(top),
@@ -1715,13 +1762,17 @@ export function installHyperlinkFollow(): void {
 
 // ─── Go To (cell address navigation) ────────────────────────────────────
 
-export function goToDialog(): void {
+export async function goToDialog(): Promise<void> {
   const inst = getInstance()
   if (!inst) {
     toast.error('Grid not ready')
     return
   }
-  const ref = window.prompt('Go to cell or range (e.g., A1, B5:D10):', 'A1')
+  const ref = await promptDialog({
+    title: 'Go to cell or range',
+    message: 'Examples: A1, B5:D10',
+    defaultValue: 'A1',
+  })
   if (!ref) return
   // Parse: support both single cell (A1) and range (A1:C5)
   const m = ref.trim().toUpperCase().match(/^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/)

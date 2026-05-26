@@ -53,9 +53,14 @@ export function CellsGroup(props: CellsGroupProps) {
   }
 
   // ── Row height / column width ──────────────────────────────────────────
-  function setRowHeight() {
+  async function setRowHeight() {
     if (!gridInstance) { toast.error('Grid not ready'); return }
-    const input = window.prompt('Row height (pixels):', '21')
+    const { promptDialog } = await import('@/components/PromptDialog')
+    const input = await promptDialog({
+      title: 'Row height (pixels)',
+      defaultValue: '21',
+      inputType: 'number',
+    })
     if (!input) return
     const h = parseInt(input, 10)
     if (isNaN(h) || h <= 0) { toast.error('Enter a valid number'); return }
@@ -88,9 +93,14 @@ export function CellsGroup(props: CellsGroupProps) {
     }
   }
 
-  function setColumnWidth() {
+  async function setColumnWidth() {
     if (!gridInstance) { toast.error('Grid not ready'); return }
-    const input = window.prompt('Column width (pixels):', '74')
+    const { promptDialog } = await import('@/components/PromptDialog')
+    const input = await promptDialog({
+      title: 'Column width (pixels)',
+      defaultValue: '74',
+      inputType: 'number',
+    })
     if (!input) return
     const w = parseInt(input, 10)
     if (isNaN(w) || w <= 0) { toast.error('Enter a valid number'); return }
@@ -175,9 +185,14 @@ export function CellsGroup(props: CellsGroupProps) {
   }
 
   // ── Sheet operations ───────────────────────────────────────────────────
-  function renameActiveSheet() {
+  async function renameActiveSheet() {
     const current = sheets.find((s) => s.id === activeSheetId)
-    const newName = window.prompt('New sheet name:', current?.name ?? 'Sheet')
+    const { promptDialog } = await import('@/components/PromptDialog')
+    const newName = await promptDialog({
+      title: 'Rename sheet',
+      defaultValue: current?.name ?? 'Sheet',
+      placeholder: 'New sheet name',
+    })
     if (!newName || newName.trim() === '') return
     renameSheet(activeSheetId, newName.trim())
     toast.success(`Sheet renamed to "${newName.trim()}"`)

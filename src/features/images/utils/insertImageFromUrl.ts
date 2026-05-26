@@ -49,7 +49,16 @@ function probeNaturalSize(src: string): Promise<{ w: number; h: number }> {
  * the load timed out) so callers can chain follow-up actions.
  */
 export async function insertImageFromUrl(url?: string): Promise<void> {
-  const raw = url ?? window.prompt('Image URL (HTTPS, or a data: URL):', 'https://')
+  let raw = url
+  if (!raw) {
+    const { promptDialog } = await import('@/components/PromptDialog')
+    raw = (await promptDialog({
+      title: 'Image URL',
+      message: 'Use an HTTPS URL pointing at a public image (PNG / JPG / GIF / SVG), or paste a data: URL.',
+      defaultValue: 'https://',
+      inputType: 'url',
+    })) ?? undefined
+  }
   if (!raw) return
   const trimmed = raw.trim()
   if (!trimmed) return
