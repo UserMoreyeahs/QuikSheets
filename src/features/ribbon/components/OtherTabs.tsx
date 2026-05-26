@@ -685,6 +685,8 @@ interface DataTabProps {
   onDedupe?: (() => void) | undefined
   onCleanData?: (() => void) | undefined
   onForecast?: (() => void) | undefined
+  onGroupRows?: (() => void) | undefined
+  onUngroupRows?: (() => void) | undefined
 }
 
 export function DataTab(props: DataTabProps) {
@@ -761,8 +763,8 @@ export function DataTab(props: DataTabProps) {
       {/* Outline */}
       <RibbonGroup label="Outline" className="border-r-0">
         <div className="flex flex-col gap-0.5">
-          <RibbonButton label="Group"    icon={<Group className="h-3.5 w-3.5" />}     onClick={ribbonStub('Group')} />
-          <RibbonButton label="Ungroup"  icon={<Ungroup className="h-3.5 w-3.5" />}    onClick={ribbonStub('Ungroup')} />
+          <RibbonButton label="Group"    icon={<Group className="h-3.5 w-3.5" />}     onClick={props.onGroupRows ?? ribbonStub('Group')} />
+          <RibbonButton label="Ungroup"  icon={<Ungroup className="h-3.5 w-3.5" />}    onClick={props.onUngroupRows ?? ribbonStub('Ungroup')} />
           <RibbonButton label="Subtotal" icon={<Sigma className="h-3.5 w-3.5" />}       onClick={ribbonStub('Subtotal')} />
         </div>
       </RibbonGroup>

@@ -34,6 +34,7 @@ import { useFormattingShortcuts } from '@/features/toolbar'
 import { useExcelKeyboardShortcuts } from '@/features/toolbar/hooks/useExcelKeyboardShortcuts'
 import { Ribbon } from '@/features/ribbon/components/Ribbon'
 import { StatusBar } from '@/features/ribbon/components/StatusBar'
+import { useOutlineStore } from '@/features/outline/store/outlineStore'
 import { SheetTabsBar } from '@/features/sheets'
 import { SortPanel } from '@/features/grid/components/SortPanel'
 import { FilterPanel } from '@/features/grid/components/FilterPanel'
@@ -1278,6 +1279,48 @@ export default function SheetPage() {
     toast.success(`Removed ${duplicateCount} duplicate row${duplicateCount === 1 ? '' : 's'}`)
   }, [gridSheets, activeSheetId, replaceGridSheets])
 
+  // ── Outline (Group / Ungroup rows) ───────────────────────────────────────
+  // Group: adds a row group and immediately collapses it so the user sees
+  // the hide effect (we don't render gutter markers yet — the button is the
+  // only collapse trigger). Ungroup: removes the innermost group covering
+  // the current selection and restores its hidden rows.
+  const handleGroupRows = useCallback(() => {
+    if (!selectedRange) {
+      toast.message('Select two or more rows to group')
+      return
+    }
+    const startRow = Math.min(selectedRange.start.row, selectedRange.end.row)
+    const endRow = Math.max(selectedRange.start.row, selectedRange.end.row)
+    const outline = useOutlineStore.getState()
+    const result = outline.addGroup(activeSheetId, startRow, endRow)
+    if (!result.ok) {
+      toast.error(result.reason)
+      return
+    }
+    outline.toggleCollapse(activeSheetId, result.group.id)
+    const hidden = Array.from(useOutlineStore.getState().getHiddenRows(activeSheetId))
+    useSheetStore.getState().setOutlineHiddenRows(activeSheetId, hidden)
+    toast.success(`Grouped rows ${startRow + 1}-${endRow + 1}`)
+  }, [selectedRange, activeSheetId])
+
+  const handleUngroupRows = useCallback(() => {
+    if (!selectedRange) {
+      toast.message('Select rows in an existing group to ungroup')
+      return
+    }
+    const startRow = Math.min(selectedRange.start.row, selectedRange.end.row)
+    const endRow = Math.max(selectedRange.start.row, selectedRange.end.row)
+    const outline = useOutlineStore.getState()
+    const removed = outline.removeGroup(activeSheetId, startRow, endRow)
+    if (!removed) {
+      toast.message('No group covers this selection')
+      return
+    }
+    const hidden = Array.from(useOutlineStore.getState().getHiddenRows(activeSheetId))
+    useSheetStore.getState().setOutlineHiddenRows(activeSheetId, hidden)
+    toast.success(`Ungrouped rows ${removed.startRow + 1}-${removed.endRow + 1}`)
+  }, [selectedRange, activeSheetId])
+
   // ── Row Summarizer shortcut ──────────────────────────────────────────────
   const handleRowSummarizer = useCallback(() => {
     if (!selectedRange) {
@@ -1518,6 +1561,8 @@ export default function SheetPage() {
             // Formulas / Data
             onMapView: toggleMap,
             onDedupe: handleDedupe,
+            onGroupRows: handleGroupRows,
+            onUngroupRows: handleUngroupRows,
             // Review / Collab
             onComments: openCommentsPanel,
             onShareLink: openShareDialog,
