@@ -1,7 +1,7 @@
 /**
  * One-off migration runner for Quiksheets Supabase setup.
  *
- * Reads a .sql file and applies it to the project via a direct
+ * Applies a .sql file to the configured Supabase project via a direct
  * Postgres connection (the Supabase REST API doesn't expose arbitrary
  * DDL).
  *
@@ -9,8 +9,9 @@
  *   # Defaults to the full v2 schema:
  *   node docs/setup/apply-migration.js
  *
- *   # Or pass a specific migration file:
+ *   # Or pass a specific migration file (absolute or relative to root):
  *   node docs/setup/apply-migration.js docs/setup/migrations/comments_table.sql
+ *   node docs/setup/apply-migration.js docs/setup/migrations/forms_tables.sql
  *
  * Prereqs:
  *   - PG_PASSWORD env var (the Supabase project's DB password).
@@ -28,10 +29,15 @@ const { Client } = require('pg')
 async function main() {
   // Optional first CLI arg = path to a SQL file. Defaults to the full
   // v2 schema so the existing bootstrap invocation keeps working.
-  const arg = process.argv[2]
-  const sqlPath = arg
-    ? path.isAbsolute(arg) ? arg : path.join(process.cwd(), arg)
+  const argPath = process.argv[2]
+  const sqlPath = argPath
+    ? (path.isAbsolute(argPath) ? argPath : path.join(process.cwd(), argPath))
     : path.join(__dirname, 'quiksheets-v2-schema.sql')
+
+  if (!fs.existsSync(sqlPath)) {
+    console.error(`SQL file not found: ${sqlPath}`)
+    process.exit(1)
+  }
   const sql = fs.readFileSync(sqlPath, 'utf8')
   console.log(`SQL file: ${sqlPath}`)
 

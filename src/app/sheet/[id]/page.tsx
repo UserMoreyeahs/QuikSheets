@@ -712,14 +712,19 @@ export default function SheetPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Merge pending form submissions into the workbook on mount
+  // Merge pending form submissions into the workbook on mount.
+  // First runs the one-time localStorage → Supabase migration so any
+  // legacy form definitions land in the proper store; then walks every
+  // form for this workbook and drains its pending submissions queue
+  // into the sheet body.
   useEffect(() => {
     void (async () => {
-      const { listFormsForWorkbook, takeSubmissions } = await import(
-        '@/features/forms/storage/localFormStore'
+      const { loadForms, takePendingSubmissions, migrateLocalFormsToSupabase } = await import(
+        '@/lib/formsApi'
       )
       const { cloneSheetWithData, getSheetMatrix } = await import('@/lib/fortuneSheet')
-      const forms = listFormsForWorkbook(workbookId)
+      await migrateLocalFormsToSupabase()
+      const forms = await loadForms(workbookId)
       if (forms.length === 0) return
 
       const state = useSheetStore.getState()
@@ -727,7 +732,8 @@ export default function SheetPage() {
       let didChange = false
 
       for (const form of forms) {
-        const subs = takeSubmissions(form.id)
+        if (!form.id) continue
+        const subs = takePendingSubmissions(form.id)
         if (subs.length === 0) continue
         const sheetIdx = nextSheets.findIndex((s) => s.id === form.sheetId)
         if (sheetIdx < 0) continue

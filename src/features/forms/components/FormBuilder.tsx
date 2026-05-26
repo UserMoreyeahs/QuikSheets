@@ -23,10 +23,10 @@ import { toast } from 'sonner'
 import { useFormBuilderStore } from '@/features/forms/store/formBuilderStore'
 import { useSheetStore } from '@/store/sheetStore'
 import { useWorkbookStore } from '@/store/workbookStore'
-import { saveForm, listFormsForWorkbook, deleteForm } from '@/features/forms/storage/localFormStore'
-import { buildFieldsFromHeaders, generateSlug } from '@/features/forms/utils/formBuilder'
+import { createForm, loadForms, deleteForm } from '@/lib/formsApi'
+import { buildFieldsFromHeaders } from '@/features/forms/utils/formBuilder'
 import { getSheetMatrix, getCellDisplayValue } from '@/lib/fortuneSheet'
-import type { FormField, FormFieldKind } from '@/features/forms/types'
+import type { FormDefinition, FormField, FormFieldKind } from '@/features/forms/types'
 import { cn } from '@/lib/utils'
 
 const FIELD_KINDS: FormFieldKind[] = [
@@ -45,14 +45,15 @@ export function FormBuilder({ workbookId }: { workbookId: string }) {
   const [fields, setFields] = useState<FormField[]>([])
   const [savedFormId, setSavedFormId] = useState<string | null>(null)
   const [savedSlug, setSavedSlug] = useState<string | null>(null)
-  const [existingForms, setExistingForms] = useState<ReturnType<typeof listFormsForWorkbook>>([])
+  const [existingForms, setExistingForms] = useState<FormDefinition[]>([])
+  const [saving, setSaving] = useState(false)
 
   // refresh existing forms when modal opens
   useEffect(() => {
     if (!open) return
-    setExistingForms(listFormsForWorkbook(workbookId))
     setSavedFormId(null)
     setSavedSlug(null)
+    void loadForms(workbookId).then((forms) => setExistingForms(forms))
 
     if (!activeSheet) return
     const matrix = getSheetMatrix(activeSheet)
@@ -102,7 +103,7 @@ export function FormBuilder({ workbookId }: { workbookId: string }) {
     ])
   }
 
-  function save() {
+  async function save() {
     if (fields.length === 0) {
       toast.error('Add at least one field.')
       return
@@ -115,28 +116,33 @@ export function FormBuilder({ workbookId }: { workbookId: string }) {
       toast.error('No active sheet.')
       return
     }
-    const slug = generateSlug(name)
-    const stored = saveForm({
-      workbookId,
-      sheetId: activeSheetId,
-      name: name.trim(),
-      slug,
-      isPublic: true,
-      fields,
-    })
-    setSavedFormId(stored.id)
-    setSavedSlug(stored.slug)
-    setExistingForms(listFormsForWorkbook(workbookId))
-    toast.success('Form saved.')
+    setSaving(true)
+    try {
+      const stored = await createForm({
+        workbookId,
+        sheetId: activeSheetId,
+        name: name.trim(),
+        fields,
+      })
+      if (stored.id) setSavedFormId(stored.id)
+      setSavedSlug(stored.slug)
+      const forms = await loadForms(workbookId)
+      setExistingForms(forms)
+      toast.success('Form saved.')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not save form.')
+    } finally {
+      setSaving(false)
+    }
   }
 
-  function publicUrl(id: string): string {
-    if (typeof window === 'undefined') return `/form/${id}`
-    return `${window.location.origin}/form/${id}`
+  function publicUrl(slug: string): string {
+    if (typeof window === 'undefined') return `/forms/${slug}`
+    return `${window.location.origin}/forms/${slug}`
   }
 
-  function copyUrl(id: string) {
-    const url = publicUrl(id)
+  function copyUrl(slug: string) {
+    const url = publicUrl(slug)
     navigator.clipboard.writeText(url).then(
       () => toast.success('Link copied.'),
       () => toast.error('Could not copy link.')
@@ -260,18 +266,18 @@ export function FormBuilder({ workbookId }: { workbookId: string }) {
                     Form saved
                   </div>
                   <div className="mt-1 break-all font-mono text-[10px] text-emerald-800 dark:text-emerald-200">
-                    {publicUrl(savedFormId)}
+                    {publicUrl(savedSlug)}
                   </div>
                   <div className="mt-2 flex gap-1">
                     <button
                       type="button"
-                      onClick={() => copyUrl(savedFormId)}
+                      onClick={() => copyUrl(savedSlug)}
                       className="flex flex-1 items-center justify-center gap-1 rounded bg-emerald-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-emerald-700"
                     >
                       <Copy className="h-3 w-3" /> Copy link
                     </button>
                     <a
-                      href={publicUrl(savedFormId)}
+                      href={publicUrl(savedSlug)}
                       target="_blank"
                       rel="noreferrer"
                       className="flex flex-1 items-center justify-center gap-1 rounded border border-emerald-600 px-2 py-1 text-[11px] font-medium text-emerald-700 hover:bg-emerald-100 dark:text-emerald-300 dark:hover:bg-emerald-900/40"
@@ -291,9 +297,9 @@ export function FormBuilder({ workbookId }: { workbookId: string }) {
                 ) : (
                   <ul className="space-y-1">
                     {existingForms.map((f) => (
-                      <li key={f.id} className="group flex items-center justify-between rounded-md border border-zinc-200 px-2 py-1 dark:border-zinc-700">
+                      <li key={f.id ?? f.slug} className="group flex items-center justify-between rounded-md border border-zinc-200 px-2 py-1 dark:border-zinc-700">
                         <a
-                          href={publicUrl(f.id)}
+                          href={publicUrl(f.slug)}
                           target="_blank"
                           rel="noreferrer"
                           className="flex-1 truncate text-[12px] text-blue-600 hover:underline dark:text-blue-400"
@@ -303,7 +309,7 @@ export function FormBuilder({ workbookId }: { workbookId: string }) {
                         <div className="flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                           <button
                             type="button"
-                            onClick={() => copyUrl(f.id)}
+                            onClick={() => copyUrl(f.slug)}
                             aria-label="Copy link"
                             className="rounded p-1 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-700"
                           >
@@ -311,10 +317,12 @@ export function FormBuilder({ workbookId }: { workbookId: string }) {
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
+                            onClick={async () => {
+                              if (!f.id) return
                               if (confirm(`Delete form "${f.name}"?`)) {
-                                deleteForm(f.id)
-                                setExistingForms(listFormsForWorkbook(workbookId))
+                                await deleteForm(f.id)
+                                const forms = await loadForms(workbookId)
+                                setExistingForms(forms)
                                 if (savedFormId === f.id) {
                                   setSavedFormId(null)
                                   setSavedSlug(null)
@@ -348,11 +356,11 @@ export function FormBuilder({ workbookId }: { workbookId: string }) {
           </button>
           <button
             type="button"
-            onClick={save}
-            disabled={fields.length === 0 || !name.trim()}
+            onClick={() => void save()}
+            disabled={fields.length === 0 || !name.trim() || saving}
             className="rounded-md bg-blue-600 px-3 py-1.5 text-[12px] font-semibold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {savedFormId ? 'Save again' : 'Save & generate link'}
+            {saving ? 'Saving…' : savedFormId ? 'Save again' : 'Save & generate link'}
           </button>
         </div>
       </div>

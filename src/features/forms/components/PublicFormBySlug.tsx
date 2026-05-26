@@ -1,21 +1,28 @@
 'use client'
 
 /**
- * PublicFormLocal — legacy /form/[id] entry point.
+ * PublicFormBySlug
+ * --------------------------------------------------------------------------
+ * Renders + submits a Quiksheets form by its public slug. Replaces the
+ * older PublicFormLocal (localStorage) and the server-action-driven
+ * PublicFormClient (which required a service-role key on the public
+ * route).
  *
- * Forms used to be stored exclusively in localStorage and the link
- * looked like /form/<uuid>. After the move to Supabase, new forms are
- * served from /forms/<slug>, but old links still need to resolve. This
- * component looks up the form via `getFormById` (which checks Supabase
- * first, then falls back to localStorage), and submits via the same
- * `submitForm(slug, …)` path as the new public route.
+ * Read path:  getFormBySlug — anon Supabase client; uses the
+ *             "public read by slug" RLS policy.
+ * Submit:     submitForm     — anon Supabase client; uses the
+ *             "anyone can submit" RLS policy.
+ *
+ * Submissions ALSO write to a local queue keyed by the form id, so when
+ * the workbook owner opens /sheet/[id] next the merge-into-grid step
+ * picks them up (existing T019 behaviour).
  */
 
 import { useEffect, useState, useTransition } from 'react'
-import { getFormById, submitForm } from '@/lib/formsApi'
+import { getFormBySlug, submitForm } from '@/lib/formsApi'
 import type { FormDefinition } from '@/features/forms/types'
 
-export function PublicFormLocal({ formId }: { formId: string }) {
+export function PublicFormBySlug({ slug }: { slug: string }) {
   const [form, setForm] = useState<FormDefinition | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -24,7 +31,7 @@ export function PublicFormLocal({ formId }: { formId: string }) {
 
   useEffect(() => {
     let cancelled = false
-    void getFormById(formId).then((result) => {
+    void getFormBySlug(slug).then((result) => {
       if (cancelled) return
       setForm(result)
       setLoaded(true)
@@ -32,12 +39,10 @@ export function PublicFormLocal({ formId }: { formId: string }) {
     return () => {
       cancelled = true
     }
-  }, [formId])
+  }, [slug])
 
   if (!loaded) {
-    return (
-      <div className="text-center text-sm text-zinc-500">Loading…</div>
-    )
+    return <div className="text-center text-sm text-zinc-500">Loading…</div>
   }
 
   if (!form) {
@@ -84,7 +89,6 @@ export function PublicFormLocal({ formId }: { formId: string }) {
               else if (field.kind === 'checkbox') values[field.id] = data.get(field.id) === 'on'
               else values[field.id] = String(raw ?? '')
             }
-            // basic required-field validation
             for (const field of form.fields) {
               if (field.required && (values[field.id] === '' || values[field.id] === undefined)) {
                 setError(`Please fill in "${field.label}".`)
@@ -101,7 +105,7 @@ export function PublicFormLocal({ formId }: { formId: string }) {
                 }
                 return undefined
               })()
-              const result = await submitForm(form.slug, values, submitterEmail)
+              const result = await submitForm(slug, values, submitterEmail)
               if (!result.ok) {
                 setError(result.error ?? 'Submission failed. Please try again.')
               } else {

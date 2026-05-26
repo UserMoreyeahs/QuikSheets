@@ -57,8 +57,8 @@ export async function createFormAction(input: z.input<typeof createSchema>) {
       sheet_id: parsed.data.sheetId,
       name: parsed.data.name,
       slug: parsed.data.slug,
-      is_public: parsed.data.isPublic,
-      fields_json: parsed.data.fields,
+      accepts_submissions: parsed.data.isPublic,
+      fields: parsed.data.fields,
       created_by: user.id,
     })
     .select('id, slug')
@@ -74,7 +74,7 @@ export async function getFormBySlug(slug: string): Promise<FormDefinition | null
   if (!service) return null
   const { data, error } = await service
     .from('forms')
-    .select('id, workbook_id, sheet_id, name, slug, is_public, fields_json')
+    .select('id, workbook_id, sheet_id, name, slug, accepts_submissions, fields')
     .eq('slug', slug)
     .maybeSingle()
   if (error || !data) return null
@@ -84,8 +84,8 @@ export async function getFormBySlug(slug: string): Promise<FormDefinition | null
     sheetId: data.sheet_id as string,
     name: data.name as string,
     slug: data.slug as string,
-    isPublic: Boolean(data.is_public),
-    fields: data.fields_json as FormField[],
+    isPublic: Boolean(data.accepts_submissions),
+    fields: data.fields as FormField[],
   }
 }
 
@@ -103,48 +103,19 @@ export async function submitFormAction(input: z.input<typeof submitSchema>) {
 
   const { data: form, error: formErr } = await service
     .from('forms')
-    .select('id, workbook_id, sheet_id, fields_json, is_public')
+    .select('id, workbook_id, sheet_id, fields, accepts_submissions')
     .eq('slug', parsed.data.slug)
     .maybeSingle()
   if (formErr || !form) return { ok: false as const, error: 'Form not found' }
-  if (!form.is_public) return { ok: false as const, error: 'Form is not public' }
+  if (!form.accepts_submissions) return { ok: false as const, error: 'Form is not accepting submissions' }
 
   // Insert submission record.
   const { data: submission, error: subErr } = await service
     .from('form_submissions')
-    .insert({ form_id: form.id, submission_json: parsed.data.values })
+    .insert({ form_id: form.id, values: parsed.data.values })
     .select('id')
     .single()
   if (subErr || !submission) return { ok: false as const, error: subErr?.message ?? 'Submission failed' }
 
-  // Determine the next row index (max + 1) for the target sheet, then write
-  // one row of cells.
-  const { data: lastCell } = await service
-    .from('cells')
-    .select('row_index')
-    .eq('sheet_id', form.sheet_id)
-    .order('row_index', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  const nextRow = ((lastCell?.row_index as number | undefined) ?? 0) + 1
-
-  const fields = (form.fields_json as FormField[]) ?? []
-  const cellsToWrite = fields.map((field) => {
-    const raw = parsed.data.values[field.id]
-    return {
-      workbook_id: form.workbook_id,
-      sheet_id: form.sheet_id,
-      row_index: nextRow,
-      column_index: field.columnIndex,
-      address: '', // computed by db trigger or downstream
-      raw_value: raw === undefined || raw === null ? null : String(raw),
-    }
-  })
-  if (cellsToWrite.length > 0) {
-    await service.from('cells').upsert(cellsToWrite, {
-      onConflict: 'sheet_id,row_index,column_index',
-    })
-  }
-
-  return { ok: true as const, rowId: nextRow }
+  return { ok: true as const, id: submission.id as string }
 }
