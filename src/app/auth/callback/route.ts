@@ -16,7 +16,7 @@
  *   3. Google Cloud Console → APIs & Services → Credentials → OAuth 2.0
  *      Client → "Authorized redirect URIs" must include the Supabase
  *      callback URL shown in the Supabase provider config — usually:
- *        https://mrvzwwfnimqufendjfhj.supabase.co/auth/v1/callback
+ *        https://anfvgmlgsthhdhwncxzt.supabase.co/auth/v1/callback
  */
 
 import { NextResponse } from 'next/server'

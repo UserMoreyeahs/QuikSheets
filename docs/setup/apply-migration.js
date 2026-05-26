@@ -16,7 +16,7 @@
  * Prereqs:
  *   - PG_PASSWORD env var (the Supabase project's DB password).
  *     Defaults for PG_HOST / PG_REGION / etc. target the configured
- *     project ref `mrvzwwfnimqufendjfhj`.
+ *     project ref `anfvgmlgsthhdhwncxzt`.
  *   - `pg` available as a dependency. It is not pinned in package.json,
  *     so run `npm install pg --no-save` first if you don't have it.
  */
@@ -45,7 +45,7 @@ async function main() {
   // do NOT expose `db.<ref>.supabase.co` — they only accept connections
   // through `aws-0-<region>.pooler.supabase.com:6543` and the postgres
   // user is `postgres.<ref>` (not plain `postgres`).
-  const projectRef = process.env.PG_PROJECT_REF ?? 'mrvzwwfnimqufendjfhj'
+  const projectRef = process.env.PG_PROJECT_REF ?? 'anfvgmlgsthhdhwncxzt'
   const region     = process.env.PG_REGION     ?? 'ap-southeast-1'
   const prefix     = process.env.PG_PREFIX     ?? 'aws-1'
   const host       = process.env.PG_HOST       ?? `${prefix}-${region}.pooler.supabase.com`
