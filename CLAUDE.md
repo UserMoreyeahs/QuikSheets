@@ -36,10 +36,70 @@
 - [x] Session 21: Starter Templates + Conditional Formatting
 
 ## Current Session
-- None - Quiksheets MVP completion session complete (May 2026)
+- None — MVP launch-readiness pass complete (May 2026)
 
 ## Next Session
-- Session 22+: Optional follow-ups — Timeline slicer rendering, Live Formula Preview verification, Cell History full Supabase path
+- T020 Automation: build the create-automation dialog + wire SpreadsheetGrid.handleChange → fireTrigger(). Provider env vars (SLACK_WEBHOOK_URL / RESEND_API_KEY / TWILIO_*) must be set by the operator. Estimated ~2h.
+- Comments @-mentions notification (mentions are parsed today but no notification system fires).
+- Persist CF rules / Comments / Typed columns to Supabase (currently localStorage).
+
+## MVP launch-readiness session (latest) — 14 commits, 3 P0 fixes, anti-hallucination flag
+
+The user attached `QuikSheets_MVP_P0_P1_P2_with_Testing_Data.xlsx` (20 P0 + 10 P1 + 6 P2 features, plus 29 test cases T001–T029) and asked for "ship today without failure" with no hallucinated buttons. This session audited every MVP test against the codebase, fixed 3 silent P0 launch-blockers, pinned 7 new MVP regression contracts, and added an env-flag that hides every "coming soon" ribbon button in production.
+
+### P0 bugs found + fixed today (would have shipped broken otherwise)
+
+| Test | Bug | Fix |
+|---|---|---|
+| T011 share-as-editor | `loadWorkbookRecord` + `saveWorkbookRecord` in `src/lib/sheetApi.ts` filtered only on `owner_id`; invited editors got 404 on read and 0-row update on save. | Two-path lookup: owner via anon client; fallback to service-role client + `workbook_members` role check. `c91cadd` |
+| T012 auto-save | `src/lib/saveService.ts` was a localStorage-only legacy module; nothing ever POSTed to `/api/sheet`. Second user could never see edits. | Rewrote `saveWorkbook` to read the Supabase session token, POST to `/api/sheet`, fall back to localStorage on 401/403/network. `81e1f9e` |
+| T019 form submission persistence | Form-submission merge in `src/app/sheet/[id]/page.tsx` updated `gridSheets` via Zustand but relied on the 30s auto-save debounce. Page refresh within 30s lost the merged rows. | Fire `saveWorkbook` IMMEDIATELY after `replaceGridSheets` in the merge useEffect. `524ab4c` |
+
+### Anti-hallucination flag
+
+`NEXT_PUBLIC_HIDE_RIBBON_STUBS=true` (set in `.env.production`) causes `RibbonButton` / `RibbonLargeButton` / `RibbonSplitButton` to return `null` when their `onClick` is a `ribbonStub('Foo')`. Production UI shows only buttons that do real work. Dev keeps stubs visible (flag is `false` by default) so the unfinished work stays discoverable. Commit `3405c30`.
+
+### 11 stub-replacement batches across Insert / Page Layout / Formulas / Data tabs
+
+| Batch | Buttons turned real | Commit |
+|---|---|---|
+| Insert > Shapes + Icons + Text Box overlays (cell-anchored, draggable, resizable) | 3 | `845058b` |
+| Insert > Screenshot (browser getDisplayMedia → image overlay) | 1 | `b219268` |
+| Insert > Header & Footer (PDF export wired via autoTable didDrawPage) | 1 | `8a81e5d` |
+| Insert > Stock Images + Online Pictures (curated 30-photo grid + URL paste) | 2 | `5a36c40` |
+| Page Layout > Themes / Colors / Fonts (6-preset picker, drives Format-as-Table palette) | 3 | `3da0a53` |
+| Page Layout > Print Titles (rows repeated on every PDF page via autoTable head) | 1 | `205d1ad` |
+| Page Layout > Arrange — Bring Forward / Send Backward / Selection Pane | 3 | `ea3e1f5` |
+| Formulas > Watch Window (live cell value + formula pinning) | 1 | `befa729` |
+| Formulas > Remove Arrows → honest toast pointing to Map View | 1 | `befa729` |
+| Data > Get Data > From Web (server proxy + CSV/JSON parser + paste helper) | 1 | `3c28f38` |
+| Forms field auto-detect regex polish (Units/Sales/Tax/Country routed correctly) | — | `7df1990` |
+
+### MVP regression test suite (132 / 132 passing)
+
+20 NEW tests pinning the MVP contract:
+- `tests/unit/permissions/sheetApi.spec.ts` — 9 cases (owner/editor/viewer/stranger × load/save/create) for T011
+- `tests/unit/saveService/saveService.spec.ts` — 4 cases (no-session/200/403/network-error) for T012
+- `tests/unit/formula-engine/evaluateCell.spec.ts` — 7 new (SUMIF/SUMIFS/COUNTIF/COUNTIFS + 3 cross-sheet) for P1 #25 + #27
+- Plus existing 112 — total 132.
+
+### Deferred per user direction (not blocking launch)
+
+- T020 Automation (UI + trigger firing both missing; providers + DB schema ready)
+- Comments @-mentions notification (mentions parsed but unnotified)
+- CF rules / Comments / Typed columns Supabase persistence (currently localStorage)
+
+### Pattern: server-side anon-client + service-role fallback
+
+Pattern emerged in `sheetApi.ts` and worth documenting. When the request runs on the server, the browser supabase client has no `auth.uid()` context, so any RLS policy keyed on `auth.uid()` returns nothing. The pattern:
+1. Try the **owner fast path** with the anon client + an explicit `owner_id = userId` filter (RLS is redundant here; the filter is the access policy).
+2. Fall back to the **service-role client** to do an explicit membership/role check, and execute the query that needed RLS-bypass.
+
+This makes the application code the source of access truth instead of relying on RLS at the data layer. The `loadWorkbookRecord` + `saveWorkbookRecord` rewrites in `c91cadd` follow this pattern.
+
+### Pattern: ribbonStub marker symbol drives both visual + hide behaviour
+
+`src/features/ribbon/utils/ribbonStub.ts` exports `RIBBON_STUB_MARKER = Symbol.for('quiksheets.ribbonStub')` and a `ribbonStub(name)` factory that attaches the marker to the returned handler. Ribbon button primitives use `getStubFeatureName(onClick)` to detect the marker — that's how they style "coming soon" buttons differently AND how `NEXT_PUBLIC_HIDE_RIBBON_STUBS` hides them in production. Zero call-site refactor for the ~50 buttons that already use `ribbonStub('Foo')`.
 
 ## Quiksheets MVP completion session — patterns + bugs fixed
 Highlights from the 59-task verification + feature-build sweep. The patterns
