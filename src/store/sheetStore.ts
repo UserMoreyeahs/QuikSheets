@@ -5,6 +5,11 @@ import { toCellNotation } from '@/lib/cellAddress'
 import { createDefaultWorkbook } from '@/lib/defaultSheet'
 import { sortRows } from '@/features/grid/utils/sortUtils'
 import { computeHiddenRows } from '@/features/grid/utils/filterUtils'
+import {
+  evaluateAdvancedFilter,
+  type AdvancedFilterCriteria,
+} from '@/features/data/utils/advancedFilter'
+import { useAdvancedFilterStore } from '@/features/data/store/advancedFilterStore'
 import { recordCellChange } from '@/features/cell-history/services/historyService'
 import {
   clearCellFormatting,
@@ -208,6 +213,13 @@ interface SheetActions {
   addFilter: (filter: FilterRule) => void
   removeFilter: (columnIndex: number) => void
   clearFilters: () => void
+  /**
+   * Set or clear the Excel-style Advanced Filter for the active sheet.
+   * Pass `null` to clear it. The criteria are persisted per-sheet in
+   * useAdvancedFilterStore; this action recomputes `config.rowhidden`
+   * by OR-ing the advanced filter with any active basic filters.
+   */
+  applyAdvancedFilterToActiveSheet: (criteria: AdvancedFilterCriteria | null) => void
   setHiddenRows: (rows: number[]) => void
   setValidationRule: (cellKey: string, config: ValidationConfig | null) => void
   setSkipNextTabSync: (skip: boolean) => void
@@ -339,6 +351,73 @@ function cellDataToHistoryValue(data: CellData | null | undefined): string | nul
   if (data.formula) return data.formula.startsWith('=') ? data.formula : `=${data.formula}`
   if (data.value === null || data.value === undefined || data.value === '') return null
   return String(data.value)
+}
+
+/**
+ * Compute the union of rows hidden by:
+ *  - basic filters (FilterRule[] applied per-column), AND
+ *  - the active advanced filter for this sheet (criteria range).
+ *
+ * Returned indices are 0-based row positions in the sheet matrix.
+ */
+function computeCombinedHiddenRows(
+  sheet: Sheet,
+  filters: FilterRule[],
+  advancedCriteria: AdvancedFilterCriteria | null
+): number[] {
+  const data = getSheetMatrix(sheet)
+
+  const rowMap: Record<number, Record<number, string | number | null>> = {}
+  data.forEach((row, rowIndex) => {
+    rowMap[rowIndex] = {}
+    ;(row ?? []).forEach((cell, columnIndex) => {
+      const value = getCellDisplayValue(cell)
+      rowMap[rowIndex]![columnIndex] =
+        typeof value === 'boolean' ? String(value) : (value as string | number | null)
+    })
+  })
+
+  const basicHidden =
+    filters.length > 0 ? computeHiddenRows(rowMap, filters, data.length) : []
+
+  let advancedHidden: number[] = []
+  if (advancedCriteria) {
+    try {
+      // Pass the underlying CellMatrix as-is — evaluateAdvancedFilter
+      // reads cell objects through getCellDisplayValue-style coercion.
+      // We coerce to string|number|boolean|null|undefined inside the
+      // evaluator. Build a plain string/number matrix here so the
+      // evaluator doesn't need to know about FortuneSheet Cell shapes.
+      const displayMatrix: (string | number | boolean | null)[][] = data.map((row) =>
+        (row ?? []).map((cell) => {
+          const v = getCellDisplayValue(cell)
+          return v === undefined ? null : (v as string | number | boolean | null)
+        })
+      )
+      advancedHidden = evaluateAdvancedFilter(displayMatrix, advancedCriteria).hiddenRows
+    } catch {
+      // Bad criteria range — leave advanced filter inactive rather than
+      // crashing. The dialog validates before saving, so this branch
+      // only triggers when external state goes stale.
+      advancedHidden = []
+    }
+  }
+
+  if (basicHidden.length === 0) return advancedHidden
+  if (advancedHidden.length === 0) return basicHidden
+
+  // Union — a row is hidden if EITHER filter says so.
+  const merged = new Set<number>(basicHidden)
+  advancedHidden.forEach((r) => merged.add(r))
+  return Array.from(merged).sort((a, b) => a - b)
+}
+
+/** Pull the active sheet's advanced criteria (or null) from its dedicated store. */
+function getActiveAdvancedCriteria(sheets: Sheet[]): AdvancedFilterCriteria | null {
+  const activeIndex = getActiveSheetIndex(sheets)
+  const sheetId = sheets[activeIndex]?.id
+  if (!sheetId) return null
+  return useAdvancedFilterStore.getState().criteriaBySheet[sheetId] ?? null
 }
 
 /** Convert our selection state to FortuneSheet Range format */
@@ -690,30 +769,21 @@ export const useSheetStore = create<SheetState & SheetActions>()(
             return
           }
 
-          const data = getSheetMatrix(activeSheet)
-          const rowMap: Record<number, Record<number, string | number | null>> = {}
-          data.forEach((row, rowIndex) => {
-            rowMap[rowIndex] = {}
-            ;(row ?? []).forEach((cell, columnIndex) => {
-              const value = getCellDisplayValue(cell)
-              rowMap[rowIndex]![columnIndex] =
-                typeof value === 'boolean' ? String(value) : (value as string | number | null)
-            })
-          })
-
-          const hiddenRows = computeHiddenRows(rowMap, filters, data.length)
+          const advancedCriteria = getActiveAdvancedCriteria(state.gridSheets)
+          const hiddenRows = computeCombinedHiddenRows(activeSheet, filters, advancedCriteria)
           const rowhidden: Record<number, 0> = {}
           hiddenRows.forEach((row) => {
             rowhidden[row] = 0
           })
 
+          const hasAnyFilter = filters.length > 0 || advancedCriteria !== null
           const newGridSheets = state.gridSheets.map((sheet, index) =>
             index === activeIndex
               ? {
                   ...sheet,
                   config: {
                     ...(sheet.config ?? {}),
-                    rowhidden: filters.length > 0 ? rowhidden : {},
+                    rowhidden: hasAnyFilter ? rowhidden : {},
                   },
                 }
               : sheet
@@ -733,18 +803,8 @@ export const useSheetStore = create<SheetState & SheetActions>()(
           const activeSheet = state.gridSheets[activeIndex]
           if (!activeSheet) return
 
-          const data = getSheetMatrix(activeSheet)
-          const rowMap: Record<number, Record<number, string | number | null>> = {}
-          data.forEach((row, rowIndex) => {
-            rowMap[rowIndex] = {}
-            ;(row ?? []).forEach((cell, columnIndex) => {
-              const value = getCellDisplayValue(cell)
-              rowMap[rowIndex]![columnIndex] =
-                typeof value === 'boolean' ? String(value) : (value as string | number | null)
-            })
-          })
-
-          const hiddenRows = computeHiddenRows(rowMap, updatedFilters, data.length)
+          const advancedCriteria = getActiveAdvancedCriteria(state.gridSheets)
+          const hiddenRows = computeCombinedHiddenRows(activeSheet, updatedFilters, advancedCriteria)
           const rowhidden: Record<number, 0> = {}
           hiddenRows.forEach((row) => {
             rowhidden[row] = 0
@@ -769,33 +829,21 @@ export const useSheetStore = create<SheetState & SheetActions>()(
           const activeSheet = state.gridSheets[activeIndex]
           if (!activeSheet) return
 
-          const data = getSheetMatrix(activeSheet)
-          const rowMap: Record<number, Record<number, string | number | null>> = {}
-          data.forEach((row, rowIndex) => {
-            rowMap[rowIndex] = {}
-            ;(row ?? []).forEach((cell, columnIndex) => {
-              const value = getCellDisplayValue(cell)
-              rowMap[rowIndex]![columnIndex] =
-                typeof value === 'boolean' ? String(value) : (value as string | number | null)
-            })
-          })
-
-          const hiddenRows =
-            updatedFilters.length > 0
-              ? computeHiddenRows(rowMap, updatedFilters, data.length)
-              : []
+          const advancedCriteria = getActiveAdvancedCriteria(state.gridSheets)
+          const hiddenRows = computeCombinedHiddenRows(activeSheet, updatedFilters, advancedCriteria)
           const rowhidden: Record<number, 0> = {}
           hiddenRows.forEach((row) => {
             rowhidden[row] = 0
           })
 
+          const hasAnyFilter = updatedFilters.length > 0 || advancedCriteria !== null
           const newGridSheets = state.gridSheets.map((sheet, index) =>
             index === activeIndex
               ? {
                   ...sheet,
                   config: {
                     ...(sheet.config ?? {}),
-                    rowhidden: updatedFilters.length > 0 ? rowhidden : {},
+                    rowhidden: hasAnyFilter ? rowhidden : {},
                   },
                 }
               : sheet
@@ -807,13 +855,72 @@ export const useSheetStore = create<SheetState & SheetActions>()(
         clearFilters: () => {
           const state = get()
           const activeIndex = getActiveSheetIndex(state.gridSheets)
+          const activeSheet = state.gridSheets[activeIndex]
+          if (!activeSheet) {
+            set({ activeFilters: [], hiddenRows: [] })
+            return
+          }
+
+          // "Clear" in the basic-filter sense — drop FilterRule[] but
+          // leave the Advanced Filter intact. Recompute so the advanced
+          // filter still hides its rows (if any).
+          const advancedCriteria = getActiveAdvancedCriteria(state.gridSheets)
+          const hiddenRows = computeCombinedHiddenRows(activeSheet, [], advancedCriteria)
+          const rowhidden: Record<number, 0> = {}
+          hiddenRows.forEach((row) => {
+            rowhidden[row] = 0
+          })
+
           const newGridSheets = state.gridSheets.map((sheet, index) =>
             index === activeIndex
-              ? { ...sheet, config: { ...(sheet.config ?? {}), rowhidden: {} } }
+              ? {
+                  ...sheet,
+                  config: {
+                    ...(sheet.config ?? {}),
+                    rowhidden: advancedCriteria !== null ? rowhidden : {},
+                  },
+                }
               : sheet
           )
 
-          set({ activeFilters: [], hiddenRows: [], gridSheets: newGridSheets })
+          set({ activeFilters: [], hiddenRows, gridSheets: newGridSheets })
+        },
+
+        applyAdvancedFilterToActiveSheet: (criteria) => {
+          const state = get()
+          const activeIndex = getActiveSheetIndex(state.gridSheets)
+          const activeSheet = state.gridSheets[activeIndex]
+          if (!activeSheet || !activeSheet.id) return
+          const sheetId = activeSheet.id as string
+
+          // Persist (or clear) the criteria in the advanced-filter store.
+          const afStore = useAdvancedFilterStore.getState()
+          if (criteria === null) {
+            afStore.clearCriteria(sheetId)
+          } else {
+            afStore.setCriteria(sheetId, criteria)
+          }
+
+          const hiddenRows = computeCombinedHiddenRows(activeSheet, state.activeFilters, criteria)
+          const rowhidden: Record<number, 0> = {}
+          hiddenRows.forEach((row) => {
+            rowhidden[row] = 0
+          })
+
+          const hasAnyFilter = state.activeFilters.length > 0 || criteria !== null
+          const newGridSheets = state.gridSheets.map((sheet, index) =>
+            index === activeIndex
+              ? {
+                  ...sheet,
+                  config: {
+                    ...(sheet.config ?? {}),
+                    rowhidden: hasAnyFilter ? rowhidden : {},
+                  },
+                }
+              : sheet
+          )
+
+          set({ hiddenRows, gridSheets: newGridSheets })
         },
 
         setHiddenRows: (rows) => set({ hiddenRows: rows }),

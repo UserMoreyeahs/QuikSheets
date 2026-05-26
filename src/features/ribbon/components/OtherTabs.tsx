@@ -129,6 +129,7 @@ import { useChartPanelStore } from '@/features/charts/store/chartPanelStore'
 import { flashFill } from '../utils/flashFill'
 import { useTextToColsStore } from '@/features/data/store/textToColsStore'
 import { useFromWebDialogStore } from '@/features/data/store/fromWebDialogStore'
+import { useAdvancedFilterStore } from '@/features/data/store/advancedFilterStore'
 import { useSlicerBuilderStore } from '@/features/slicers/store/slicerBuilderStore'
 import { useSparklineBuilderStore } from '@/features/sparklines/store/sparklineStore'
 import { useRecommendedPivotsStore } from '@/features/pivot/store/recommendedPivotsStore'
@@ -732,7 +733,7 @@ export function DataTab(props: DataTabProps) {
         <div className="flex flex-col gap-0.5">
           <RibbonButton label="Clear"    icon={<EyeOff className="h-3.5 w-3.5" />}      onClick={clearFilter} />
           <RibbonButton label="Reapply"  icon={<RefreshCcw className="h-3.5 w-3.5" />}  onClick={reapplyFilter} />
-          <RibbonButton label="Advanced" icon={<WandSparkles className="h-3.5 w-3.5" />} onClick={ribbonStub('Advanced Filter')} />
+          <RibbonButton label="Advanced" icon={<WandSparkles className="h-3.5 w-3.5" />} onClick={() => useAdvancedFilterStore.getState().openDialog()} />
         </div>
       </RibbonGroup>
 
