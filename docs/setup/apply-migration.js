@@ -1,14 +1,23 @@
 /**
- * One-off migration runner for Quiksheets v2 Supabase setup.
+ * One-off migration runner for Quiksheets Supabase setup.
  *
- * Reads docs/setup/quiksheets-v2-schema.sql and applies it to the
- * project via a direct Postgres connection (the Supabase REST API
- * doesn't expose arbitrary DDL).
+ * Reads a .sql file and applies it to the project via a direct
+ * Postgres connection (the Supabase REST API doesn't expose arbitrary
+ * DDL).
  *
  * Run from repo root:
+ *   # Defaults to the full v2 schema:
  *   node docs/setup/apply-migration.js
  *
- * Requires PG_HOST / PG_PASSWORD env vars (passed inline by the caller).
+ *   # Or pass a specific migration file:
+ *   node docs/setup/apply-migration.js docs/setup/migrations/comments_table.sql
+ *
+ * Prereqs:
+ *   - PG_PASSWORD env var (the Supabase project's DB password).
+ *     Defaults for PG_HOST / PG_REGION / etc. target the configured
+ *     project ref `mrvzwwfnimqufendjfhj`.
+ *   - `pg` available as a dependency. It is not pinned in package.json,
+ *     so run `npm install pg --no-save` first if you don't have it.
  */
 
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -17,8 +26,14 @@ const path = require('path')
 const { Client } = require('pg')
 
 async function main() {
-  const sqlPath = path.join(__dirname, 'quiksheets-v2-schema.sql')
+  // Optional first CLI arg = path to a SQL file. Defaults to the full
+  // v2 schema so the existing bootstrap invocation keeps working.
+  const arg = process.argv[2]
+  const sqlPath = arg
+    ? path.isAbsolute(arg) ? arg : path.join(process.cwd(), arg)
+    : path.join(__dirname, 'quiksheets-v2-schema.sql')
   const sql = fs.readFileSync(sqlPath, 'utf8')
+  console.log(`SQL file: ${sqlPath}`)
 
   // Supabase moved DB access to regional poolers in 2024. New projects
   // do NOT expose `db.<ref>.supabase.co` — they only accept connections

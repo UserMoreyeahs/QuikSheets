@@ -4,15 +4,16 @@
  * CommentComposer
  * --------------------------------------------------------------------------
  * Small floating popover that appears centered when the user picks
- * "Add comment" — captures a body with @mention support, then writes it to
- * localStorage and bumps the comments-version so the panel re-reads.
+ * "Add comment" — captures a body with @mention support, then writes it
+ * through commentsApi (Supabase + localStorage fallback) and bumps the
+ * comments-version so the panel re-reads.
  */
 
 import { useEffect, useState } from 'react'
 import { X, AtSign, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import { useCommentsUiStore } from '@/features/comments/store/commentsUiStore'
-import { addComment } from '@/features/comments/storage/localCommentsStore'
+import { createComment } from '@/lib/commentsApi'
 import { useWorkbookStore } from '@/store/workbookStore'
 
 export function CommentComposer({ workbookId }: { workbookId: string }) {
@@ -23,32 +24,44 @@ export function CommentComposer({ workbookId }: { workbookId: string }) {
   const { sheets } = useWorkbookStore()
 
   const [body, setBody] = useState('')
+  const [submitting, setSubmitting] = useState(false)
   useEffect(() => {
-    if (composer) setBody('')
+    if (composer) {
+      setBody('')
+      setSubmitting(false)
+    }
   }, [composer])
 
   if (!composer) return null
 
   const sheetName = sheets.find((s) => s.id === composer.sheetId)?.name ?? composer.sheetId
 
-  function submit() {
+  async function submit() {
     if (!composer) return
     const trimmed = body.trim()
     if (!trimmed) {
       toast.error('Type something first.')
       return
     }
-    addComment({
-      workbookId,
-      sheetId: composer.sheetId,
-      cellAddress: composer.cellAddress,
-      body: trimmed,
-      author: 'You',
-    })
-    bump()
-    toast.success(`Comment added on ${composer.cellAddress}`)
-    closeComposer()
-    openPanel()
+    setSubmitting(true)
+    try {
+      await createComment({
+        workbookId,
+        sheetId: composer.sheetId,
+        cellAddress: composer.cellAddress,
+        body: trimmed,
+      })
+      bump()
+      toast.success(`Comment added on ${composer.cellAddress}`)
+      closeComposer()
+      openPanel()
+    } catch (err) {
+      toast.error('Could not add comment.')
+      // eslint-disable-next-line no-console
+      console.debug('[CommentComposer] create failed:', err)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -79,7 +92,7 @@ export function CommentComposer({ workbookId }: { workbookId: string }) {
             onKeyDown={(e) => {
               if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                 e.preventDefault()
-                submit()
+                void submit()
               } else if (e.key === 'Escape') {
                 closeComposer()
               }
@@ -106,12 +119,12 @@ export function CommentComposer({ workbookId }: { workbookId: string }) {
           </button>
           <button
             type="button"
-            onClick={submit}
-            disabled={!body.trim()}
+            onClick={() => void submit()}
+            disabled={!body.trim() || submitting}
             className="flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1.5 text-[12px] font-semibold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Send className="h-3 w-3" />
-            Add comment
+            {submitting ? 'Adding…' : 'Add comment'}
           </button>
         </div>
       </div>
