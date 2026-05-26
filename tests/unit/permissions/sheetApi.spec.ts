@@ -78,9 +78,12 @@ function makeMockClient(state: Record<string, MockTableState>) {
   return { from }
 }
 
-const supabaseState: Record<string, MockTableState> = {
-  workbooks:        { rows: [] },
-  workbook_members: { rows: [] },
+const supabaseState = {
+  workbooks:        { rows: [] as MockRow[] },
+  workbook_members: { rows: [] as MockRow[] },
+} as Record<string, MockTableState> & {
+  workbooks:        MockTableState
+  workbook_members: MockTableState
 }
 
 vi.mock('@/lib/supabase', () => ({

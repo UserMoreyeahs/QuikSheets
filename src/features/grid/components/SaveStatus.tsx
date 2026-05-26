@@ -43,13 +43,20 @@ export function SaveStatus({ workbookName, workbookData, workbookId }: SaveStatu
 
     setIsSaving(false)
 
-    if (result) {
+    if (result.id && result.destination === 'supabase') {
+      // Server confirmed the save. Pin the id so subsequent saves UPDATE.
       setCurrentId(result.id)
       setLastSavedAt(new Date())
       setSaveState('saved')
       return
     }
 
+    // Save fell back to localStorage. We treat this as "saved" for the
+    // UI (the user's work is at least on disk) but a future iteration
+    // could distinguish "saved offline" with a separate icon. Important:
+    // we DON'T call setSaveState('error') here because a 401 (logged
+    // out / demo session) still shouldn't scare the user when their
+    // edits are safely in localStorage.
     setLastSavedAt(new Date())
     setSaveState('saved')
   }, [setIsSaving, setLastSavedAt])
