@@ -211,6 +211,11 @@ const ForecastPanel = dynamic(
   { ssr: false },
 )
 import { useForecastStore } from '@/features/forecasting/store/forecastStore'
+const GoalSeekDialog = dynamic(
+  () => import('@/features/goal-seek').then((m) => ({ default: m.GoalSeekDialog })),
+  { ssr: false },
+)
+import { useGoalSeekStore } from '@/features/goal-seek'
 const CommentsPanel = dynamic(
   () => import('@/features/comments/components/CommentsPanel').then((m) => ({ default: m.CommentsPanel })),
   { ssr: false },
@@ -1443,6 +1448,7 @@ export default function SheetPage() {
   const openFormBuilder = useFormBuilderStore((s) => s.open)
   const openPivotBuilder = usePivotUiStore((s) => s.openBuilder)
   const openForecast = useForecastStore((s) => s.open)
+  const openGoalSeek = useGoalSeekStore((s) => s.open)
   const openCommentsPanel = useCommentsUiStore((s) => s.openPanel)
   const openVersionHistory = useVersionUiStore((s) => s.open)
   const openShareDialog = useShareDialogStore((s) => s.open)
@@ -1569,6 +1575,7 @@ export default function SheetPage() {
             onInsertPivot: openPivotBuilder,
             onCleanData: openCleanData,
             onForecast: openForecast,
+            onGoalSeek: openGoalSeek,
             // Formulas / Data
             onMapView: toggleMap,
             onDedupe: handleDedupe,
@@ -1723,6 +1730,7 @@ export default function SheetPage() {
       <ErrorBoundary><FormBuilder workbookId={workbookId} /></ErrorBoundary>
       <ErrorBoundary><PivotBuilder /></ErrorBoundary>
       <ErrorBoundary><ForecastPanel /></ErrorBoundary>
+      <ErrorBoundary><GoalSeekDialog /></ErrorBoundary>
       <ErrorBoundary><CommentsPanel workbookId={workbookId} /></ErrorBoundary>
       <ErrorBoundary><CommentComposer workbookId={workbookId} /></ErrorBoundary>
       <ErrorBoundary><VersionHistoryPanel workbookId={workbookId} /></ErrorBoundary>
