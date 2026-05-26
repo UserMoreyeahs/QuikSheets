@@ -47,7 +47,7 @@ function toDashboardRow(row: WorkbookSummary): DashboardWorkbook {
  * is authenticated and a Supabase project is configured, otherwise from
  * localStorage. Local workbooks are also surfaced when the user *is*
  * authenticated but has no remote workbooks yet — so a user who created
- * sheets in the legacy SheetForge build still sees them.
+ * sheets in an earlier (localStorage-only) build still sees them.
  */
 export function useDashboardWorkbooks() {
   const [hasAuth, setHasAuth] = useState<boolean | null>(null)

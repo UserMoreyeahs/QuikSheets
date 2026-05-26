@@ -8,9 +8,9 @@
 
 import type { FormDefinition, FormSubmission } from '@/features/forms/types'
 
-const FORM_KEY = (id: string) => `sheetforge_form:${id}`
-const INDEX_KEY = (workbookId: string) => `sheetforge_forms_index:${workbookId}`
-const SUBMISSIONS_KEY = (id: string) => `sheetforge_form_submissions:${id}`
+const FORM_KEY = (id: string) => `quiksheets_form:${id}`
+const INDEX_KEY = (workbookId: string) => `quiksheets_forms_index:${workbookId}`
+const SUBMISSIONS_KEY = (id: string) => `quiksheets_form_submissions:${id}`
 
 type StoredForm = FormDefinition & { id: string; createdAt: number }
 

@@ -25,14 +25,14 @@ Scope:
 - Create AGENTS.md at repo root using the operating contract in docs/10_CODEX_OPERATING_GUIDE.md.
 - Create /docs at repo root and copy in 01_PRODUCT_REQUIREMENTS.md, 02_TECH_STACK_AND_DEPENDENCIES.md, 03_ARCHITECTURE.md, 04_DATABASE_SCHEMA_AND_RLS.md, 05_TESTING_AND_QUALITY_GATES.md, 06_RISK_REGISTER.md, 07_DEPLOYMENT_AND_OPERATIONS.md, 08_SESSION_ROADMAP.md, 09_CODEX_PROMPTS_22_SESSIONS.md, 10_CODEX_OPERATING_GUIDE.md, 11_VERIFICATION_NOTES.md, plus this remediation pack.
 - Create .env.example listing NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, GROQ_API_KEY, and any feature flags referenced by docs.
-- Rename the product everywhere it currently says SheetForge: package.json name, README, dashboard header, login page, CLAUDE.md, comments, and any UI strings.
-- Add a one-time localStorage migration shim in src/lib/legacyStorageMigration.ts that, on app boot, copies any keys starting with sheetforge_ to quiksheets_ and deletes the originals; call it once from src/app/layout.tsx (client boundary).
+- Confirm the product name is Quiksheets everywhere: package.json name, README, dashboard header, login page, CLAUDE.md, comments, and any UI strings.
+- Add a one-time localStorage migration shim in src/lib/legacyStorageMigration.ts that, on app boot, copies any keys with a legacy prefix into the current `quiksheets_` prefix and deletes the originals; call it once from src/app/layout.tsx (client boundary).
 - Update CLAUDE.md so it states the new product name, the new doc locations, and links the remediation pack.
 
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -91,7 +91,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -149,7 +149,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -209,7 +209,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -265,7 +265,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -316,13 +316,13 @@ Scope:
 - Move conditional-formatting rules: add migration 0008_cf_rules.sql defining conditional_format_rules(id, workbook_id, sheet_id, range_ref, rule_json, created_by, created_at) with editor-RLS; rewrite cfStore to read/write through TanStack Query.
 - Add workbook snapshot endpoint POST /api/workbooks/:id/versions writing to workbook_versions; restore endpoint POST /api/workbooks/:id/versions/:vid/restore writing a new version + audit_logs entry.
 - Update src/features/cell-history/services/historyService.ts to use the normalized sheet_id (uuid) from the new cells table.
-- Replace dashboard localStorage list with the server-action TanStack Query path created in R5; remove or archive any sheetforge_* localStorage code that is now dead.
+- Replace dashboard localStorage list with the server-action TanStack Query path created in R5; remove or archive any legacy-prefixed localStorage code that is now dead.
 - Add Playwright E2E: edit a cell → reload page → cell persists; delete browser localStorage → cell still present.
 
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -377,7 +377,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -432,7 +432,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -488,7 +488,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -544,7 +544,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -598,7 +598,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -652,7 +652,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -709,7 +709,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -774,7 +774,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.

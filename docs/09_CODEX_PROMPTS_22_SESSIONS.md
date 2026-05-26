@@ -28,14 +28,14 @@ Create all durable project context files before implementation.
 
 Scope:
 - Create/verify AGENTS.md, README.md, docs folder, .env.example.
-- Document Quiksheets naming rule and SheetForge legacy mapping.
+- Document Quiksheets naming rule.
 - Do not install packages or build UI yet.
 - Commit docs only.
 
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -87,7 +87,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -139,7 +139,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -191,7 +191,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -243,7 +243,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -295,7 +295,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -347,7 +347,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -399,7 +399,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -450,7 +450,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -502,7 +502,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -554,7 +554,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -606,7 +606,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -657,7 +657,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -708,7 +708,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -759,7 +759,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -812,7 +812,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -864,7 +864,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -916,7 +916,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -968,7 +968,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -1020,7 +1020,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -1073,7 +1073,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.
@@ -1125,7 +1125,7 @@ Scope:
 Rules:
 - Implement this session only.
 - Do not implement later sessions.
-- Do not use SheetForge as the new product name.
+
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16.
 - Do not expose API keys.

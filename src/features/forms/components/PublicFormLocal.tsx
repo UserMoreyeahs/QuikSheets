@@ -4,8 +4,8 @@
  * PublicFormLocal
  * --------------------------------------------------------------------------
  * localStorage-backed twin of PublicFormClient.  Reads the form definition
- * from `sheetforge_form:<id>` and writes submissions to
- * `sheetforge_form_submissions:<id>` — those are then merged into the source
+ * from `quiksheets_form:<id>` and writes submissions to
+ * `quiksheets_form_submissions:<id>` — those are then merged into the source
  * workbook on next sheet-page mount.
  */
 

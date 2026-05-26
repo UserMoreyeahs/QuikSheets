@@ -1,9 +1,7 @@
 # AGENTS.md — Quiksheets
 
 ## Project
-Quiksheets is a production-grade browser spreadsheet application with AI-native workflows.
-
-Legacy files may mention SheetForge. Treat SheetForge as old source context only. All new code, docs, UI, env names, package names, database names, and commit messages must use Quiksheets.
+Quiksheets is a production-grade browser spreadsheet application with AI-native workflows. All code, docs, UI strings, env names, package names, database names, and commit messages use the name **Quiksheets**.
 
 ## Stack
 - Next.js 15.x
@@ -30,7 +28,6 @@ Legacy files may mention SheetForge. Treat SheetForge as old source context only
 - Vercel deployment
 
 ## Critical Rules
-- Do not use SheetForge as the new app name.
 - Do not use Next.js 14.
 - Do not upgrade to Next.js 16 unless a separate compatibility spike proves it safe.
 - Do not call Groq from client/browser code.
@@ -73,4 +70,4 @@ Implement one session at a time. Do not skip ahead.
 
 ## Session Index
 - Original 22 sessions: see [docs/09_CODEX_PROMPTS_22_SESSIONS.md](docs/09_CODEX_PROMPTS_22_SESSIONS.md).
-- Remediation pack (R1–R14) for the legacy SheetForge → Quiksheets bridge: see [docs/REMEDIATION_CODEX_PROMPTS.md](docs/REMEDIATION_CODEX_PROMPTS.md).
+- Remediation pack (R1–R14) bridging to the current target architecture: see [docs/REMEDIATION_CODEX_PROMPTS.md](docs/REMEDIATION_CODEX_PROMPTS.md).

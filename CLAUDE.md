@@ -1,6 +1,6 @@
 # Quiksheets — AI Session State
 
-> Renamed from SheetForge during R1 of `docs/REMEDIATION_CODEX_PROMPTS.md`. The legacy session notes below still describe what is on disk; new work follows the Quiksheets target stack documented in `AGENTS.md` and `docs/02_TECH_STACK_AND_DEPENDENCIES.md`.
+> Some session notes below describe earlier iterations of the codebase. New work follows the Quiksheets target stack documented in `AGENTS.md` and `docs/02_TECH_STACK_AND_DEPENDENCIES.md`.
 
 ## Stack (legacy — being migrated; new code must follow AGENTS.md)
 - Next.js 14 → **target Next.js 15.x** (R2)
