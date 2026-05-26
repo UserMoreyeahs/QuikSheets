@@ -36,7 +36,7 @@ Open https://console.cloud.google.com/
      ```
    - **Authorized redirect URIs:**
      ```
-     https://anfvgmlgsthhdhwncxzt.supabase.co/auth/v1/callback
+     https://mrvzwwfnimqufendjfhj.supabase.co/auth/v1/callback
      ```
      (This is the Supabase project's OAuth callback — Supabase forwards
      to our `/auth/callback` after exchange.)
@@ -48,7 +48,7 @@ Open https://console.cloud.google.com/
 
 ## Step 2 — Supabase provider (1 min)
 
-Open https://supabase.com/dashboard/project/anfvgmlgsthhdhwncxzt/auth/providers
+Open https://supabase.com/dashboard/project/mrvzwwfnimqufendjfhj/auth/providers
 
 1. Find **Google** in the list → click to expand
 2. Toggle **Enable Sign in with Google** to ON
@@ -60,7 +60,7 @@ Open https://supabase.com/dashboard/project/anfvgmlgsthhdhwncxzt/auth/providers
 
 ## Step 3 — Supabase redirect URLs (30 sec)
 
-Open https://supabase.com/dashboard/project/anfvgmlgsthhdhwncxzt/auth/url-configuration
+Open https://supabase.com/dashboard/project/mrvzwwfnimqufendjfhj/auth/url-configuration
 
 1. **Site URL**: `https://quiksheets-v2.vercel.app`
 2. **Redirect URLs** (add these one per line):
@@ -100,7 +100,7 @@ const c = new Client({
   host: 'aws-1-ap-southeast-1.pooler.supabase.com',
   port: 6543,
   database: 'postgres',
-  user: 'postgres.anfvgmlgsthhdhwncxzt',
+  user: 'postgres.mrvzwwfnimqufendjfhj',
   password: process.env.PG_PASSWORD,
   ssl: { rejectUnauthorized: false },
 })
