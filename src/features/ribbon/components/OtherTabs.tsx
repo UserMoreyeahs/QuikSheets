@@ -1025,7 +1025,12 @@ export function ViewTab(props: ViewTabProps) {
 
 // ─── Automate ────────────────────────────────────────────────────────────────
 
-export function AutomateTab() {
+interface AutomateTabProps {
+  onCreateAutomation?: (() => void) | undefined
+  onViewAutomationRuns?: (() => void) | undefined
+}
+
+export function AutomateTab({ onCreateAutomation, onViewAutomationRuns }: AutomateTabProps) {
   return (
     <div className="flex h-full items-stretch overflow-x-auto scrollbar-hide">
       <RibbonGroup label="Office Scripts">
@@ -1048,8 +1053,17 @@ export function AutomateTab() {
         </div>
       </RibbonGroup>
 
-      <RibbonGroup label="Power Automate" className="border-r-0">
-        <RibbonLargeButton label="Automation Templates" icon={<WandSparkles className="text-blue-500" />} onClick={ribbonStub('Automation Templates')} />
+      <RibbonGroup label="Quiksheets Automations" className="border-r-0">
+        <RibbonLargeButton
+          label="Create Automation"
+          icon={<WandSparkles className="text-blue-500" />}
+          onClick={onCreateAutomation ?? ribbonStub('Create Automation')}
+        />
+        <RibbonLargeButton
+          label="View Runs"
+          icon={<Activity className="text-emerald-500" />}
+          onClick={onViewAutomationRuns ?? ribbonStub('View Runs')}
+        />
       </RibbonGroup>
     </div>
   )

@@ -26,6 +26,8 @@ import { useColumnTypesStore, validateForEdit } from '@/features/typed-columns'
 import { useInlineEditSync } from '../hooks/useInlineEditSync'
 import { CellContextMenu } from './CellContextMenu'
 import { insertHyperlink, defineNameFromSelection } from '@/features/ribbon/utils/cellOps'
+import { fireTrigger, buildEvent } from '@/features/automation/triggerClient'
+import { useAutomationStore } from '@/features/automation/store/automationStore'
 import type { RowSummarySelection } from '@/features/row-summarizer'
 import type { Cell, Sheet, Selection } from '@fortune-sheet/core'
 import type { WorkbookInstance } from '@fortune-sheet/react'
@@ -453,6 +455,67 @@ export function SpreadsheetGrid({
             rawValue,
             display,
           )
+        }
+      }
+
+      // ── Automation trigger firing ────────────────────────────────────
+      // Best-effort: fire a trigger event for each changed row so the
+      // server-side dispatcher can evaluate automation rules and log runs.
+      // We only fire when there's a real workbookId (not demo mode) and
+      // at least one cell changed. Failures are swallowed in fireTrigger.
+      if (workbookId && cellChanges.length > 0) {
+        const { automations } = useAutomationStore.getState()
+        if (automations.length > 0) {
+          // Group changes by sheetId + rowIndex — one event per row.
+          const rowMap = new Map<string, { sheetId: string; rowIndex: number }>()
+          for (const change of cellChanges) {
+            const key = `${change.sheetId}:${change.address.row}`
+            if (!rowMap.has(key)) {
+              rowMap.set(key, { sheetId: change.sheetId, rowIndex: change.address.row })
+            }
+          }
+          for (const { sheetId: evtSheetId, rowIndex } of rowMap.values()) {
+            const prevSheet = gridSheetsRef.current.find((s) => s.id === evtSheetId)
+            const nextSheet = nextSheets.find((s) => s.id === evtSheetId)
+            const prevMatrix = prevSheet ? getSheetMatrix(prevSheet) : []
+            const nextMatrix = nextSheet ? getSheetMatrix(nextSheet) : []
+            const prevRow = (prevMatrix[rowIndex] ?? []).map(
+              (c) => getCellFormulaBarValue(c) ?? null,
+            )
+            const nextRow = (nextMatrix[rowIndex] ?? []).map(
+              (c) => getCellFormulaBarValue(c) ?? null,
+            )
+
+            // Determine trigger type: a brand-new row (all previous cells
+            // empty) → row_created; otherwise always try status_changed
+            // first so condition-based automations get evaluated, then
+            // fall back to row_updated.
+            const wasEmpty = prevRow.every((v) => v === null || v === '')
+            const triggerType = wasEmpty ? 'row_created' : 'status_changed'
+
+            const event = buildEvent({
+              workbookId,
+              sheetId: evtSheetId,
+              rowIndex,
+              type: triggerType,
+              ...(wasEmpty ? {} : { beforeRow: prevRow }),
+              afterRow: nextRow,
+            })
+            fireTrigger(event)
+
+            // If we fired status_changed, also fire row_updated so generic
+            // row_updated automations are evaluated too.
+            if (!wasEmpty) {
+              fireTrigger(buildEvent({
+                workbookId,
+                sheetId: evtSheetId,
+                rowIndex,
+                type: 'row_updated',
+                beforeRow: prevRow,
+                afterRow: nextRow,
+              }))
+            }
+          }
         }
       }
 

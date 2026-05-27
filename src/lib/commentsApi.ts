@@ -28,6 +28,7 @@ import {
   setCommentResolved as setLocalCommentResolved,
   type LocalComment,
 } from '@/features/comments/storage/localCommentsStore'
+import { insertMentionNotifications } from './notificationsApi'
 
 /**
  * Unified comment record used by the UI. `LocalComment` is the
@@ -279,7 +280,24 @@ export async function createComment(input: {
     return localToRecord(local)
   }
 
-  return dbRowToRecord(data as DbCommentRow)
+  const record = dbRowToRecord(data as DbCommentRow)
+
+  // Fire-and-forget: insert one notification row per mentioned user.
+  // Errors are swallowed inside insertMentionNotifications — a
+  // notification failure must never block the comment-creation path.
+  if (mentions.length > 0) {
+    void insertMentionNotifications({
+      workbookId: input.workbookId,
+      sheetId: input.sheetId,
+      commentId: record.id,
+      actorId: session.userId,
+      actorName: session.displayName,
+      mentions,
+      body: input.body,
+    })
+  }
+
+  return record
 }
 
 /** Update a comment's body. Author-only enforced by RLS. */

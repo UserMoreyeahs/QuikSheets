@@ -100,6 +100,9 @@ export interface RibbonHandlers {
   onShareLink?: () => void
   onProtectedRanges?: () => void
   onVersionHistory?: () => void
+  // ── Automation ──────────────────────────────────────
+  onCreateAutomation?: (() => void) | undefined
+  onViewAutomationRuns?: (() => void) | undefined
   // ── Review / Help ───────────────────────────────────
   onShortcuts: () => void
   // ── View toggles ────────────────────────────────────
@@ -327,7 +330,12 @@ export function Ribbon({ handlers }: { handlers: RibbonHandlers }) {
             onZoomReset={handlers.onZoomReset ?? (() => {})}
           />
         )}
-        {activeTab === 'automate' && <AutomateTab />}
+        {activeTab === 'automate' && (
+          <AutomateTab
+            onCreateAutomation={handlers.onCreateAutomation}
+            onViewAutomationRuns={handlers.onViewAutomationRuns}
+          />
+        )}
         {activeTab === 'help' && <HelpTab onShortcuts={handlers.onShortcuts} />}
       </div>
     </div>

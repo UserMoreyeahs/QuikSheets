@@ -3,8 +3,12 @@
 /**
  * Zustand store for per-column type metadata.
  *
- * Persistence: localStorage at `quiksheets_column_types:<workbookId>`.
- * Shape: `{ [sheetId]: { [colIndex]: ColumnTypeMeta } }`.
+ * Persistence: Supabase-first (via columnTypesApi), localStorage fallback.
+ * The previous implementation wrote directly to localStorage; columnTypesApi
+ * preserves that as the offline path so nothing breaks in demo / unauthenticated
+ * mode.
+ *
+ * Shape in memory: `{ [sheetId]: { [colIndex]: ColumnTypeMeta } }`.
  *
  * Why a separate store (not in sheetStore):
  *   - Column-type metadata is workbook-scoped, not session state.
@@ -15,30 +19,14 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 import type { ColumnType, ColumnTypeMeta } from '../types'
-
-const STORAGE_PREFIX = 'quiksheets_column_types:'
+import {
+  loadColumnTypes,
+  setColumnType as apiSetColumnType,
+  clearColumnType as apiClearColumnType,
+  type WorkbookColumnMap,
+} from '@/lib/columnTypesApi'
 
 type SheetColumnMap = Record<string, ColumnTypeMeta>
-type WorkbookColumnMap = Record<string, SheetColumnMap>
-
-function loadFromStorage(workbookId: string): WorkbookColumnMap {
-  if (typeof window === 'undefined') return {}
-  try {
-    const raw = window.localStorage.getItem(`${STORAGE_PREFIX}${workbookId}`)
-    return raw ? (JSON.parse(raw) as WorkbookColumnMap) : {}
-  } catch {
-    return {}
-  }
-}
-
-function saveToStorage(workbookId: string, data: WorkbookColumnMap): void {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(`${STORAGE_PREFIX}${workbookId}`, JSON.stringify(data))
-  } catch {
-    /* localStorage unavailable / over quota */
-  }
-}
 
 interface ColumnTypesState {
   workbookId: string | null
@@ -47,8 +35,8 @@ interface ColumnTypesState {
 }
 
 interface ColumnTypesActions {
-  /** Hydrate from localStorage on workbook load. */
-  loadFromWorkbook: (workbookId: string) => void
+  /** Hydrate from Supabase (with localStorage fallback) on workbook load. */
+  loadFromWorkbook: (workbookId: string) => Promise<void>
   /** Get the type meta for a single column (returns undefined if untyped). */
   getColumnType: (sheetId: string, colIndex: number) => ColumnTypeMeta | undefined
   /** Set the type (and optional options) for an entire column. */
@@ -65,9 +53,10 @@ export const useColumnTypesStore = create<ColumnTypesState & ColumnTypesActions>
       workbookId: null,
       byWorkbook: {},
 
-      loadFromWorkbook(workbookId) {
-        const stored = loadFromStorage(workbookId)
-        set({ workbookId, byWorkbook: stored }, false, 'columnTypes/load')
+      async loadFromWorkbook(workbookId) {
+        // Load from Supabase (falls back to localStorage inside columnTypesApi).
+        const loaded = await loadColumnTypes(workbookId)
+        set({ workbookId, byWorkbook: loaded }, false, 'columnTypes/load')
       },
 
       getColumnType(sheetId, colIndex) {
@@ -80,7 +69,10 @@ export const useColumnTypesStore = create<ColumnTypesState & ColumnTypesActions>
             const sheet = { ...(state.byWorkbook[sheetId] ?? {}) }
             sheet[String(colIndex)] = meta
             const next = { ...state.byWorkbook, [sheetId]: sheet }
-            if (state.workbookId) saveToStorage(state.workbookId, next)
+            // Persist async — do not block the store update.
+            if (state.workbookId) {
+              void apiSetColumnType(state.workbookId, sheetId, colIndex, meta)
+            }
             return { byWorkbook: next }
           },
           false,
@@ -94,7 +86,10 @@ export const useColumnTypesStore = create<ColumnTypesState & ColumnTypesActions>
             const sheet = { ...(state.byWorkbook[sheetId] ?? {}) }
             delete sheet[String(colIndex)]
             const next = { ...state.byWorkbook, [sheetId]: sheet }
-            if (state.workbookId) saveToStorage(state.workbookId, next)
+            // Persist async — do not block the store update.
+            if (state.workbookId) {
+              void apiClearColumnType(state.workbookId, sheetId, colIndex)
+            }
             return { byWorkbook: next }
           },
           false,

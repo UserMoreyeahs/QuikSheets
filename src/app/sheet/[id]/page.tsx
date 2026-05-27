@@ -15,6 +15,7 @@ import { toast } from 'sonner'
 import { CommandPalette, type CommandPaletteItem } from '@/components/CommandPalette'
 import { KeyboardShortcuts } from '@/components/KeyboardShortcuts'
 import { ThemeToggle } from '@/components/ThemeToggle'
+import { NotificationBell } from '@/components/NotificationBell'
 import { WorkbookSidebar } from '@/features/workbook/components/WorkbookSidebar'
 import { createWorkbookAction } from '@/features/workbook/actions'
 import { getBrowserSupabase } from '@/lib/supabase/client'
@@ -242,7 +243,17 @@ const ProtectedRangesDialog = dynamic(
   () => import('@/features/protected-ranges/components/ProtectedRangesDialog').then((m) => ({ default: m.ProtectedRangesDialog })),
   { ssr: false },
 )
+const AutomationBuilder = dynamic(
+  () => import('@/features/automation/components/AutomationBuilder').then((m) => ({ default: m.AutomationBuilder })),
+  { ssr: false },
+)
+const AutomationRunsPanel = dynamic(
+  () => import('@/features/automation/components/AutomationRunsPanel').then((m) => ({ default: m.AutomationRunsPanel })),
+  { ssr: false },
+)
 import { useProtectedRangesUiStore } from '@/features/protected-ranges/store/protectedRangesUiStore'
+import { useAutomationStore } from '@/features/automation/store/automationStore'
+import { listAutomationsAction } from '@/features/automation/actions'
 import { useSheetStore } from '@/store/sheetStore'
 import { useWorkbookStore } from '@/store/workbookStore'
 import { DEFAULT_COLS } from '@/lib/constants'
@@ -717,7 +728,7 @@ export default function SheetPage() {
   // Apply saved conditional formatting rules once after the workbook loads
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      applyAllCFRules(workbookId)
+      void applyAllCFRules(workbookId)
     }, 500)
     return () => window.clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1454,6 +1465,32 @@ export default function SheetPage() {
   const openShareDialog = useShareDialogStore((s) => s.open)
   const openProtectedRanges = useProtectedRangesUiStore((s) => s.open)
 
+  // ── Automation ──────────────────────────────────────────────────────────────
+  const { openDialog: openAutomationDialog, openRuns: openAutomationRuns, setAutomations } = useAutomationStore()
+
+  // Pre-load enabled automations into the store so the grid trigger wiring
+  // can evaluate conditions without a per-keystroke Supabase round-trip.
+  useEffect(() => {
+    if (!workbookId || workbookId === 'demo') return
+    void listAutomationsAction(workbookId).then((rows) => {
+      setAutomations(
+        rows
+          .filter((r) => r.enabled)
+          .map((r) => ({
+            id: r.id as string,
+            workbookId,
+            name: r.name as string,
+            enabled: true,
+            trigger: r.trigger_config_json as import('@/features/automation/types').TriggerConfig,
+            action: {
+              type: r.action_type as import('@/features/automation/types').ActionType,
+              config: r.action_config_json as Record<string, string | number | boolean>,
+            },
+          })),
+      )
+    })
+  }, [workbookId, setAutomations])
+
   return (
     <main className="flex h-screen w-screen overflow-hidden bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
       <WorkbookSidebar
@@ -1535,6 +1572,7 @@ export default function SheetPage() {
             </button>
 
             <PresenceAvatars />
+            <NotificationBell />
             <ThemeToggle />
           </div>
         </header>
@@ -1581,6 +1619,9 @@ export default function SheetPage() {
             onDedupe: handleDedupe,
             onGroupRows: handleGroupRows,
             onUngroupRows: handleUngroupRows,
+            // Automation
+            onCreateAutomation: openAutomationDialog,
+            onViewAutomationRuns: openAutomationRuns,
             // Review / Collab
             onComments: openCommentsPanel,
             onShareLink: openShareDialog,
@@ -1736,6 +1777,10 @@ export default function SheetPage() {
       <ErrorBoundary><VersionHistoryPanel workbookId={workbookId} /></ErrorBoundary>
       <ErrorBoundary><ShareDialog workbookId={workbookId} workbookName={workbookName} /></ErrorBoundary>
       <ErrorBoundary><ProtectedRangesDialog workbookId={workbookId} /></ErrorBoundary>
+      <ErrorBoundary>
+        <AutomationBuilder workbookId={workbookId} sheets={sheets.map((s) => ({ id: s.id, name: s.name }))} />
+      </ErrorBoundary>
+      <ErrorBoundary><AutomationRunsPanel workbookId={workbookId} /></ErrorBoundary>
       </div>
     </main>
   )

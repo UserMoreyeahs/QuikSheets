@@ -7,12 +7,13 @@
  * patches to the FortuneSheet grid data via `sheetStore.replaceGridSheets`.
  *
  * Persistence:
- *   Rules are stored in localStorage at `quiksheets_cf_rules:<workbookId>`,
- *   keyed by sheetId. Backups (original cell styles before CF overrides) are
- *   held in memory only and rebuilt on each page load.
+ *   Rules are stored in Supabase via cfRulesApi (primary) with a
+ *   localStorage fallback for unauthenticated / offline use.
+ *   Backups (original cell styles before CF overrides) are held in memory
+ *   only and rebuilt on each page load.
  *
  * Workflow:
- *   loadRules(workbookId)    — Called once on sheet page mount.
+ *   loadRules(workbookId)    — Called once on sheet page mount (async, Supabase-first).
  *   addRule / updateRule     — Mutate rules; call applyToActiveSheet afterwards.
  *   deleteRule               — Strips CF styles, re-applies remaining rules, saves.
  *   reorderRules             — Drag-to-reorder (priority index = array position).
@@ -29,22 +30,27 @@ import { applyRulesToSheet, stripRulesFromSheet } from '../utils/cfEvaluator'
 import { useSheetStore } from '@/store/sheetStore'
 import { useWorkbookStore } from '@/store/workbookStore'
 import type { Sheet } from '@fortune-sheet/core'
+import {
+  loadRules as apiLoadRules,
+  saveRule as apiSaveRule,
+  updateRule as apiUpdateRule,
+  deleteRule as apiDeleteRule,
+  deleteAllRulesForSheet as apiDeleteAllRulesForSheet,
+} from '@/lib/cfRulesApi'
 
-/** localStorage key prefix for CF rule persistence. */
-const STORAGE_KEY_PREFIX = 'quiksheets_cf_rules:'
+// ---------------------------------------------------------------------------
+// localStorage write-through (keeps cfRulesApi's local cache in sync when
+// the store mutates rules in-memory synchronously before the async API call
+// resolves). cfRulesApi also writes localStorage internally on every
+// saveRule / updateRule / deleteRule call, so this is belt-and-suspenders.
+// ---------------------------------------------------------------------------
 
-function loadFromStorage(workbookId: string): Record<string, CFRule[]> {
-  try {
-    const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${workbookId}`)
-    return raw ? (JSON.parse(raw) as Record<string, CFRule[]>) : {}
-  } catch {
-    return {}
-  }
-}
-
+/** @deprecated — kept only as the in-memory sync-to-local fallback for the rule list. */
 function saveToStorage(workbookId: string, rules: Record<string, CFRule[]>): void {
   try {
-    localStorage.setItem(`${STORAGE_KEY_PREFIX}${workbookId}`, JSON.stringify(rules))
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(`quiksheets_cf_rules:${workbookId}`, JSON.stringify(rules))
+    }
   } catch {
     // localStorage unavailable
   }
@@ -64,7 +70,7 @@ interface CFState {
 }
 
 interface CFActions {
-  loadRules: (workbookId: string) => void
+  loadRules: (workbookId: string) => Promise<void>
   getRulesForSheet: (sheetId: string) => CFRule[]
   addRule: (sheetId: string, rule: Omit<CFRule, 'id'>) => void
   updateRule: (sheetId: string, id: string, updates: Partial<Omit<CFRule, 'id'>>) => void
@@ -83,8 +89,9 @@ export const useCFStore = create<CFState & CFActions>()(
       rules: {},
       backup: {},
 
-      loadRules(workbookId) {
-        const stored = loadFromStorage(workbookId)
+      async loadRules(workbookId) {
+        // Load from Supabase (or localStorage fallback).
+        const stored = await apiLoadRules(workbookId)
         set({ workbookId, rules: stored, backup: {} }, false, 'cf/loadRules')
       },
 
@@ -99,20 +106,30 @@ export const useCFStore = create<CFState & CFActions>()(
           (state) => {
             const sheetRules = [...(state.rules[sheetId] ?? []), newRule]
             const nextRules = { ...state.rules, [sheetId]: sheetRules }
+            // Sync to localStorage immediately (in-memory fast path).
             if (state.workbookId) saveToStorage(state.workbookId, nextRules)
             return { rules: nextRules }
           },
           false,
           'cf/addRule'
         )
+        // Persist to Supabase in the background.
+        const { workbookId: wbId } = get()
+        if (wbId) {
+          void apiSaveRule(wbId, sheetId, newRule)
+        }
       },
 
       updateRule(sheetId, id, updates) {
+        let updatedRule: CFRule | undefined
         set(
           (state) => {
-            const sheetRules = (state.rules[sheetId] ?? []).map((r) =>
-              r.id === id ? { ...r, ...updates } : r
-            )
+            const sheetRules = (state.rules[sheetId] ?? []).map((r) => {
+              if (r.id !== id) return r
+              const next = { ...r, ...updates }
+              updatedRule = next
+              return next
+            })
             const nextRules = { ...state.rules, [sheetId]: sheetRules }
             if (state.workbookId) saveToStorage(state.workbookId, nextRules)
             return { rules: nextRules }
@@ -120,10 +137,14 @@ export const useCFStore = create<CFState & CFActions>()(
           false,
           'cf/updateRule'
         )
+        const { workbookId: wbId } = get()
+        if (wbId && updatedRule) {
+          void apiUpdateRule(wbId, sheetId, updatedRule)
+        }
       },
 
       deleteRule(sheetId, id) {
-        const { backup } = get()
+        const { backup, workbookId: wbId } = get()
         const sheetBackup = backup[sheetId] ?? {}
 
         // Strip CF styles before removing the rule
@@ -142,8 +163,7 @@ export const useCFStore = create<CFState & CFActions>()(
           useSheetStore.getState().replaceGridSheets(nextSheets)
           set(
             (state) => {
-              const sheetRules = remainingRules
-              const nextRules = { ...state.rules, [sheetId]: sheetRules }
+              const nextRules = { ...state.rules, [sheetId]: remainingRules }
               if (state.workbookId) saveToStorage(state.workbookId, nextRules)
               return {
                 rules: nextRules,
@@ -153,6 +173,7 @@ export const useCFStore = create<CFState & CFActions>()(
             false,
             'cf/deleteRule'
           )
+          if (wbId) void apiDeleteRule(wbId, sheetId, id)
           return
         }
 
@@ -166,6 +187,7 @@ export const useCFStore = create<CFState & CFActions>()(
           false,
           'cf/deleteRule'
         )
+        if (wbId) void apiDeleteRule(wbId, sheetId, id)
       },
 
       reorderRules(sheetId, fromIndex, toIndex) {
@@ -178,6 +200,13 @@ export const useCFStore = create<CFState & CFActions>()(
             const reindexed = sheetRules.map((r, i) => ({ ...r, priority: i }))
             const nextRules = { ...state.rules, [sheetId]: reindexed }
             if (state.workbookId) saveToStorage(state.workbookId, nextRules)
+            // Persist each reordered rule to Supabase.
+            if (state.workbookId) {
+              const wbId = state.workbookId
+              for (const r of reindexed) {
+                void apiUpdateRule(wbId, sheetId, r)
+              }
+            }
             return { rules: nextRules }
           },
           false,
@@ -212,7 +241,7 @@ export const useCFStore = create<CFState & CFActions>()(
 
       clearFromSheet(sheetId) {
         const gridSheets = useSheetStore.getState().gridSheets
-        const { backup } = get()
+        const { backup, workbookId: wbId } = get()
 
         const targetSheet = gridSheets.find((s) => s.id === sheetId)
         if (targetSheet) {
@@ -234,6 +263,7 @@ export const useCFStore = create<CFState & CFActions>()(
           false,
           'cf/clearFromSheet'
         )
+        if (wbId) void apiDeleteAllRulesForSheet(wbId, sheetId)
       },
 
       quickAddRule(sheetId, rule) {
@@ -258,10 +288,12 @@ export const useCFStore = create<CFState & CFActions>()(
  * the FortuneSheet grid to hydrate) so that saved rules are visible immediately
  * when a workbook is opened.
  *
+ * This is an async function because `loadRules` now fetches from Supabase.
+ *
  * @param workbookId - The current workbook's UUID (or "demo").
  */
-export function applyAllCFRules(workbookId: string): void {
-  useCFStore.getState().loadRules(workbookId)
+export async function applyAllCFRules(workbookId: string): Promise<void> {
+  await useCFStore.getState().loadRules(workbookId)
   const { rules } = useCFStore.getState()
   const gridSheets = useSheetStore.getState().gridSheets
 
