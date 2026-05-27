@@ -15,24 +15,32 @@ CREATE TABLE IF NOT EXISTS share_links (
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 
--- 2. Idempotent column additions (safe to re-run)
+-- 2. Normalize the legacy is_active column to active BEFORE adding any active
+--    column, so a pre-existing is_active is renamed rather than duplicated.
+--    Handles three states: fresh table, legacy (is_active only), both columns.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+              WHERE table_schema='public' AND table_name='share_links' AND column_name='is_active')
+     AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                      WHERE table_schema='public' AND table_name='share_links' AND column_name='active')
+  THEN
+    ALTER TABLE share_links RENAME COLUMN is_active TO active;
+  ELSIF EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_schema='public' AND table_name='share_links' AND column_name='is_active')
+        AND EXISTS (SELECT 1 FROM information_schema.columns
+                     WHERE table_schema='public' AND table_name='share_links' AND column_name='active')
+  THEN
+    UPDATE share_links SET active = is_active;
+    ALTER TABLE share_links DROP COLUMN is_active;
+  END IF;
+END $$;
+
+-- 3. Idempotent column additions (safe to re-run; active already present if renamed above)
 ALTER TABLE share_links ADD COLUMN IF NOT EXISTS expires_at  timestamptz NULL;
 ALTER TABLE share_links ADD COLUMN IF NOT EXISTS active      boolean     NOT NULL DEFAULT true;
 ALTER TABLE share_links ADD COLUMN IF NOT EXISTS created_by  uuid        REFERENCES auth.users(id) ON DELETE SET NULL;
 ALTER TABLE share_links ADD COLUMN IF NOT EXISTS created_at  timestamptz NOT NULL DEFAULT now();
-
--- 3. Rename is_active → active if the old column exists (safe if already renamed)
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM information_schema.columns
-     WHERE table_schema = 'public'
-       AND table_name   = 'share_links'
-       AND column_name  = 'is_active'
-  ) THEN
-    ALTER TABLE share_links RENAME COLUMN is_active TO active;
-  END IF;
-END $$;
 
 -- 4. RLS
 ALTER TABLE share_links ENABLE ROW LEVEL SECURITY;
