@@ -108,7 +108,6 @@ import { useSlicerStore } from '@/features/slicers/store/slicerStore'
 import { parseClipboardText } from '@/features/smart-paste/utils/clipboardParser'
 import { applyRulesToSheet, evaluateRules } from '@/features/conditional-formatting/utils/cfEvaluator'
 import * as cellOps from '@/features/ribbon/utils/cellOps'
-import { installHyperlinkFollow } from '@/features/ribbon/utils/cellOps'
 import { usePrintSettingsStore } from '@/features/page-layout/printSettingsStore'
 const CleanDataPanel = dynamic(
   () => import('@/features/data-cleaning/components/CleanDataPanel').then((m) => ({ default: m.CleanDataPanel })),
@@ -275,6 +274,8 @@ import type { ImportedSheet } from '@/features/grid/utils/importUtils'
 import type { ExportSheet } from '@/features/grid/utils/exportUtils'
 import type { SheetTab, SortDirection } from '@/types/sheet.types'
 import type { Sheet } from '@fortune-sheet/core'
+import { useSidebarCollapsed } from './hooks/useSidebarCollapsed'
+import { useSheetPageGlobalListeners } from './hooks/useSheetPageGlobalListeners'
 
 function toExportRows(sheet?: Sheet): (string | number | boolean | null)[][] {
   if (!sheet) return []
@@ -358,74 +359,15 @@ export default function SheetPage() {
   const [showCommandPalette, setShowCommandPalette] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [showCF, setShowCF] = useState(false)
-  // Sidebar starts expanded on BOTH server and client so the initial
-  // hydration markup matches. Without this guarantee Next.js logs a
-  // "hydration failed" recoverable error because window.innerWidth is
-  // only defined on the client. After mount we sync to the user's saved
-  // preference (or auto-collapse on narrow viewports).
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  useEffect(() => {
-    // 1) Honour an explicit user preference if present.
-    try {
-      const saved = window.localStorage.getItem('quiksheets_sidebar_collapsed')
-      if (saved === '1') {
-        setSidebarCollapsed(true)
-        return
-      }
-      if (saved === '0') {
-        setSidebarCollapsed(false)
-        return
-      }
-    } catch {
-      // localStorage unavailable — fall through to viewport heuristic.
-    }
-    // 2) No preference: collapse on narrow viewports.
-    if (window.innerWidth < 768) setSidebarCollapsed(true)
-  }, [])
-  // Auto-collapse the sidebar on viewport resize crossing the breakpoint.
-  useEffect(() => {
-    function onResize() {
-      if (window.innerWidth < 768) setSidebarCollapsed(true)
-    }
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
-  // Persist the user's choice so it carries across reloads / new tabs.
-  useEffect(() => {
-    try {
-      window.localStorage.setItem('quiksheets_sidebar_collapsed', sidebarCollapsed ? '1' : '0')
-    } catch {
-      /* ignore */
-    }
-  }, [sidebarCollapsed])
+  // Sidebar state + the 3 effects that keep it in sync (mount-time pref
+  // load, resize listener, persist-on-change). Extracted to a focused
+  // hook as the first Wave 4 page.tsx slice.
+  const [sidebarCollapsed, setSidebarCollapsed] = useSidebarCollapsed()
 
-  // Install Ctrl+Click hyperlink-follow on the canvas. Idempotent.
-  useEffect(() => {
-    installHyperlinkFollow()
-  }, [])
-
-  // Listen for quiksheets:toggle-map (fired by Trace Precedents/Dependents).
-  // Routed through a CustomEvent so cellOps doesn't need a direct dependency
-  // on the page-component's state.
-  useEffect(() => {
-    function handle() { toggleMap() }
-    window.addEventListener('quiksheets:toggle-map', handle)
-    return () => window.removeEventListener('quiksheets:toggle-map', handle)
-  }, [toggleMap])
-
-  // UX-1: NL filter bar visibility + Ctrl+Shift+L shortcut to toggle.
+  // Global listeners (hyperlink-follow + toggle-map event + Ctrl+Shift+L)
+  // extracted into a focused hook as the second Wave 4 page.tsx slice.
+  useSheetPageGlobalListeners({ toggleMap })
   const nlFilterVisible = useNLFilterUiStore((s) => s.visible)
-  const toggleNlFilter = useNLFilterUiStore((s) => s.toggle)
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'L' || e.key === 'l')) {
-        e.preventDefault()
-        toggleNlFilter()
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [toggleNlFilter])
 
   // Dev-only: expose the live grid instance + a 2-D test-data seeder on
   // window so we can verify Insert > Chart/Table/Pivot end-to-end with
