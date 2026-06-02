@@ -20,79 +20,33 @@
  */
 
 import { getBrowserSupabase } from './supabase/client'
+import { getClientSession, type ClientSession } from './supabase/getClientSession'
+import { createMigrationFlag } from './supabase/migrationFlag'
+import { makeLocalStore } from './localJsonStore'
 import type { CFRule } from '@/features/conditional-formatting/types'
 
 // ---------------------------------------------------------------------------
 // Local-storage helpers (fallback)
 // ---------------------------------------------------------------------------
 
-const LOCAL_RULES_PREFIX = 'quiksheets_cf_rules:'
-const MIGRATED_FLAG_PREFIX = 'quiksheets_cf_migrated_to_supabase:'
+const localRules = makeLocalStore<Record<string, CFRule[]>>('quiksheets_cf_rules')
+const migrationFlag = createMigrationFlag('quiksheets_cf_migrated_to_supabase')
 
-function localRulesKey(workbookId: string): string {
-  return `${LOCAL_RULES_PREFIX}${workbookId}`
-}
-
-function migratedFlagKey(workbookId: string): string {
-  return `${MIGRATED_FLAG_PREFIX}${workbookId}`
-}
-
-function hasMigrated(workbookId: string): boolean {
-  if (typeof window === 'undefined') return true
-  return window.localStorage.getItem(migratedFlagKey(workbookId)) === 'true'
-}
-
-function markMigrated(workbookId: string): void {
-  if (typeof window === 'undefined') return
-  window.localStorage.setItem(migratedFlagKey(workbookId), 'true')
-}
-
-/** Read all CF rules from localStorage for the workbook. */
 function readLocalRules(workbookId: string): Record<string, CFRule[]> {
-  if (typeof window === 'undefined') return {}
-  try {
-    const raw = window.localStorage.getItem(localRulesKey(workbookId))
-    return raw ? (JSON.parse(raw) as Record<string, CFRule[]>) : {}
-  } catch {
-    return {}
-  }
+  return localRules.read(workbookId) ?? {}
 }
-
-/** Write all CF rules for the workbook to localStorage. */
 function writeLocalRules(workbookId: string, rules: Record<string, CFRule[]>): void {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(localRulesKey(workbookId), JSON.stringify(rules))
-  } catch {
-    // localStorage quota exceeded — ignore
-  }
+  localRules.write(workbookId, rules)
 }
-
 function clearLocalRules(workbookId: string): void {
-  if (typeof window === 'undefined') return
-  window.localStorage.removeItem(localRulesKey(workbookId))
+  localRules.clear(workbookId)
 }
 
-// ---------------------------------------------------------------------------
-// Supabase session helper
-// ---------------------------------------------------------------------------
+const hasMigrated = (workbookId: string) => migrationFlag.has(workbookId)
+const markMigrated = (workbookId: string) => migrationFlag.mark(workbookId)
 
-interface SessionContext {
-  userId: string
-}
-
-async function getSession(): Promise<SessionContext | null> {
-  const supabase = getBrowserSupabase()
-  if (!supabase) return null
-  try {
-    const { data } = await supabase.auth.getUser()
-    const user = data.user
-    if (!user) return null
-    return { userId: user.id }
-  } catch {
-    return null
-  }
-}
+type SessionContext = ClientSession
+const getSession = getClientSession
 
 // ---------------------------------------------------------------------------
 // DB row shape

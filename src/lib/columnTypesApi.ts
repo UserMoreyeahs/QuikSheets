@@ -20,6 +20,9 @@
  */
 
 import { getBrowserSupabase } from './supabase/client'
+import { getClientSession, type ClientSession } from './supabase/getClientSession'
+import { createMigrationFlag } from './supabase/migrationFlag'
+import { makeLocalStore } from './localJsonStore'
 import type { ColumnTypeMeta } from '@/features/typed-columns/types'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -48,49 +51,20 @@ interface DbColumnTypeRow {
 // localStorage helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-const STORAGE_PREFIX = 'quiksheets_column_types:'
-const MIGRATED_FLAG_PREFIX = 'quiksheets_col_types_migrated_to_supabase'
+const localMap = makeLocalStore<WorkbookColumnMap>('quiksheets_column_types')
+const migrationFlag = createMigrationFlag('quiksheets_col_types_migrated_to_supabase')
 
-function localKey(workbookId: string): string {
-  return `${STORAGE_PREFIX}${workbookId}`
-}
-
-function migratedFlagKey(workbookId: string): string {
-  return `${MIGRATED_FLAG_PREFIX}:${workbookId}`
-}
-
-function hasMigratedWorkbook(workbookId: string): boolean {
-  if (typeof window === 'undefined') return true
-  return window.localStorage.getItem(migratedFlagKey(workbookId)) === 'true'
-}
-
-function markWorkbookMigrated(workbookId: string): void {
-  if (typeof window === 'undefined') return
-  window.localStorage.setItem(migratedFlagKey(workbookId), 'true')
-}
+const hasMigratedWorkbook = (workbookId: string) => migrationFlag.has(workbookId)
+const markWorkbookMigrated = (workbookId: string) => migrationFlag.mark(workbookId)
 
 function readLocalMap(workbookId: string): WorkbookColumnMap {
-  if (typeof window === 'undefined') return {}
-  try {
-    const raw = window.localStorage.getItem(localKey(workbookId))
-    return raw ? (JSON.parse(raw) as WorkbookColumnMap) : {}
-  } catch {
-    return {}
-  }
+  return localMap.read(workbookId) ?? {}
 }
-
 function writeLocalMap(workbookId: string, data: WorkbookColumnMap): void {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(localKey(workbookId), JSON.stringify(data))
-  } catch {
-    /* quota exceeded — silently ignore */
-  }
+  localMap.write(workbookId, data)
 }
-
 function clearLocalMap(workbookId: string): void {
-  if (typeof window === 'undefined') return
-  window.localStorage.removeItem(localKey(workbookId))
+  localMap.clear(workbookId)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -124,21 +98,8 @@ function dbRowsToWorkbookMap(rows: DbColumnTypeRow[]): WorkbookColumnMap {
 // Session helper
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface SessionContext {
-  userId: string
-}
-
-async function getSession(): Promise<SessionContext | null> {
-  const supabase = getBrowserSupabase()
-  if (!supabase) return null
-  try {
-    const { data } = await supabase.auth.getUser()
-    if (!data.user) return null
-    return { userId: data.user.id }
-  } catch {
-    return null
-  }
-}
+type SessionContext = ClientSession
+const getSession = getClientSession
 
 // ─────────────────────────────────────────────────────────────────────────────
 // One-time migration: localStorage → Supabase

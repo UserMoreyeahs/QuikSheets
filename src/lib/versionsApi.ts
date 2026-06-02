@@ -23,6 +23,8 @@
 
 import type { Sheet } from '@fortune-sheet/core'
 import { getBrowserSupabase } from '@/lib/supabase/client'
+import { getClientSession, type ClientSession } from '@/lib/supabase/getClientSession'
+import { createMigrationFlag } from '@/lib/supabase/migrationFlag'
 import {
   snapshotWorkbook as localSnapshot,
   listWorkbookVersions as listLocalVersions,
@@ -48,38 +50,12 @@ export interface VersionRecord {
 // Internal helpers
 // ------------------------------------------------------------------
 
-const MIGRATED_FLAG_PREFIX = 'quiksheets_versions_migrated_to_supabase'
+const migrationFlag = createMigrationFlag('quiksheets_versions_migrated_to_supabase')
+const hasMigrated = (workbookId: string) => migrationFlag.has(workbookId)
+const markMigrated = (workbookId: string) => migrationFlag.mark(workbookId)
 
-function migratedFlagKey(workbookId: string): string {
-  return `${MIGRATED_FLAG_PREFIX}:${workbookId}`
-}
-
-function hasMigrated(workbookId: string): boolean {
-  if (typeof window === 'undefined') return true
-  return window.localStorage.getItem(migratedFlagKey(workbookId)) === 'true'
-}
-
-function markMigrated(workbookId: string): void {
-  if (typeof window === 'undefined') return
-  window.localStorage.setItem(migratedFlagKey(workbookId), 'true')
-}
-
-interface SessionContext {
-  userId: string
-}
-
-async function getSession(): Promise<SessionContext | null> {
-  const supabase = getBrowserSupabase()
-  if (!supabase) return null
-  try {
-    const { data } = await supabase.auth.getUser()
-    const user = data.user
-    if (!user) return null
-    return { userId: user.id }
-  } catch {
-    return null
-  }
-}
+type SessionContext = ClientSession
+const getSession = getClientSession
 
 interface DbVersionRow {
   id: string

@@ -14,6 +14,7 @@
  */
 
 import { getBrowserSupabase } from './supabase/client'
+import { getClientSession } from './supabase/getClientSession'
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -80,14 +81,7 @@ function dbRowToRecord(row: DbNotificationRow): NotificationRecord {
 // ---------------------------------------------------------------------------
 
 async function getCurrentUserId(): Promise<string | null> {
-  const supabase = getBrowserSupabase()
-  if (!supabase) return null
-  try {
-    const { data } = await supabase.auth.getUser()
-    return data.user?.id ?? null
-  } catch {
-    return null
-  }
+  return (await getClientSession())?.userId ?? null
 }
 
 // ---------------------------------------------------------------------------

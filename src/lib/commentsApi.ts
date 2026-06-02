@@ -20,6 +20,8 @@
  */
 
 import { getBrowserSupabase } from './supabase/client'
+import { getClientSession, type ClientSession } from './supabase/getClientSession'
+import { createMigrationFlag } from './supabase/migrationFlag'
 import {
   addComment as addLocalComment,
   deleteComment as deleteLocalComment,
@@ -40,22 +42,8 @@ export interface CommentRecord extends LocalComment {
   parentId: string | null
 }
 
-/** localStorage flag — set when the one-time per-workbook migration runs. */
-const MIGRATED_FLAG_PREFIX = 'quiksheets_comments_migrated_to_supabase'
-
-function migratedFlagKey(workbookId: string): string {
-  return `${MIGRATED_FLAG_PREFIX}:${workbookId}`
-}
-
-function hasMigratedWorkbook(workbookId: string): boolean {
-  if (typeof window === 'undefined') return true
-  return window.localStorage.getItem(migratedFlagKey(workbookId)) === 'true'
-}
-
-function markWorkbookMigrated(workbookId: string): void {
-  if (typeof window === 'undefined') return
-  window.localStorage.setItem(migratedFlagKey(workbookId), 'true')
-}
+/** One-time per-workbook migration flag. */
+const migrationFlag = createMigrationFlag('quiksheets_comments_migrated_to_supabase')
 
 function clearLocalWorkbookComments(workbookId: string): void {
   if (typeof window === 'undefined') return
@@ -102,29 +90,6 @@ function localToRecord(local: LocalComment): CommentRecord {
   }
 }
 
-interface SessionContext {
-  userId: string
-  displayName: string | null
-}
-
-async function getSession(): Promise<SessionContext | null> {
-  const supabase = getBrowserSupabase()
-  if (!supabase) return null
-  try {
-    const { data } = await supabase.auth.getUser()
-    const user = data.user
-    if (!user) return null
-    const displayName =
-      (user.user_metadata?.['display_name'] as string | undefined) ??
-      (user.user_metadata?.['full_name'] as string | undefined) ??
-      user.email ??
-      null
-    return { userId: user.id, displayName }
-  } catch {
-    return null
-  }
-}
-
 /**
  * One-time migration: lift any localStorage comments for this workbook
  * into Supabase, then mark the workbook migrated and clear local data.
@@ -136,12 +101,12 @@ async function getSession(): Promise<SessionContext | null> {
  */
 async function migrateLocalToSupabase(
   workbookId: string,
-  session: SessionContext
+  session: ClientSession
 ): Promise<void> {
-  if (hasMigratedWorkbook(workbookId)) return
+  if (migrationFlag.has(workbookId)) return
   const local = listLocalComments(workbookId)
   if (local.length === 0) {
-    markWorkbookMigrated(workbookId)
+    migrationFlag.mark(workbookId)
     return
   }
 
@@ -176,7 +141,7 @@ async function migrateLocalToSupabase(
     console.debug('[commentsApi] migration deferred:', error.message)
     return
   }
-  markWorkbookMigrated(workbookId)
+  migrationFlag.mark(workbookId)
   clearLocalWorkbookComments(workbookId)
 }
 
@@ -193,7 +158,7 @@ async function migrateLocalToSupabase(
  */
 export async function loadComments(workbookId: string): Promise<CommentRecord[]> {
   const supabase = getBrowserSupabase()
-  const session = supabase ? await getSession() : null
+  const session = supabase ? await getClientSession() : null
 
   if (!supabase || !session) {
     return listLocalComments(workbookId).map(localToRecord)
@@ -234,7 +199,7 @@ export async function createComment(input: {
 }): Promise<CommentRecord> {
   const mentions = input.mentions ?? parseMentions(input.body)
   const supabase = getBrowserSupabase()
-  const session = supabase ? await getSession() : null
+  const session = supabase ? await getClientSession() : null
 
   if (!supabase || !session) {
     const local = addLocalComment({
@@ -304,7 +269,7 @@ export async function createComment(input: {
 export async function updateComment(id: string, body: string): Promise<void> {
   const mentions = parseMentions(body)
   const supabase = getBrowserSupabase()
-  const session = supabase ? await getSession() : null
+  const session = supabase ? await getClientSession() : null
   if (!supabase || !session) return // no-op for local (UI doesn't expose edit yet)
 
   await supabase.from('comments').update({ body, mentions }).eq('id', id)
@@ -313,7 +278,7 @@ export async function updateComment(id: string, body: string): Promise<void> {
 /** Delete a comment. Author-only enforced by RLS. */
 export async function deleteComment(workbookId: string, id: string): Promise<void> {
   const supabase = getBrowserSupabase()
-  const session = supabase ? await getSession() : null
+  const session = supabase ? await getClientSession() : null
   if (!supabase || !session) {
     deleteLocalComment(workbookId, id)
     return
@@ -334,7 +299,7 @@ export async function resolveComment(
   resolved: boolean
 ): Promise<void> {
   const supabase = getBrowserSupabase()
-  const session = supabase ? await getSession() : null
+  const session = supabase ? await getClientSession() : null
   if (!supabase || !session) {
     setLocalCommentResolved(workbookId, id, resolved)
     return
