@@ -5,7 +5,7 @@
 // picks up the new functions.
 import '@/lib/formulajsPatches'
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import { useParams, useRouter } from 'next/navigation'
 import { Network, Upload, ChevronLeft, ChevronRight } from 'lucide-react'
@@ -274,6 +274,8 @@ import { useWorkbookName } from './hooks/useWorkbookName'
 import { useLoadTemplateDataOnMount } from './hooks/useLoadTemplateDataOnMount'
 import { useDevWindowHelpers } from './hooks/useDevWindowHelpers'
 import { useLocalhostDebugWindow } from './hooks/useLocalhostDebugWindow'
+import { useFormSubmissionMergeOnMount } from './hooks/useFormSubmissionMergeOnMount'
+import { useBroadcastCursorToCollab } from './hooks/useBroadcastCursorToCollab'
 
 function toExportRows(sheet?: Sheet): (string | number | boolean | null)[][] {
   if (!sheet) return []
@@ -341,14 +343,7 @@ export default function SheetPage() {
   const nameManagerOpen = useNamedRangesStore((s) => s.dialogOpen)
 
   // Broadcast cursor position to other users via Realtime.
-  // Use collab.broadcastCursor directly (stable useCallback ref) — do NOT
-  // include the whole `collab` object (recreated every render → infinite loop).
-  const { broadcastCursor } = collab
-  useEffect(() => {
-    if (selectedCell && activeSheetId) {
-      broadcastCursor(activeSheetId, selectedCell.row, selectedCell.col)
-    }
-  }, [selectedCell, activeSheetId, broadcastCursor])
+  useBroadcastCursorToCollab(selectedCell, activeSheetId, collab.broadcastCursor)
 
   const [showSort, setShowSort] = useState(false)
   const [showFilter, setShowFilter] = useState(false)
@@ -475,69 +470,9 @@ export default function SheetPage() {
   // Apply saved conditional formatting rules once after workbook hydration.
   useApplyCFOnMount(workbookId)
 
-  // Merge pending form submissions into the workbook on mount.
-  // First runs the one-time localStorage → Supabase migration so any
-  // legacy form definitions land in the proper store; then walks every
-  // form for this workbook and drains its pending submissions queue
-  // into the sheet body.
-  useEffect(() => {
-    void (async () => {
-      const { loadForms, takePendingSubmissions, migrateLocalFormsToSupabase } = await import(
-        '@/lib/formsApi'
-      )
-      const { cloneSheetWithData, getSheetMatrix } = await import('@/lib/fortuneSheet')
-      await migrateLocalFormsToSupabase()
-      const forms = await loadForms(workbookId)
-      if (forms.length === 0) return
-
-      const state = useSheetStore.getState()
-      let nextSheets = state.gridSheets
-      let didChange = false
-
-      for (const form of forms) {
-        if (!form.id) continue
-        const subs = takePendingSubmissions(form.id)
-        if (subs.length === 0) continue
-        const sheetIdx = nextSheets.findIndex((s) => s.id === form.sheetId)
-        if (sheetIdx < 0) continue
-        const sheet = nextSheets[sheetIdx]
-        if (!sheet) continue
-        const matrix = getSheetMatrix(sheet)
-        const next = matrix.map((row) => [...(row ?? [])])
-        // start writing at the first empty row at the bottom
-        let writeRow = next.length
-        for (const sub of subs) {
-          let row = next[writeRow]
-          if (!row) {
-            row = []
-            next[writeRow] = row
-          }
-          for (const field of form.fields) {
-            const raw = sub.values[field.id]
-            const display = raw === undefined || raw === null ? '' : String(raw)
-            row[field.columnIndex] = { v: display, m: display }
-          }
-          writeRow++
-        }
-        nextSheets = nextSheets.map((s, i) =>
-          i === sheetIdx ? cloneSheetWithData(s, next) : s
-        )
-        didChange = true
-      }
-
-      if (didChange) {
-        useSheetStore.getState().replaceGridSheets(nextSheets)
-        // MVP T019 fix: persist the merged rows IMMEDIATELY instead of
-        // relying on the 30-second auto-save debounce. If the user
-        // refreshes right after a form submission, we lose the rows
-        // otherwise — they appear in the grid, disappear on reload.
-        const { saveWorkbook } = await import('@/lib/saveService')
-        void saveWorkbook({ id: workbookId, name: workbookName, data: nextSheets })
-        toast.success('Form submissions added to the sheet.')
-      }
-    })()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // Merge pending form submissions into the workbook on mount + run
+  // the one-time formsApi localStorage → Supabase migration.
+  useFormSubmissionMergeOnMount(workbookId, workbookName)
 
   const handleQuickSort = useCallback(
     (direction: SortDirection) => {
