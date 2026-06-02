@@ -5,13 +5,22 @@
  * -----------------
  * Wires Supabase Realtime for multi-user co-editing:
  *
- *   1. Joins a Realtime channel scoped to the workbook ID.
+ *   1. Shares a single Realtime channel via useWorkbookChannel (channel dedup).
  *   2. Broadcasts local cell selection changes → other users see cursors.
  *   3. Broadcasts cell edits → other users receive updated cell data.
  *   4. Tracks remote presence (who's here, what they're looking at).
  *
  * Graceful fallback: when Supabase is not configured, the hook is a no-op —
  * the app works in single-user mode with no errors.
+ *
+ * Channel sharing
+ * ---------------
+ * All three collab hooks (useRealtimeCollab, useBroadcast, usePresence) share
+ * ONE Supabase Realtime channel per workbook via useWorkbookChannel.  Events
+ * are differentiated by the Broadcast `event` field:
+ *   'cell_edit'      — remote cell mutations
+ *   'cursor'         — cursor/selection position
+ *   'presence-update'— presence list (handled by usePresence)
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react'
@@ -19,7 +28,7 @@ import { getBrowserSupabase } from '@/lib/supabase/client'
 import { usePresenceStore } from '../store/presenceStore'
 import { useSheetStore } from '@/store/sheetStore'
 import { getSheetMatrix, cloneSheetWithData } from '@/lib/fortuneSheet'
-import type { RealtimeChannel } from '@supabase/supabase-js'
+import { useWorkbookChannel } from './useWorkbookChannel'
 
 interface CellEditPayload {
   type: 'cell_edit'
@@ -42,10 +51,11 @@ interface CursorPayload {
 }
 
 export function useRealtimeCollab(workbookId: string) {
-  const channelRef = useRef<RealtimeChannel | null>(null)
   const upsertPresence = usePresenceStore((s) => s.upsertPresence)
-  const removePresence = usePresenceStore((s) => s.removePresence)
   const pruneStale = usePresenceStore((s) => s.pruneStale)
+
+  // ── Shared channel (one per workbook, ref-counted) ─────────────
+  const sharedChannel = useWorkbookChannel(workbookId)
 
   // Identity priority:
   //  1. Authenticated Supabase user id (so two tabs from the same user
@@ -80,18 +90,12 @@ export function useRealtimeCollab(workbookId: string) {
   const userName = authUser?.name ?? `User ${anonIdRef.current.slice(0, 4)}`
   const userEmail = authUser?.email ?? ''
 
-  // ── Join channel on mount ──────────────────────────────────────
+  // ── Register broadcast listeners on the shared channel ────────
   useEffect(() => {
-    const supabase = getBrowserSupabase()
-    if (!supabase || !workbookId) return
-
-    const channelName = `workbook:${workbookId}`
-    const channel = supabase.channel(channelName, {
-      config: { broadcast: { self: false } },
-    })
+    if (!sharedChannel) return
 
     // Listen for broadcasts
-    channel
+    sharedChannel
       .on('broadcast', { event: 'cursor' }, ({ payload }) => {
         const p = payload as CursorPayload
         if (p.userId === userId) return
@@ -112,26 +116,21 @@ export function useRealtimeCollab(workbookId: string) {
         // Apply remote edit to local grid
         applyRemoteEdit(p)
       })
-      .subscribe()
-
-    channelRef.current = channel
 
     // Prune stale presences periodically
     const pruneInterval = setInterval(() => pruneStale(), 15000)
 
     return () => {
       clearInterval(pruneInterval)
-      channel.unsubscribe()
-      channelRef.current = null
+      // Note: channel teardown is managed by useWorkbookChannel, not here.
     }
-  }, [workbookId, userId, upsertPresence, removePresence, pruneStale])
+  }, [sharedChannel, userId, upsertPresence, pruneStale])
 
   // ── Broadcast local cursor ─────────────────────────────────────
   const broadcastCursor = useCallback(
     (sheetId: string, row: number, col: number) => {
-      const channel = channelRef.current
-      if (!channel) return
-      channel.send({
+      if (!sharedChannel) return
+      void sharedChannel.send({
         type: 'broadcast',
         event: 'cursor',
         payload: {
@@ -145,15 +144,14 @@ export function useRealtimeCollab(workbookId: string) {
         } satisfies CursorPayload,
       })
     },
-    [userId, userName, userEmail],
+    [sharedChannel, userId, userName, userEmail],
   )
 
   // ── Broadcast cell edit ────────────────────────────────────────
   const broadcastEdit = useCallback(
     (sheetId: string, row: number, col: number, value: string | number | null, display: string) => {
-      const channel = channelRef.current
-      if (!channel) return
-      channel.send({
+      if (!sharedChannel) return
+      void sharedChannel.send({
         type: 'broadcast',
         event: 'cell_edit',
         payload: {
@@ -167,14 +165,14 @@ export function useRealtimeCollab(workbookId: string) {
         } satisfies CellEditPayload,
       })
     },
-    [userId],
+    [sharedChannel, userId],
   )
 
   return {
     userId,
     broadcastCursor,
     broadcastEdit,
-    isConnected: channelRef.current !== null,
+    isConnected: sharedChannel !== null,
   }
 }
 

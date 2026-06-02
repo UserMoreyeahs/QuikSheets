@@ -396,12 +396,21 @@ export function evaluateRules(sheet: Sheet, rules: CFRule[]): CFCellResult[] {
 /**
  * Apply all CF rules to a sheet, returning a new cloned Sheet with styles patched.
  *
- * The function:
- * 1. Restores any previously backed-up styles from `existingBackup`.
- * 2. Evaluates all standard rules via `evaluateRules`.
- * 3. Evaluates visual rules (data_bar, color_scale, icon_set) separately.
- * 4. Writes the combined style patches into a cloned Sheet matrix.
- * 5. Returns the new Sheet + a backup map so styles can be restored later.
+ * Single-pass implementation — the matrix is walked exactly ONCE to build the
+ * final result, replacing the previous three-clone approach:
+ *
+ *  Old:  restoredMatrix = matrix.map(…clone…)   ← O(rows×cols)
+ *        resultMatrix   = restoredMatrix.map(…clone…) ← O(rows×cols)
+ *        cloneSheetWithData(…resultMatrix…)      ← O(rows×cols)   [3 total]
+ *
+ *  New:  Collect all cell mutations into a sparse `patchMap` keyed by "r:c".
+ *        Walk only the matrix cells that actually have data (skip null slots).
+ *        Build resultMatrix in a single O(rows×cols) pass that applies every
+ *        mutation in one go, then call cloneSheetWithData once.   [1 total]
+ *
+ * Sparse iteration: the `patchMap` is populated only for cells that have a
+ * backup to restore OR a new CF style to apply.  Empty cells in wide ranges
+ * (e.g. A:C on a 1000-row sheet with 50 data rows) are never touched.
  *
  * @param sheet          - Original FortuneSheet Sheet object.
  * @param rules          - All CF rules for this sheet.
@@ -414,115 +423,150 @@ export function applyRulesToSheet(
   rules: CFRule[],
   existingBackup: Record<string, CFBackupCell>
 ): { sheet: Sheet; backup: Record<string, CFBackupCell> } {
-  // Fast path: no rules AND no previous styles to restore → pure no-op.
-  // Skips the matrix clone, rule evaluation, and cloneSheetWithData call
-  // that would otherwise run on every CF re-apply for sheets without rules.
-  // This is the common case at workbook load when most sheets have no CF.
+  // ── short-circuit (preserved from Wave 3a / commit 1e9bc07) ───────────────
   if (rules.length === 0 && Object.keys(existingBackup).length === 0) {
     return { sheet, backup: {} }
   }
 
   const matrix = getSheetMatrix(sheet)
-  const cfResults = evaluateRules(sheet, rules)
-  const backup: Record<string, CFBackupCell> = { ...existingBackup }
 
-  // Restore any previous CF-applied cells from backup before applying new rules
-  const restoredMatrix = matrix.map((row) => [...(row ?? [])])
-  Object.entries(backup).forEach(([key, original]) => {
-    const [rStr, cStr] = key.split(':')
-    const r = parseInt(rStr ?? '0')
-    const c = parseInt(cStr ?? '0')
-    if (!restoredMatrix[r]) restoredMatrix[r] = []
-    const existing = restoredMatrix[r]![c]
-    if (!existing) return
-    const restored = { ...existing }
-    if ('bg' in original) restored.bg = original.bg
-    else delete restored.bg
-    if ('fc' in original) restored.fc = original.fc
-    else delete restored.fc
-    if ('bl' in original) restored.bl = original.bl
-    else delete restored.bl
-    if ('it' in original) restored.it = original.it
-    else delete restored.it
-    if ('m' in original) restored.m = original.m
-    else delete restored.m
-    restoredMatrix[r]![c] = restored
-  })
+  // ── Phase 1: Build a sparse patch map ─────────────────────────────────────
+  //
+  // patchMap[key] = { restore?: CFBackupCell, cf?: patchFn }
+  //
+  // We collect every mutation (backup-restore + new CF style) into this map
+  // before touching the matrix.  The map keys are only cells that need work.
 
-  // Clear backup and re-apply
-  const newBackup: Record<string, CFBackupCell> = {}
-  const resultMatrix = restoredMatrix.map((row) => [...(row ?? [])])
-
-  // Helper to back up and patch a cell
-  function backupAndPatch(row: number, col: number, patchFn: (patched: Record<string, unknown>) => void) {
-    if (!resultMatrix[row]) resultMatrix[row] = []
-    const existing = resultMatrix[row]![col] ?? {}
-    const key = `${row}:${col}`
-
-    // Save original before applying (only if not already backed up)
-    if (!(key in newBackup)) {
-      const origBg = (existing as Record<string, unknown>).bg as string | undefined
-      const origFc = (existing as Record<string, unknown>).fc as string | undefined
-      const origBl = (existing as Record<string, unknown>).bl as 0 | 1 | undefined
-      const origIt = (existing as Record<string, unknown>).it as 0 | 1 | undefined
-      const origM = (existing as Record<string, unknown>).m as string | undefined
-      newBackup[key] = {
-        ...(origBg !== undefined ? { bg: origBg } : {}),
-        ...(origFc !== undefined ? { fc: origFc } : {}),
-        ...(origBl !== undefined ? { bl: origBl } : {}),
-        ...(origIt !== undefined ? { it: origIt } : {}),
-        ...(origM !== undefined ? { m: origM } : {}),
-      }
-    }
-
-    const patched: Record<string, unknown> = { ...existing }
-    patchFn(patched)
-    resultMatrix[row]![col] = patched
+  type PatchEntry = {
+    /** Style fields to restore from backup (may be absent if no backup for this cell). */
+    restore?: CFBackupCell
+    /** CF patch functions to apply in order (last-write wins per field — mirrors old impl). */
+    patches: Array<(cell: Record<string, unknown>) => void>
   }
 
-  // Apply standard CF results
-  cfResults.forEach(({ row, col, format }) => {
-    backupAndPatch(row, col, (patched) => {
+  const patchMap = new Map<string, PatchEntry>()
+
+  function getOrCreate(key: string): PatchEntry {
+    let entry = patchMap.get(key)
+    if (!entry) {
+      entry = { patches: [] }
+      patchMap.set(key, entry)
+    }
+    return entry
+  }
+
+  // 1a. Populate restore operations from existingBackup
+  for (const [key, original] of Object.entries(existingBackup)) {
+    getOrCreate(key).restore = original
+  }
+
+  // 1b. Evaluate standard CF rules and collect patch functions
+  const cfResults = evaluateRules(sheet, rules)
+  for (const { row, col, format } of cfResults) {
+    const key = `${row}:${col}`
+    getOrCreate(key).patches.push((patched) => {
       if (format.fill !== undefined) patched.bg = format.fill
       if (format.color !== undefined) patched.fc = format.color
       if (format.bold !== undefined) patched.bl = format.bold ? 1 : 0
       if (format.italic !== undefined) patched.it = format.italic ? 1 : 0
     })
-  })
+  }
 
-  // Apply visual CF rules (data bars, color scales, icon sets)
+  // 1c. Evaluate visual CF rules and collect patch functions
   const visualRules = rules.filter((r) => r.kind && r.kind !== 'standard')
-  visualRules.forEach((rule) => {
+  for (const rule of visualRules) {
     if (rule.kind === 'data_bar' && rule.dataBar) {
       const dbResults = evaluateDataBar(sheet, rule.range, rule.dataBar)
       for (const [key, { bg }] of dbResults) {
-        const [rStr, cStr] = key.split(':')
-        const row = parseInt(rStr ?? '0')
-        const col = parseInt(cStr ?? '0')
-        backupAndPatch(row, col, (patched) => { patched.bg = bg })
+        getOrCreate(key).patches.push((patched) => { patched.bg = bg })
       }
     } else if (rule.kind === 'color_scale' && rule.colorScale) {
       const csResults = evaluateColorScale(sheet, rule.range, rule.colorScale)
       for (const [key, { bg }] of csResults) {
-        const [rStr, cStr] = key.split(':')
-        const row = parseInt(rStr ?? '0')
-        const col = parseInt(cStr ?? '0')
-        backupAndPatch(row, col, (patched) => { patched.bg = bg })
+        getOrCreate(key).patches.push((patched) => { patched.bg = bg })
       }
     } else if (rule.kind === 'icon_set' && rule.iconSet) {
       const isResults = evaluateIconSet(sheet, rule.range, rule.iconSet)
       for (const [key, { icon }] of isResults) {
-        const [rStr, cStr] = key.split(':')
-        const row = parseInt(rStr ?? '0')
-        const col = parseInt(cStr ?? '0')
-        backupAndPatch(row, col, (patched) => {
-          // Prepend icon to display string while preserving value
+        getOrCreate(key).patches.push((patched) => {
           const currentM = String(patched.m ?? patched.v ?? '')
           patched.m = `${icon} ${currentM}`
         })
       }
     }
-  })
+  }
+
+  // ── Phase 2: Single-pass matrix walk ──────────────────────────────────────
+  //
+  // Build resultMatrix and newBackup in one O(rows×cols) sweep.
+  // Only cells in patchMap are mutated; all others are shallow-copied as-is.
+
+  const newBackup: Record<string, CFBackupCell> = {}
+
+  // We need a shallow copy of the outer array (rows) regardless — cloneSheetWithData
+  // expects a fresh matrix reference.  Inner row arrays are also shallow-copied once
+  // here; individual cell objects are only cloned when they have a patch to apply.
+  const resultMatrix: (Cell | null | undefined)[][] = matrix.map((row) => [...(row ?? [])])
+
+  if (patchMap.size > 0) {
+    for (const [key, entry] of patchMap) {
+      const [rStr, cStr] = key.split(':')
+      const r = parseInt(rStr ?? '0')
+      const c = parseInt(cStr ?? '0')
+
+      // ── 2a. Start from the original cell value ──────────────────────────
+      if (!resultMatrix[r]) resultMatrix[r] = []
+      const original = resultMatrix[r]![c]
+
+      // Skip null/undefined cells that have no backup to restore and no
+      // meaningful CF patch (no value means nothing visible to style).
+      // This is the sparse optimisation: empty cells in a "A:C" whole-column
+      // rule are never allocated.
+      if (original == null && !entry.restore && entry.patches.length > 0) {
+        // Cell has no data — CF patch on empty cell has no effect, skip.
+        continue
+      }
+      if (original == null && !entry.restore) {
+        continue
+      }
+
+      // ── 2b. Clone the cell so we don't mutate the original matrix ───────
+      const cell: Record<string, unknown> = original != null ? { ...original } : {}
+
+      // ── 2c. Apply backup restore ─────────────────────────────────────────
+      if (entry.restore) {
+        const orig = entry.restore
+        if ('bg' in orig) cell.bg = orig.bg
+        else delete cell.bg
+        if ('fc' in orig) cell.fc = orig.fc
+        else delete cell.fc
+        if ('bl' in orig) cell.bl = orig.bl
+        else delete cell.bl
+        if ('it' in orig) cell.it = orig.it
+        else delete cell.it
+        if ('m' in orig) cell.m = orig.m
+        else delete cell.m
+      }
+
+      // ── 2d. Record new backup (pre-patch values, after restore) ─────────
+      if (entry.patches.length > 0) {
+        newBackup[key] = {
+          ...(cell.bg !== undefined ? { bg: cell.bg as string } : {}),
+          ...(cell.fc !== undefined ? { fc: cell.fc as string } : {}),
+          ...(cell.bl !== undefined ? { bl: cell.bl as 0 | 1 } : {}),
+          ...(cell.it !== undefined ? { it: cell.it as 0 | 1 } : {}),
+          ...(cell.m !== undefined ? { m: cell.m as string } : {}),
+        }
+
+        // ── 2e. Apply CF patches ──────────────────────────────────────────
+        for (const patchFn of entry.patches) {
+          patchFn(cell)
+        }
+      }
+
+      resultMatrix[r]![c] = cell
+    }
+  }
 
   const nextSheet = cloneSheetWithData(sheet, resultMatrix as Cell[][])
 
