@@ -102,9 +102,6 @@ const NameManagerDialog = dynamic(
 )
 import { useNamedRangesStore } from '@/features/named-ranges/namedRangesStore'
 import { useCFStore } from '@/features/conditional-formatting/store/cfStore'
-import { applyRulesToSheet, evaluateRules } from '@/features/conditional-formatting/utils/cfEvaluator'
-import * as cellOps from '@/features/ribbon/utils/cellOps'
-import { usePrintSettingsStore } from '@/features/page-layout/printSettingsStore'
 const CleanDataPanel = dynamic(
   () => import('@/features/data-cleaning/components/CleanDataPanel').then((m) => ({ default: m.CleanDataPanel })),
   { ssr: false },
@@ -276,6 +273,7 @@ import { useLoadAutomationsOnMount } from './hooks/useLoadAutomationsOnMount'
 import { useWorkbookName } from './hooks/useWorkbookName'
 import { useLoadTemplateDataOnMount } from './hooks/useLoadTemplateDataOnMount'
 import { useDevWindowHelpers } from './hooks/useDevWindowHelpers'
+import { useLocalhostDebugWindow } from './hooks/useLocalhostDebugWindow'
 
 function toExportRows(sheet?: Sheet): (string | number | boolean | null)[][] {
   if (!sheet) return []
@@ -431,85 +429,9 @@ export default function SheetPage() {
     [activeSheetMatrix, nlFilterColumnSchema]
   )
 
-  useEffect(() => {
-    const isLocalDebugSession =
-      window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    if (!isLocalDebugSession) return
-
-    const debugWindow = window as Window & {
-      __quiksheetsDebug?: {
-        getSheetState: typeof useSheetStore.getState
-        getWorkbookState: typeof useWorkbookStore.getState
-        // feature panel stores — exposed for headless smoke testing
-        chartBuilder: { open: () => void; close: () => void }
-        pivotBuilder: { open: () => void; close: () => void }
-        formBuilder:  { open: () => void; close: () => void }
-        cleanData:    { open: () => void; close: () => void }
-        forecast:     { open: () => void; close: () => void }
-        comments:     { openPanel: () => void; closePanel: () => void; openComposer: (t: { sheetId: string; cellAddress: string }) => void }
-        versionHistory: { open: () => void; close: () => void }
-        share:        { open: () => void; close: () => void }
-        protectedRanges: { open: () => void; close: () => void }
-        cf: typeof useCFStore.getState
-        cfDebug: {
-          evaluateRules: typeof evaluateRules
-          applyRulesToSheet: typeof applyRulesToSheet
-        }
-        cellOps: typeof cellOps
-        printSettings: typeof usePrintSettingsStore.getState
-      }
-    }
-
-    debugWindow.__quiksheetsDebug = {
-      getSheetState: useSheetStore.getState,
-      getWorkbookState: useWorkbookStore.getState,
-      chartBuilder: {
-        open:  () => useChartPanelStore.getState().openBuilder(),
-        close: () => useChartPanelStore.getState().closeBuilder(),
-      },
-      pivotBuilder: {
-        open:  () => usePivotUiStore.getState().openBuilder(),
-        close: () => usePivotUiStore.getState().closeBuilder(),
-      },
-      formBuilder: {
-        open:  () => useFormBuilderStore.getState().open(),
-        close: () => useFormBuilderStore.getState().close(),
-      },
-      cleanData: {
-        open:  () => useCleanDataStore.getState().open(),
-        close: () => useCleanDataStore.getState().close(),
-      },
-      forecast: {
-        open:  () => useForecastStore.getState().open(),
-        close: () => useForecastStore.getState().close(),
-      },
-      comments: {
-        openPanel:    () => useCommentsUiStore.getState().openPanel(),
-        closePanel:   () => useCommentsUiStore.getState().closePanel(),
-        openComposer: (t) => useCommentsUiStore.getState().openComposer(t),
-      },
-      versionHistory: {
-        open:  () => useVersionUiStore.getState().open(),
-        close: () => useVersionUiStore.getState().close(),
-      },
-      share: {
-        open:  () => useShareDialogStore.getState().open(),
-        close: () => useShareDialogStore.getState().close(),
-      },
-      protectedRanges: {
-        open:  () => useProtectedRangesUiStore.getState().open(),
-        close: () => useProtectedRangesUiStore.getState().close(),
-      },
-      cf: useCFStore.getState,
-      cfDebug: { evaluateRules, applyRulesToSheet },
-      cellOps,
-      printSettings: usePrintSettingsStore.getState,
-    }
-
-    return () => {
-      delete debugWindow.__quiksheetsDebug
-    }
-  }, [])
+  // window.__quiksheetsDebug surface for local Playwright smoke runs
+  // (no-op outside localhost / 127.0.0.1).
+  useLocalhostDebugWindow()
 
   const getActiveSheetData = useCallback((): ExportSheet => {
     return {
