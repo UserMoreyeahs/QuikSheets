@@ -174,12 +174,18 @@ interface SheetState {
   showFindReplace: boolean
   findResults: FoundCell[]
   /**
-   * Monotonic counter bumped on every wholesale gridSheets replacement
-   * (setGridSheets / replaceGridSheets). FortuneSheet only hydrates from
-   * the `data` prop on initial mount — to force a remount when cell data
-   * changes wholesale (import, template load, undo of a bulk op) we
-   * include this counter in SpreadsheetGrid's React key so the grid
-   * remounts cleanly. See P0 fix for the Excel-import blank-screen bug.
+   * Monotonic counter bumped ONLY by `replaceGridSheets` — i.e. wholesale
+   * gridSheets replacements (import, template load, paste-table, undo of
+   * a bulk op, conditional-formatting re-apply, etc.). FortuneSheet only
+   * hydrates from the `data` prop on initial mount, so to make those
+   * external replacements visible we include this counter in
+   * SpreadsheetGrid's React key so the grid remounts cleanly.
+   *
+   * `setGridSheets` does NOT bump this counter — it's used for
+   * incremental writes (e.g. `handleChange` reflecting a single
+   * keystroke FortuneSheet already knows about). Bumping there caused
+   * "refresh-on-type": every character → key change → unmount → the
+   * in-progress edit was wiped before the next keystroke could commit.
    */
   hydrationVersion: number
 }
@@ -513,12 +519,15 @@ export const useSheetStore = create<SheetState & SheetActions>()(
 
         setGridSheets: (sheets) => {
           const nextSheets = cloneFortuneData(sheets)
-          set((state) => ({
+          set(() => ({
             gridSheets: nextSheets,
             activeSheetIndex: getActiveSheetIndex(nextSheets),
-            // Bump so SpreadsheetGrid remounts FortuneSheet — needed because
-            // FortuneSheet only hydrates from `data` on initial mount.
-            hydrationVersion: state.hydrationVersion + 1,
+            // NO hydrationVersion bump.  This action is for incremental
+            // writes where FortuneSheet ALREADY has the new data in its
+            // own internal state (e.g. `handleChange` echoing back a
+            // single keystroke).  Bumping here forced a remount on every
+            // character → the in-progress edit was lost.  Callers that
+            // genuinely need a forced remount must use `replaceGridSheets`.
           }))
         },
 

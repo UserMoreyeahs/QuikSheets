@@ -15,6 +15,7 @@ import { toast } from 'sonner'
 import { CommandPalette, type CommandPaletteItem } from '@/components/CommandPalette'
 import { KeyboardShortcuts } from '@/components/KeyboardShortcuts'
 import { ThemeToggle } from '@/components/ThemeToggle'
+import { UserMenu } from '@/components/UserMenu'
 import { NotificationBell } from '@/components/NotificationBell'
 import { WorkbookSidebar } from '@/features/workbook/components/WorkbookSidebar'
 import { createWorkbookAction } from '@/features/workbook/actions'
@@ -1252,6 +1253,7 @@ export default function SheetPage() {
 
             <PresenceAvatars />
             <NotificationBell />
+            <UserMenu />
             <ThemeToggle />
           </div>
         </header>

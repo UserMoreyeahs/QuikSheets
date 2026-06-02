@@ -217,7 +217,11 @@ export function useSmartPaste() {
     state.columns.forEach((column) => {
       sheetState.setActiveFormatting(TYPE_FORMAT[column.type] ?? TYPE_FORMAT.text)
     })
-    sheetState.setGridSheets(applyColumnFormats(sheetState.gridSheets, state, activeSheetId))
+    // replaceGridSheets — applying column-wide formats to the pasted
+    // region is a wholesale write FortuneSheet's internal state hasn't
+    // seen, so we MUST bump hydrationVersion to force a remount so the
+    // new formats render.  See sheetStore.setGridSheets vs replaceGridSheets.
+    sheetState.replaceGridSheets(applyColumnFormats(sheetState.gridSheets, state, activeSheetId))
     setState(null)
     setIsApplying(false)
   }, [activeSheetId, state])

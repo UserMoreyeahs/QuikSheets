@@ -146,7 +146,12 @@ export function useColumnIntent(gridSheets: Sheet[]) {
 
     const sheetState = useSheetStore.getState()
     sheetState.setActiveFormatting(intentToFormatting(pendingIntent.intent))
-    sheetState.setGridSheets(
+    // replaceGridSheets (not setGridSheets) — applying column-wide
+    // formatting is a wholesale write FortuneSheet's internal state
+    // hasn't seen, so we MUST bump hydrationVersion to force a remount
+    // so the new format is visible. setGridSheets is reserved for
+    // incremental writes FortuneSheet already knows about.
+    sheetState.replaceGridSheets(
       applyIntentToColumn(sheetState.gridSheets, pendingIntent, activeSheetId)
     )
 

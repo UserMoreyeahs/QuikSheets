@@ -8,6 +8,7 @@ import type { Sheet } from '@fortune-sheet/core'
 import { useDashboardWorkbooks, type DashboardWorkbook } from '@/features/workbook/useDashboardWorkbooks'
 import { createWorkbookAction, deleteWorkbookAction } from '@/features/workbook/actions'
 import { getBrowserSupabase } from '@/lib/supabase/client'
+import { UserMenu } from '@/components/UserMenu'
 
 function formatDate(iso?: string): string {
   if (!iso) return ''
@@ -265,14 +266,17 @@ export default function DashboardPage() {
             <FileSpreadsheet className="h-6 w-6 text-blue-600" />
             <span className="text-lg font-bold text-zinc-900 dark:text-zinc-50">Quiksheets</span>
           </div>
-          <button
-            onClick={handleNewWorkbook}
-            disabled={pending}
-            className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
-          >
-            <Plus className="h-4 w-4" />
-            {pending ? 'Creating…' : 'New workbook'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleNewWorkbook}
+              disabled={pending}
+              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+            >
+              <Plus className="h-4 w-4" />
+              {pending ? 'Creating…' : 'New workbook'}
+            </button>
+            <UserMenu />
+          </div>
         </div>
       </header>
 

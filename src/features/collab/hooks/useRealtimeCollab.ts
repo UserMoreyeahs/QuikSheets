@@ -57,20 +57,23 @@ export function useRealtimeCollab(workbookId: string) {
   // ── Shared channel (one per workbook, ref-counted) ─────────────
   const sharedChannel = useWorkbookChannel(workbookId)
 
-  // Identity priority:
-  //  1. Authenticated Supabase user id (so two tabs from the same user
-  //     appear as ONE presence — the previous behaviour gave each tab a
-  //     fresh random UUID and showed the user as a duplicate).
-  //  2. Fallback to a stable per-session anon UUID.
+  // Identity: ONLY the authenticated Supabase user id.
   //
-  // We render anon first to avoid blocking the channel subscription on
-  // the auth round-trip, then upgrade when getUser() returns.
-  const anonIdRef = useRef<string>('')
-  if (!anonIdRef.current) {
-    anonIdRef.current = typeof crypto !== 'undefined'
-      ? crypto.randomUUID()
-      : `anon-${Math.random().toString(36).slice(2, 10)}`
-  }
+  // Previous behaviour generated a per-session anon UUID and broadcast
+  // with it before auth resolved.  Two consequences:
+  //   1. A second tab from the same user (also pre-auth) received the
+  //      anon-UUID broadcast and rendered it as a "remote user" — the
+  //      ghost-presence chip the user reported.  Even after auth
+  //      resolved on both tabs, the anon entries lingered in the
+  //      presence Map for ~30s until pruneStale removed them.
+  //   2. Supabase's broadcast `self: false` is keyed by client_id, which
+  //      means anon-id sends in the brief pre-auth window could echo back
+  //      to the same tab in some race conditions.
+  //
+  // The fix: never broadcast as anon.  Anonymous viewers don't get
+  // cursor presence (which is fine — they're read-only anyway), and
+  // authenticated users always identify with their stable auth id so
+  // two tabs from the same user collapse to one presence entry.
   const [authUser, setAuthUser] = useState<{ id: string; email: string; name: string } | null>(null)
   useEffect(() => {
     const supabase = getBrowserSupabase()
@@ -86,50 +89,69 @@ export function useRealtimeCollab(workbookId: string) {
       })
     })
   }, [])
-  const userId = authUser?.id ?? anonIdRef.current
-  const userName = authUser?.name ?? `User ${anonIdRef.current.slice(0, 4)}`
+  const userId = authUser?.id ?? null
+  const userName = authUser?.name ?? ''
   const userEmail = authUser?.email ?? ''
 
   // ── Register broadcast listeners on the shared channel ────────
+  // Use a ref for userId so the handlers always read the CURRENT id
+  // (set after auth resolves) without needing to re-subscribe on every
+  // auth change.  Re-subscribing previously leaked listeners because
+  // sharedChannel.on() has no symmetric .off() in our cleanup.
+  const userIdRef = useRef<string | null>(null)
+  userIdRef.current = userId
+
   useEffect(() => {
     if (!sharedChannel) return
 
-    // Listen for broadcasts
-    sharedChannel
-      .on('broadcast', { event: 'cursor' }, ({ payload }) => {
-        const p = payload as CursorPayload
-        if (p.userId === userId) return
-        upsertPresence({
-          userId: p.userId,
-          name: p.name || `User ${p.userId.slice(0, 4)}`,
-          email: p.email || '',
-          color: '', // will be assigned by store
-          row: p.row,
-          col: p.col,
-          sheetId: p.sheetId,
-          lastSeen: Date.now(),
-        })
+    const onCursor = ({ payload }: { payload: unknown }) => {
+      const p = payload as CursorPayload
+      // Skip self.  Also skip when we don't yet have an auth id — at
+      // that point we can't reliably distinguish self from other and
+      // the safer default is to drop the message.
+      if (!userIdRef.current || p.userId === userIdRef.current) return
+      upsertPresence({
+        userId: p.userId,
+        name: p.name || `User ${p.userId.slice(0, 4)}`,
+        email: p.email || '',
+        color: '', // assigned by the store
+        row: p.row,
+        col: p.col,
+        sheetId: p.sheetId,
+        lastSeen: Date.now(),
       })
-      .on('broadcast', { event: 'cell_edit' }, ({ payload }) => {
-        const p = payload as CellEditPayload
-        if (p.userId === userId) return
-        // Apply remote edit to local grid
-        applyRemoteEdit(p)
-      })
+    }
 
-    // Prune stale presences periodically
+    const onCellEdit = ({ payload }: { payload: unknown }) => {
+      const p = payload as CellEditPayload
+      if (!userIdRef.current || p.userId === userIdRef.current) return
+      applyRemoteEdit(p)
+    }
+
+    sharedChannel
+      .on('broadcast', { event: 'cursor' }, onCursor)
+      .on('broadcast', { event: 'cell_edit' }, onCellEdit)
+
     const pruneInterval = setInterval(() => pruneStale(), 15000)
 
     return () => {
       clearInterval(pruneInterval)
-      // Note: channel teardown is managed by useWorkbookChannel, not here.
+      // Note: channel teardown is managed by useWorkbookChannel.  The
+      // .on() handlers above are tied to the channel's lifetime — when
+      // the channel unsubscribes (last subscriber unmounts), all
+      // listeners are dropped with it.  Re-running this effect on
+      // sharedChannel change registers fresh handlers against the new
+      // channel, which is the correct behaviour.
     }
-  }, [sharedChannel, userId, upsertPresence, pruneStale])
+  }, [sharedChannel, upsertPresence, pruneStale])
 
   // ── Broadcast local cursor ─────────────────────────────────────
+  // Guard on authUser: don't broadcast cursor presence until we know
+  // who the user is.  This avoids the ghost-presence race described
+  // above.
   const broadcastCursor = useCallback(
     (sheetId: string, row: number, col: number) => {
-      if (!sharedChannel) return
+      if (!sharedChannel || !userId) return
       void sharedChannel.send({
         type: 'broadcast',
         event: 'cursor',
@@ -150,7 +172,7 @@ export function useRealtimeCollab(workbookId: string) {
   // ── Broadcast cell edit ────────────────────────────────────────
   const broadcastEdit = useCallback(
     (sheetId: string, row: number, col: number, value: string | number | null, display: string) => {
-      if (!sharedChannel) return
+      if (!sharedChannel || !userId) return
       void sharedChannel.send({
         type: 'broadcast',
         event: 'cell_edit',
@@ -169,7 +191,7 @@ export function useRealtimeCollab(workbookId: string) {
   )
 
   return {
-    userId,
+    userId: userId ?? '',
     broadcastCursor,
     broadcastEdit,
     isConnected: sharedChannel !== null,
