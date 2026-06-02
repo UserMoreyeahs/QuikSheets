@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { setAutoFreeze } from 'immer'
-import { BarChart3, Sparkles } from 'lucide-react'
+import { BarChart3 } from 'lucide-react'
 import { toast } from 'sonner'
 import { isCellProtected } from '@/features/protected-ranges/storage/localProtectedRanges'
 import {
@@ -29,30 +29,24 @@ import { insertHyperlink, defineNameFromSelection } from '@/features/ribbon/util
 import { fireTrigger, buildEvent } from '@/features/automation/triggerClient'
 import { useAutomationStore } from '@/features/automation/store/automationStore'
 import type { RowSummarySelection } from '@/features/row-summarizer'
-import type { Cell, Sheet, Selection } from '@fortune-sheet/core'
+import type { Sheet, Selection } from '@fortune-sheet/core'
 import type { WorkbookInstance } from '@fortune-sheet/react'
-import type { CellData, FontFamily, NumberFormat } from '@/types/sheet.types'
+import type { FontFamily } from '@/types/sheet.types'
 import type { ComponentProps, ComponentType } from 'react'
+// Wave 4 extraction — pure helpers + skeleton + floater moved to focused files.
+import {
+  DEFAULT_FORMATTING,
+  GRID_ROW_HEADER_WIDTH,
+  GRID_COLUMN_HEADER_HEIGHT,
+  mapNumberFormat,
+  stringifySheets,
+  setIfChanged,
+  getCellChangesForHistory,
+} from '../utils/gridFormatting'
+import { GridSkeleton } from './GridSkeleton'
+import { SelectedRowsFloater, type SelectedRowRangeState } from './SelectedRowsFloater'
 
 setAutoFreeze(false)
-
-const DEFAULT_FORMATTING = {
-  bold: false,
-  italic: false,
-  underline: false,
-  strikethrough: false,
-  fontSize: 11,
-  fontFamily: 'Inter' as FontFamily,
-  textColor: '#000000',
-  backgroundColor: '#ffffff',
-  textAlign: 'left' as const,
-  verticalAlign: 'bottom' as const,
-  wrapText: false,
-  numberFormat: 'general' as NumberFormat,
-}
-
-const GRID_ROW_HEADER_WIDTH = 46
-const GRID_COLUMN_HEADER_HEIGHT = 20
 
 type WorkbookComponentType = ComponentType<
   ComponentProps<typeof import('@fortune-sheet/react')['Workbook']> & {
@@ -81,68 +75,6 @@ interface SpreadsheetGridProps {
   ) => void
 }
 
-function GridSkeleton() {
-  return (
-    <div className="flex h-full w-full flex-col">
-      <div className="h-10 w-full animate-pulse border-b border-zinc-200 bg-zinc-100" />
-      <div className="h-8 w-full animate-pulse border-b border-zinc-200 bg-zinc-50" />
-      <div className="flex-1 w-full animate-pulse bg-white">
-        <div className="grid h-full grid-cols-12 opacity-20">
-          {Array.from({ length: 120 }).map((_, index) => (
-            <div key={index} className="border border-zinc-200 bg-zinc-50" />
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function mapNumberFormat(format?: string): NumberFormat {
-  const normalized = format?.toLowerCase() ?? ''
-  if (!normalized || normalized === 'general') return 'general'
-  if (normalized === '@') return 'text'
-  if (normalized.includes('%')) return 'percentage'
-  if (normalized.includes('e+')) return 'scientific'
-  if (normalized.includes('?/?')) return 'fraction'
-  if (normalized.includes('mmmm')) return 'date_long'
-  if (normalized.includes('mm/dd') || normalized.includes('yyyy')) return 'date_short'
-  if (normalized.includes('hh') || normalized.includes('ss')) return 'time'
-  if (normalized.includes('$')) return normalized.includes('#,##') ? 'accounting' : 'currency'
-  if (normalized.includes('0.00') || normalized.includes('#,##')) return 'number'
-  return 'general'
-}
-
-function stringifySheets(sheets: Sheet[]): string {
-  return JSON.stringify(sheets)
-}
-
-function setIfChanged<T>(current: T, next: T, setter: (value: T) => void) {
-  if (JSON.stringify(current) !== JSON.stringify(next)) {
-    setter(next)
-  }
-}
-
-function normalizeCellHistoryValue(cell: Cell | null | undefined): string | null {
-  const value = getCellFormulaBarValue(cell)
-  return value === '' ? null : value
-}
-
-function historyValueToCellData(value: string | null): CellData {
-  if (value && value.startsWith('=')) {
-    return { value: null, formula: value }
-  }
-
-  return { value }
-}
-
-interface CellChangeForHistory {
-  address: { row: number; col: number; sheet: number }
-  cellAddress: string
-  newData: CellData
-  oldData: CellData
-  sheetId: string
-}
-
 interface CellContextMenuState {
   left: number
   top: number
@@ -156,50 +88,6 @@ interface HoveredColumnState {
   col: number
   left: number
   top: number
-}
-
-interface SelectedRowRangeState extends RowSummarySelection {
-  left: number
-  top: number
-  rowCount: number
-}
-
-function getCellChangesForHistory(previousSheets: Sheet[], nextSheets: Sheet[]): CellChangeForHistory[] {
-  const changes: CellChangeForHistory[] = []
-  const sheetCount = Math.min(previousSheets.length, nextSheets.length)
-
-  for (let sheetIndex = 0; sheetIndex < sheetCount; sheetIndex += 1) {
-    const previousSheet = previousSheets[sheetIndex]
-    const nextSheet = nextSheets[sheetIndex]
-    if (!previousSheet || !nextSheet) continue
-
-    const sheetId = typeof nextSheet.id === 'string' ? nextSheet.id : `sheet-${sheetIndex}`
-    const previousMatrix = getSheetMatrix(previousSheet)
-    const nextMatrix = getSheetMatrix(nextSheet)
-    const rowCount = Math.max(previousMatrix.length, nextMatrix.length)
-
-    for (let row = 0; row < rowCount; row += 1) {
-      const previousRow = previousMatrix[row] ?? []
-      const nextRow = nextMatrix[row] ?? []
-      const colCount = Math.max(previousRow.length, nextRow.length)
-
-      for (let col = 0; col < colCount; col += 1) {
-        const oldValue = normalizeCellHistoryValue(previousRow[col] ?? null)
-        const newValue = normalizeCellHistoryValue(nextRow[col] ?? null)
-        if (oldValue === newValue) continue
-
-        changes.push({
-          address: { row, col, sheet: sheetIndex },
-          cellAddress: toCellNotation(row, col),
-          oldData: historyValueToCellData(oldValue),
-          newData: historyValueToCellData(newValue),
-          sheetId,
-        })
-      }
-    }
-  }
-
-  return changes
 }
 
 export function SpreadsheetGrid({
@@ -1041,23 +929,10 @@ export function SpreadsheetGrid({
       )}
 
       {selectedRowRange && onSummarizeRows && (
-        <div
-          style={{ left: selectedRowRange.left, top: selectedRowRange.top }}
-          className="absolute z-[86] flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs shadow-xl dark:border-blue-900/70 dark:bg-zinc-800"
-        >
-          <span className="font-medium text-zinc-700 dark:text-zinc-200">
-            {selectedRowRange.rowCount} rows selected
-          </span>
-          <button
-            type="button"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => onSummarizeRows(selectedRowRange)}
-            className="flex items-center gap-1.5 rounded-md bg-blue-600 px-2.5 py-1.5 font-semibold text-white transition-colors hover:bg-blue-700"
-          >
-            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-            Summarize rows
-          </button>
-        </div>
+        <SelectedRowsFloater
+          selectedRowRange={selectedRowRange}
+          onSummarizeRows={onSummarizeRows}
+        />
       )}
 
       {WorkbookComponent ? (
