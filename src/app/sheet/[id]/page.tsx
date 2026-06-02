@@ -277,6 +277,7 @@ import { useSheetPageGlobalListeners } from './hooks/useSheetPageGlobalListeners
 import { useApplyCFOnMount } from './hooks/useApplyCFOnMount'
 import { useLoadAutomationsOnMount } from './hooks/useLoadAutomationsOnMount'
 import { useWorkbookName } from './hooks/useWorkbookName'
+import { useLoadTemplateDataOnMount } from './hooks/useLoadTemplateDataOnMount'
 
 function toExportRows(sheet?: Sheet): (string | number | boolean | null)[][] {
   if (!sheet) return []
@@ -632,33 +633,9 @@ export default function SheetPage() {
     })
   }, [workbookId, sheets, gridSheets])
 
-  // Load template data if this workbook was created from a template
-  useEffect(() => {
-    try {
-      const templateKey = `quiksheets_template_data:${workbookId}`
-      const raw = window.localStorage.getItem(templateKey)
-      if (!raw) return
-
-      const templateSheets = JSON.parse(raw) as Sheet[]
-      window.localStorage.removeItem(templateKey)
-
-      const templateTabs: SheetTab[] = templateSheets.map((sheet, index) => ({
-        id: typeof sheet.id === 'string' ? sheet.id : `sheet${index + 1}`,
-        name: sheet.name,
-        color: null,
-        isHidden: false,
-        order: index,
-      }))
-      const firstId = templateTabs[0]?.id ?? 'sheet1'
-
-      const { replaceSheets } = useWorkbookStore.getState()
-      replaceSheets(templateTabs, firstId)
-      replaceGridSheets(templateSheets)
-    } catch {
-      // Template data missing or corrupt; start with default sheet
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // Drain template data from localStorage on first mount (if this
+  // workbook was created via Insert > Template).
+  useLoadTemplateDataOnMount(workbookId)
 
   // Apply saved conditional formatting rules once after workbook hydration.
   useApplyCFOnMount(workbookId)
