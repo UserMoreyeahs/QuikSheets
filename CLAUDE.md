@@ -39,9 +39,10 @@
 - None — MVP launch-readiness pass complete (May 2026)
 
 ## Next Session
-- T020 Automation: build the create-automation dialog + wire SpreadsheetGrid.handleChange → fireTrigger(). Provider env vars (SLACK_WEBHOOK_URL / RESEND_API_KEY / TWILIO_*) must be set by the operator. Estimated ~2h.
-- Comments @-mentions notification (mentions are parsed today but no notification system fires).
-- Persist CF rules / Comments / Typed columns to Supabase (currently localStorage).
+> Last reviewed: 2026-05-27. Earlier entries below are append-log session notes — treat current-state claims with caution.
+- Wave 1 (this session) shipped: dead-code purge, redoStack cap, formula-explainer LRU cap, exportUtils lazy-loaded, CLAUDE.md hygiene.
+- Wave 2 next: extract shared persistence helpers (`getClientSession`, `createMigrationFlag`, `makeLocalStore`) and refactor the seven `src/lib/*Api.ts` modules onto them — ~40 % LOC reduction per file, behavior-preserving.
+- Wave 3+: god-file splits, perf fixes (overlay React.memo, useLivePreview incremental HF, single-pass cfEvaluator), adapter completion. See the senior-engineer audit report from 2026-05-27 for the full plan.
 
 ## MVP launch-readiness session (latest) — 14 commits, 3 P0 fixes, anti-hallucination flag
 
@@ -85,9 +86,9 @@ The user attached `QuikSheets_MVP_P0_P1_P2_with_Testing_Data.xlsx` (20 P0 + 10 P
 
 ### Deferred per user direction (not blocking launch)
 
-- T020 Automation (UI + trigger firing both missing; providers + DB schema ready)
-- Comments @-mentions notification (mentions parsed but unnotified)
-- CF rules / Comments / Typed columns Supabase persistence (currently localStorage)
+- ~~T020 Automation~~ DONE (this session) — AutomationBuilder dialog + fireTrigger wired; MockProvider fallback.
+- ~~Comments @-mentions notification~~ DONE (this session) — NotificationBell + notifications table.
+- ~~CF rules / Comments / Typed columns Supabase persistence~~ DONE (this session) — cfRulesApi/columnTypesApi/commentsApi + idempotent migrations.
 
 ### Pattern: server-side anon-client + service-role fallback
 
@@ -191,7 +192,7 @@ Under `process.env.NODE_ENV !== 'production'` guard in `src/app/sheet/[id]/page.
 Each helper goes through the real store/action — no shadow state.
 
 ## Key File Locations
-- Supabase client: src/lib/supabase.ts
+- Supabase clients: src/lib/supabase/client.ts (browser anon) + src/lib/supabase/server.ts (cookie-aware server + service-role). The legacy src/lib/supabase.ts is now a back-compat shim.
 - Groq client: src/lib/groq.ts
 - HyperFormula: src/lib/hyperformula.ts
 - Global types: src/types/
@@ -310,7 +311,7 @@ Each helper goes through the real store/action — no shadow state.
 - Sheet page uses 'use client' because of useFormattingShortcuts hook
 - Formatting state lives in Zustand activeFormatting object
 - Color picker has 30 presets plus custom hex input
-- Borders and merge cells are UI-only placeholders — not wired yet
+- ~~Borders and merge cells are UI-only placeholders~~ STALE — both are wired (see src/features/ribbon/utils/cellOps.ts `applyBorder`, `mergeAcross`, `mergeVertically`, `unmerge`).
 - All toolbar dropdowns use position:fixed + getBoundingClientRect() — overflow-x-auto on the toolbar clips absolute-positioned children, so fixed positioning is mandatory
 - Sort and filter open as modal panels not inline dropdowns
 - Find/Replace opens as floating panel top-right (not modal) at fixed right-4 top-[130px]
@@ -318,7 +319,7 @@ Each helper goes through the real store/action — no shadow state.
 - Data validation rules stored in Zustand validationRules map keyed by "row:col"
 - Filter state stored in Zustand activeFilters array; filter button turns blue when activeFilters.length > 0
 - exactOptionalPropertyTypes: never assign `T | undefined` to optional prop — use conditional spread `...(val ? { prop: val } : {})`
-- Two separate Zustand stores: sheetStore (cells/formatting/data ops) + workbookStore (sheet tab metadata)
+- Three Zustand stores: sheetStore (grid data + undo + filter/sort + formatting), workbookStore (sheet tab metadata), uiStore (modal/sidebar/command-palette toggles). Many features also have their own scoped stores under `src/features/*/store/`.
 - workbookStore manages: sheets: SheetTab[], activeSheetId; initial sheet must be { id: 'sheet1', name: 'Sheet1' } to match createDefaultWorkbook()
 - FortuneSheet active sheet controlled by status: 1 in Sheet[] data; SpreadsheetGrid syncs sheetData via useEffect watching [tabSheets, activeSheetId] from workbookStore
 - Sheet sync strategy: preserve celldata of existing FortuneSheet sheets; add new default sheets for new tabs; remove stale sheets; always update status field
@@ -395,7 +396,7 @@ Each helper goes through the real store/action — no shadow state.
 - Scratchpad MAIN! references like `=MAIN!A1` resolve against the active main sheet when entered and store the resolved value.
 - Session 19 added next-themes dark mode, a header theme toggle, Command Palette via Ctrl+K, and Keyboard Shortcuts via ?.
 - Session 19 removed the visible session badge from the sheet header and replaced the hardcoded workbook name with local workbook-name state.
-- Next.js version verified as 16.2.4.
+- Next.js version pinned to 15.5.15 (per package.json). The "16.2.4" note below from Session 19 was incorrect.
 - Final local checks pass: `npm run build`, `npx tsc --noEmit`, and `npx eslint src/ --max-warnings 0`.
 - Vercel deployment URL is pending because `npx vercel --prod --yes` failed with an invalid token.
 - The attached master QuikSheets prompt files reference Univer, but this repo remains locked to FortuneSheet per the stack section above.
@@ -406,7 +407,7 @@ Each helper goes through the real store/action — no shadow state.
 - Ctrl+Shift+M merges the selected range; Ctrl+Shift+U unmerges the active merged cell.
 - Session 21 templates are hardcoded in `src/lib/templates/index.ts`; no Supabase required.
 - Session 21 template load: data stored at `quiksheets_template_data:<id>` in localStorage; sheet page reads + deletes it on first mount.
-- Session 21 CF rules stored at `quiksheets_cf_rules:<workbookId>` in localStorage, keyed by sheetId.
+- ~~Session 21 CF rules in localStorage at `quiksheets_cf_rules:<workbookId>`~~ SUPERSEDED — now Supabase-first via `src/lib/cfRulesApi.ts` (table `conditional_format_rules`); localStorage is the offline fallback only.
 - Session 21 CF styles applied directly to FortuneSheet gridSheets via `cloneSheetWithData`; backups tracked per cell.
 - Session 21 CF re-applied on sheet page load after 500ms delay to allow grid hydration.
 - Dashboard redesigned as client component with My Workbooks + Templates tabs.

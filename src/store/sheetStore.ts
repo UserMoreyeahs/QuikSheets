@@ -595,7 +595,7 @@ export const useSheetStore = create<SheetState & SheetActions>()(
             const key = `${lastEntry.cellAddress.row}:${lastEntry.cellAddress.col}`
             return {
               undoStack: state.undoStack.slice(0, -1),
-              redoStack: [...state.redoStack, lastEntry],
+              redoStack: [...state.redoStack, lastEntry].slice(-UNDO_HISTORY_LIMIT + 1),
               workbook: {
                 ...state.workbook,
                 sheets: state.workbook.sheets.map((sheet, index) => {
@@ -620,7 +620,7 @@ export const useSheetStore = create<SheetState & SheetActions>()(
             const key = `${lastEntry.cellAddress.row}:${lastEntry.cellAddress.col}`
             return {
               redoStack: state.redoStack.slice(0, -1),
-              undoStack: [...state.undoStack, lastEntry],
+              undoStack: [...state.undoStack, lastEntry].slice(-UNDO_HISTORY_LIMIT + 1),
               workbook: {
                 ...state.workbook,
                 sheets: state.workbook.sheets.map((sheet, index) => {

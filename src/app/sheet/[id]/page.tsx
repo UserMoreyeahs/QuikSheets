@@ -44,7 +44,20 @@ import { DataValidation } from '@/features/grid/components/DataValidation'
 import { ImportModal } from '@/features/grid/components/ImportModal'
 import { ExportMenu } from '@/features/grid/components/ExportMenu'
 import { SaveStatus } from '@/features/grid/components/SaveStatus'
-import { exportToCSV, exportToExcelFidelity, exportToPDF } from '@/features/grid/utils/exportUtils'
+// Lazy-load the export module (xlsx + jspdf + jspdf-autotable ≈ 2 MB) on
+// first invocation so it doesn't bloat the initial /sheet/[id] bundle. The
+// wrappers below preserve the original `typeof` signatures so every call
+// site stays byte-identical; the browser caches the chunk after first use.
+import type * as ExportUtils from '@/features/grid/utils/exportUtils'
+const loadExportUtils = () => import('@/features/grid/utils/exportUtils')
+const exportToCSV: typeof ExportUtils.exportToCSV = (...args) => {
+  void loadExportUtils().then((m) => m.exportToCSV(...args))
+}
+const exportToExcelFidelity: typeof ExportUtils.exportToExcelFidelity = async (...args) =>
+  (await loadExportUtils()).exportToExcelFidelity(...args)
+const exportToPDF: typeof ExportUtils.exportToPDF = (...args) => {
+  void loadExportUtils().then((m) => m.exportToPDF(...args))
+}
 import { buildExportExtras } from '@/features/grid/utils/exportExtrasAdapter'
 // Lazy-loaded heavy panels — these render only when their respective UI
 // stores have `open: true`, so deferring their JS bundle keeps the initial
