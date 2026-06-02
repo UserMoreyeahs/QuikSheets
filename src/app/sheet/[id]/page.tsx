@@ -102,9 +102,6 @@ const NameManagerDialog = dynamic(
 )
 import { useNamedRangesStore } from '@/features/named-ranges/namedRangesStore'
 import { useCFStore } from '@/features/conditional-formatting/store/cfStore'
-import { useColumnTypesStore } from '@/features/typed-columns/store/columnTypesStore'
-import { useSlicerStore } from '@/features/slicers/store/slicerStore'
-import { parseClipboardText } from '@/features/smart-paste/utils/clipboardParser'
 import { applyRulesToSheet, evaluateRules } from '@/features/conditional-formatting/utils/cfEvaluator'
 import * as cellOps from '@/features/ribbon/utils/cellOps'
 import { usePrintSettingsStore } from '@/features/page-layout/printSettingsStore'
@@ -278,6 +275,7 @@ import { useApplyCFOnMount } from './hooks/useApplyCFOnMount'
 import { useLoadAutomationsOnMount } from './hooks/useLoadAutomationsOnMount'
 import { useWorkbookName } from './hooks/useWorkbookName'
 import { useLoadTemplateDataOnMount } from './hooks/useLoadTemplateDataOnMount'
+import { useDevWindowHelpers } from './hooks/useDevWindowHelpers'
 
 function toExportRows(sheet?: Sheet): (string | number | boolean | null)[][] {
   if (!sheet) return []
@@ -371,93 +369,8 @@ export default function SheetPage() {
   useSheetPageGlobalListeners({ toggleMap })
   const nlFilterVisible = useNLFilterUiStore((s) => s.visible)
 
-  // Dev-only: expose the live grid instance + a 2-D test-data seeder on
-  // window so we can verify Insert > Chart/Table/Pivot end-to-end with
-  // real data. Stripped from production bundles.
-  //
-  // The seeder writes directly into gridSheets via replaceGridSheets so
-  // both FortuneSheet AND the Zustand mirror (which ChartsLayer / PivotsLayer
-  // read from) end up in sync — calling FortuneSheet's setCellValue alone
-  // updates the canvas but doesn't always fire onChange in time.
-  useEffect(() => {
-    if (process.env.NODE_ENV === 'production') return
-    ;(window as unknown as { __qsGrid?: unknown }).__qsGrid = gridInstance
-    ;(window as unknown as { __qsSeed?: (rows: unknown[][]) => void }).__qsSeed = (rows) => {
-      const state = useSheetStore.getState()
-      const sheets = state.gridSheets.length ? state.gridSheets : [{ id: activeSheetId, name: 'Sheet1', status: 1 }]
-      const targetSheetIdx = Math.max(0, sheets.findIndex((s) => s.status === 1))
-      const target = sheets[targetSheetIdx]
-      if (!target) {
-        return
-      }
-      const buildCell = (v: unknown) =>
-        v === null || v === undefined
-          ? null
-          : typeof v === 'number'
-            ? { ct: { fa: 'General', t: 'n' }, m: String(v), v }
-            : { ct: { fa: 'General', t: 'g' }, m: String(v), v: String(v) }
-      const celldata = rows.flatMap((row, r) =>
-        row.map((v, c) => ({ r, c, v: buildCell(v) })).filter((e) => e.v !== null),
-      )
-      // Also populate the 2-D `data` matrix because FortuneSheet renders
-      // from `data`, not celldata, when the workbook is hydrated via the
-      // `data` prop. Build a 100x26 matrix (default sheet size).
-      const ROWS = 100
-      const COLS = 26
-      const matrix: (ReturnType<typeof buildCell> | null)[][] = Array.from(
-        { length: ROWS },
-        () => Array<ReturnType<typeof buildCell> | null>(COLS).fill(null),
-      )
-      rows.forEach((row, r) => {
-        if (r >= ROWS) return
-        row.forEach((v, c) => {
-          if (c >= COLS) return
-          matrix[r]![c] = buildCell(v)
-        })
-      })
-      const nextSheets = sheets.map((s, i) =>
-        i === targetSheetIdx
-          ? ({ ...s, celldata, data: matrix } as typeof s)
-          : s,
-      )
-      state.replaceGridSheets(nextSheets)
-    }
-    // Dev helpers — verification surface that mirrors the real stores
-    // so scripted tests can drive features without window.prompt() etc.
-    // Stripped from production via the process.env.NODE_ENV guard at
-    // the top of this useEffect.
-    ;(window as unknown as { __qsSetColType?: (sheetId: string, col: number, type: string) => void }).__qsSetColType =
-      (sheetId, col, type) => useColumnTypesStore.getState().setColumnType(sheetId, col, { type: type as never })
-    ;(window as unknown as { __qsClearColType?: (sheetId: string, col: number) => void }).__qsClearColType =
-      (sheetId, col) => useColumnTypesStore.getState().clearColumnType(sheetId, col)
-    ;(window as unknown as { __qsListPivots?: () => Array<{ id: string; name: string }> }).__qsListPivots = () =>
-      usePivotUiStore.getState().pivots.map((p) => ({ id: p.id, name: p.name }))
-    ;(window as unknown as { __qsParseClipboard?: (text: string) => unknown }).__qsParseClipboard = (text) =>
-      parseClipboardText(text)
-    ;(window as unknown as { __qsAddSlicer?: (pivotId: string, columnIndex: number, label: string, allValues: string[]) => string }).__qsAddSlicer =
-      (pivotId, columnIndex, label, allValues) =>
-        useSlicerStore.getState().addSlicer({
-          label, kind: 'list', pivotId, columnIndex, allValues,
-          selected: [], x: 200, y: 600, width: 200, height: 240,
-        })
-    ;(window as unknown as { __qsAddName?: (name: string, range: string) => void }).__qsAddName =
-      (name, range) => useNamedRangesStore.getState().addName(workbookId, { name, range, scope: 'workbook' })
-    ;(window as unknown as { __qsListNames?: () => Array<{ name: string; range: string }> }).__qsListNames = () =>
-      useNamedRangesStore.getState().getNamesForWorkbook(workbookId) as unknown as Array<{ name: string; range: string }>
-    ;(window as unknown as { __qsAddFilter?: (col: number, operator: string, value: string) => void }).__qsAddFilter =
-      (col, operator, value) => useSheetStore.getState().addFilter({ columnIndex: col, operator: operator as never, value })
-    ;(window as unknown as { __qsClearFilters?: () => void }).__qsClearFilters = () => useSheetStore.getState().clearFilters()
-    ;(window as unknown as { __qsAddCFGreaterThan?: (sheetId: string, range: string, threshold: number, bgColor: string) => void }).__qsAddCFGreaterThan =
-      (sheetId, range, threshold, bgColor) => {
-        useCFStore.getState().addRule(sheetId, {
-          range,
-          condition: { type: 'cell_value', operator: 'greater', value: String(threshold) },
-          format: { fill: bgColor },
-          priority: 0,
-        })
-        useCFStore.getState().applyToActiveSheet()
-      }
-  }, [gridInstance, activeSheetId, workbookId])
+  // Dev-only window.__qs* test-surface helpers (no-op in production).
+  useDevWindowHelpers(workbookId)
   const [showFormulaBarUI, setShowFormulaBarUI] = useState(true)
   const [showGridlines, setShowGridlines] = useState(true)
   const [zoomLevel, setZoomLevel] = useState(1.0)
