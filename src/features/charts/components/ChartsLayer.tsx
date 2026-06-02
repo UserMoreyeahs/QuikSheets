@@ -24,6 +24,7 @@ import { useEffect, useRef, useState } from 'react'
 import { X, GripVertical, BarChart3 } from 'lucide-react'
 import { useChartPanelStore } from '@/features/charts/store/chartPanelStore'
 import { useSheetStore } from '@/store/sheetStore'
+import { useShallow } from 'zustand/react/shallow'
 import { ChartRenderer } from '@/features/charts/components/ChartRenderer'
 import { getRangeMatrix } from '@/features/charts/utils/rangeUtils'
 import { useGridScroll, cellToPixelPosition } from '@/features/grid/hooks/useGridScroll'
@@ -48,13 +49,24 @@ function ChartsLayerInner() {
   const charts = useChartPanelStore((s) => s.charts)
   const removeChart = useChartPanelStore((s) => s.removeChart)
   const moveChart = useChartPanelStore((s) => s.moveChart)
-  const gridSheets = useSheetStore((s) => s.gridSheets)
+  // Narrow selector — subscribe ONLY to sheets the charts reference (+ the
+  // active sheet as fallback). Cell edits on unrelated sheets are skipped
+  // via useShallow's shallow-equality check on the returned map.
+  const sheetMap = useSheetStore(
+    useShallow((s) => {
+      const ids = new Set(charts.map((c) => c.sheetId))
+      const map: Record<string, Sheet | undefined> = {}
+      ids.forEach((id) => { map[id] = s.gridSheets.find((g) => g.id === id) })
+      map['__active__'] = s.gridSheets.find((g) => g.status === 1)
+      return map
+    })
+  )
   const scrollOffset = useGridScroll()
 
   return (
     <>
       {charts.map((chart) => {
-        const sheet = gridSheets.find((s) => s.id === chart.sheetId) ?? gridSheets.find((s) => s.status === 1)
+        const sheet = sheetMap[chart.sheetId] ?? sheetMap['__active__']
         // Compute scroll-anchored position
         const anchorPos = cellToPixelPosition(chart.anchorRow, chart.anchorCol, scrollOffset)
         return (

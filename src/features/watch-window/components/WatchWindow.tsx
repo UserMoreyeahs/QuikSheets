@@ -28,8 +28,9 @@ interface RowProps {
 }
 
 function WatchRow({ cell, onJump, onRemove }: RowProps) {
-  const gridSheets = useSheetStore((s) => s.gridSheets)
-  const sheet = gridSheets.find((s) => s.id === cell.sheetId)
+  // Narrow selector — each WatchRow re-renders only when ITS sheet
+  // changes reference; edits on other sheets are skipped.
+  const sheet = useSheetStore((s) => s.gridSheets.find((g) => g.id === cell.sheetId))
   const matrix = sheet ? getSheetMatrix(sheet) : null
   const raw = matrix?.[cell.row]?.[cell.col] ?? null
   const display = raw ? getCellDisplayValue(raw) : null

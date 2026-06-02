@@ -20,6 +20,8 @@ import { SVGRenderer } from 'echarts/renderers'
 import { X } from 'lucide-react'
 import { useSparklineStore, type InsertedSparkline, type SparklineKind } from '../store/sparklineStore'
 import { useSheetStore } from '@/store/sheetStore'
+import { useShallow } from 'zustand/react/shallow'
+import type { Sheet } from '@fortune-sheet/core'
 import { useGridScroll, cellToPixelPosition } from '@/features/grid/hooks/useGridScroll'
 import { getCellDisplayValue, getSheetMatrix } from '@/lib/fortuneSheet'
 import { parseA1Range } from '@/features/charts/utils/rangeUtils'
@@ -42,13 +44,22 @@ export function SparklinesLayer() {
 function SparklinesLayerInner() {
   const sparklines = useSparklineStore((s) => s.sparklines)
   const remove = useSparklineStore((s) => s.remove)
-  const gridSheets = useSheetStore((s) => s.gridSheets)
+  // Narrow selector — re-render only when a sheet THIS layer cares about changes.
+  const sheetMap = useSheetStore(
+    useShallow((s) => {
+      const ids = new Set(sparklines.map((sp) => sp.sheetId))
+      const map: Record<string, Sheet | undefined> = {}
+      ids.forEach((id) => { map[id] = s.gridSheets.find((g) => g.id === id) })
+      map['__active__'] = s.gridSheets.find((g) => g.status === 1)
+      return map
+    })
+  )
   const scrollOffset = useGridScroll()
 
   return (
     <>
       {sparklines.map((sp) => {
-        const sheet = gridSheets.find((s) => s.id === sp.sheetId) ?? gridSheets.find((s) => s.status === 1)
+        const sheet = sheetMap[sp.sheetId] ?? sheetMap['__active__']
         if (!sheet) return null
         const pos = cellToPixelPosition(sp.targetRow, sp.targetCol, scrollOffset)
         return (

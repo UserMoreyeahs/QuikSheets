@@ -41,7 +41,8 @@ export function SlicerBuilderDialog() {
   const closeBuilder = useSlicerBuilderStore((s) => s.closeBuilder)
   const pivots = usePivotUiStore((s) => s.pivots)
   const addSlicer = useSlicerStore((s) => s.addSlicer)
-  const gridSheets = useSheetStore((s) => s.gridSheets)
+  // Narrow selector — re-render only when the ACTIVE sheet changes.
+  const activeSheet = useSheetStore((s) => s.gridSheets.find((g) => g.status === 1) ?? s.gridSheets[0])
 
   const [selectedPivotId, setSelectedPivotId] = useState<string | null>(null)
   const [selectedColIdx, setSelectedColIdx] = useState<number>(0)
@@ -62,9 +63,7 @@ export function SlicerBuilderDialog() {
 
   // Distinct values for the column the user picked — what'll show in the slicer.
   const distinctValues = useMemo<string[]>(() => {
-    if (!pivot) return []
-    const activeSheet = gridSheets.find((s) => s.status === 1) ?? gridSheets[0]
-    if (!activeSheet) return []
+    if (!pivot || !activeSheet) return []
     const bounds = parseA1Range(pivot.sourceRange)
     if (!bounds) return []
     const matrix = getSheetMatrix(activeSheet)
@@ -79,7 +78,7 @@ export function SlicerBuilderDialog() {
       if (!seen.has(str)) seen.add(str)
     }
     return Array.from(seen).sort((a, b) => a.localeCompare(b))
-  }, [pivot, gridSheets, selectedColIdx])
+  }, [pivot, activeSheet, selectedColIdx])
 
   function handleInsert(): void {
     if (!pivot) {

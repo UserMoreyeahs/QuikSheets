@@ -29,6 +29,8 @@ import {
   type TextboxOverlay,
 } from '../store/overlayStore'
 import { useSheetStore } from '@/store/sheetStore'
+import { useShallow } from 'zustand/react/shallow'
+import type { Sheet } from '@fortune-sheet/core'
 import { useGridScroll, cellToPixelPosition } from '@/features/grid/hooks/useGridScroll'
 import { colIndexToLetter } from '@/lib/cellAddress'
 import { CURATED_ICON_NAMES } from '../utils/curatedIcons'
@@ -45,13 +47,22 @@ function OverlaysLayerInner() {
   const move = useOverlayStore((s) => s.moveOverlay)
   const resize = useOverlayStore((s) => s.resizeOverlay)
   const update = useOverlayStore((s) => s.updateOverlay)
-  const gridSheets = useSheetStore((s) => s.gridSheets)
+  // Narrow selector — re-render only when a sheet THIS layer cares about changes.
+  const sheetMap = useSheetStore(
+    useShallow((s) => {
+      const ids = new Set(overlays.map((ov) => ov.sheetId))
+      const map: Record<string, Sheet | undefined> = {}
+      ids.forEach((id) => { map[id] = s.gridSheets.find((g) => g.id === id) })
+      map['__active__'] = s.gridSheets.find((g) => g.status === 1)
+      return map
+    })
+  )
   const scrollOffset = useGridScroll()
 
   return (
     <>
       {overlays.map((ov) => {
-        const sheet = gridSheets.find((s) => s.id === ov.sheetId) ?? gridSheets.find((s) => s.status === 1)
+        const sheet = sheetMap[ov.sheetId] ?? sheetMap['__active__']
         if (!sheet) return null
         const anchorPos = cellToPixelPosition(ov.anchorRow, ov.anchorCol, scrollOffset)
         return (
