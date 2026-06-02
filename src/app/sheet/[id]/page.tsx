@@ -264,7 +264,6 @@ const AutomationRunsPanel = dynamic(
 )
 import { useProtectedRangesUiStore } from '@/features/protected-ranges/store/protectedRangesUiStore'
 import { useAutomationStore } from '@/features/automation/store/automationStore'
-import { listAutomationsAction } from '@/features/automation/actions'
 import { useSheetStore } from '@/store/sheetStore'
 import { useWorkbookStore } from '@/store/workbookStore'
 import { DEFAULT_COLS } from '@/lib/constants'
@@ -276,6 +275,7 @@ import type { Sheet } from '@fortune-sheet/core'
 import { useSidebarCollapsed } from './hooks/useSidebarCollapsed'
 import { useSheetPageGlobalListeners } from './hooks/useSheetPageGlobalListeners'
 import { useApplyCFOnMount } from './hooks/useApplyCFOnMount'
+import { useLoadAutomationsOnMount } from './hooks/useLoadAutomationsOnMount'
 
 function toExportRows(sheet?: Sheet): (string | number | boolean | null)[][] {
   if (!sheet) return []
@@ -1415,30 +1415,11 @@ export default function SheetPage() {
   const openProtectedRanges = useProtectedRangesUiStore((s) => s.open)
 
   // ── Automation ──────────────────────────────────────────────────────────────
-  const { openDialog: openAutomationDialog, openRuns: openAutomationRuns, setAutomations } = useAutomationStore()
+  const { openDialog: openAutomationDialog, openRuns: openAutomationRuns } = useAutomationStore()
 
-  // Pre-load enabled automations into the store so the grid trigger wiring
-  // can evaluate conditions without a per-keystroke Supabase round-trip.
-  useEffect(() => {
-    if (!workbookId || workbookId === 'demo') return
-    void listAutomationsAction(workbookId).then((rows) => {
-      setAutomations(
-        rows
-          .filter((r) => r.enabled)
-          .map((r) => ({
-            id: r.id as string,
-            workbookId,
-            name: r.name as string,
-            enabled: true,
-            trigger: r.trigger_config_json as import('@/features/automation/types').TriggerConfig,
-            action: {
-              type: r.action_type as import('@/features/automation/types').ActionType,
-              config: r.action_config_json as Record<string, string | number | boolean>,
-            },
-          })),
-      )
-    })
-  }, [workbookId, setAutomations])
+  // Pre-load enabled automations for this workbook so the grid's
+  // trigger pipeline can evaluate conditions synchronously.
+  useLoadAutomationsOnMount(workbookId)
 
   return (
     <main className="flex h-screen w-screen overflow-hidden bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
