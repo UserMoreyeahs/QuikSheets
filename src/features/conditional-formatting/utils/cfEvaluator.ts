@@ -414,6 +414,14 @@ export function applyRulesToSheet(
   rules: CFRule[],
   existingBackup: Record<string, CFBackupCell>
 ): { sheet: Sheet; backup: Record<string, CFBackupCell> } {
+  // Fast path: no rules AND no previous styles to restore → pure no-op.
+  // Skips the matrix clone, rule evaluation, and cloneSheetWithData call
+  // that would otherwise run on every CF re-apply for sheets without rules.
+  // This is the common case at workbook load when most sheets have no CF.
+  if (rules.length === 0 && Object.keys(existingBackup).length === 0) {
+    return { sheet, backup: {} }
+  }
+
   const matrix = getSheetMatrix(sheet)
   const cfResults = evaluateRules(sheet, rules)
   const backup: Record<string, CFBackupCell> = { ...existingBackup }
