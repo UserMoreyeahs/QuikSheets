@@ -276,6 +276,7 @@ import { useSidebarCollapsed } from './hooks/useSidebarCollapsed'
 import { useSheetPageGlobalListeners } from './hooks/useSheetPageGlobalListeners'
 import { useApplyCFOnMount } from './hooks/useApplyCFOnMount'
 import { useLoadAutomationsOnMount } from './hooks/useLoadAutomationsOnMount'
+import { useWorkbookName } from './hooks/useWorkbookName'
 
 function toExportRows(sheet?: Sheet): (string | number | boolean | null)[][] {
   if (!sheet) return []
@@ -459,9 +460,7 @@ export default function SheetPage() {
   const [showFormulaBarUI, setShowFormulaBarUI] = useState(true)
   const [showGridlines, setShowGridlines] = useState(true)
   const [zoomLevel, setZoomLevel] = useState(1.0)
-  const [workbookName, setWorkbookName] = useState(() =>
-    workbookId === 'demo' ? 'Demo Spreadsheet' : `Workbook ${workbookId.slice(0, 8)}`
-  )
+  const [workbookName, setWorkbookName] = useWorkbookName(workbookId)
   const [isEditingName, setIsEditingName] = useState(false)
 
   const activeSheet = sheets.find((sheet) => sheet.id === activeSheetId)
@@ -632,25 +631,6 @@ export default function SheetPage() {
       validationRules: validation,
     })
   }, [workbookId, sheets, gridSheets])
-
-  useEffect(() => {
-    try {
-      const storedName = window.localStorage.getItem(`quiksheets_workbook_name:${workbookId}`)
-      if (storedName?.trim()) {
-        setWorkbookName(storedName)
-      }
-    } catch {
-      // Local storage is optional; the in-memory workbook name remains usable.
-    }
-  }, [workbookId])
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(`quiksheets_workbook_name:${workbookId}`, workbookName)
-    } catch {
-      // Local storage is optional; saves still proceed through SaveStatus.
-    }
-  }, [workbookId, workbookName])
 
   // Load template data if this workbook was created from a template
   useEffect(() => {
