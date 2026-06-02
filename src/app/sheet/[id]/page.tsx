@@ -87,7 +87,6 @@ const ScratchpadPanel = dynamic(
   { ssr: false },
 )
 import { RowSummarizer, useRowSummarizer } from '@/features/row-summarizer'
-import { applyAllCFRules } from '@/features/conditional-formatting'
 const ConditionalFormatting = dynamic(
   () => import('@/features/conditional-formatting').then((m) => ({ default: m.ConditionalFormatting })),
   { ssr: false },
@@ -276,6 +275,7 @@ import type { SheetTab, SortDirection } from '@/types/sheet.types'
 import type { Sheet } from '@fortune-sheet/core'
 import { useSidebarCollapsed } from './hooks/useSidebarCollapsed'
 import { useSheetPageGlobalListeners } from './hooks/useSheetPageGlobalListeners'
+import { useApplyCFOnMount } from './hooks/useApplyCFOnMount'
 
 function toExportRows(sheet?: Sheet): (string | number | boolean | null)[][] {
   if (!sheet) return []
@@ -680,14 +680,8 @@ export default function SheetPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Apply saved conditional formatting rules once after the workbook loads
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void applyAllCFRules(workbookId)
-    }, 500)
-    return () => window.clearTimeout(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // Apply saved conditional formatting rules once after workbook hydration.
+  useApplyCFOnMount(workbookId)
 
   // Merge pending form submissions into the workbook on mount.
   // First runs the one-time localStorage → Supabase migration so any
