@@ -80,7 +80,6 @@ import {
   Ungroup,
   Users,
   WandSparkles,
-  Webhook,
   Workflow,
   ZoomIn,
   ZoomOut,
@@ -146,6 +145,9 @@ import { useSelectionPaneStore } from '@/features/page-layout/store/selectionPan
 import { useWatchWindowStore } from '@/features/watch-window/store/watchWindowStore'
 import { useThemeStore } from '@/features/themes/store/themeStore'
 import { useShapePickerStore, useIconPickerStore } from '@/features/overlays/store/overlayStore'
+import { useDashboardStore } from '@/features/dashboards'
+import { useConnectorsStore } from '@/features/connectors'
+import { useRowRlsStore } from '@/features/row-rls'
 import { insertTextBox } from '@/features/overlays/utils/insertTextBox'
 import { toast } from 'sonner'
 
@@ -223,6 +225,7 @@ export function InsertTab(props: InsertTabProps) {
       <RibbonGroup label="Tables">
         <RibbonLargeButton label="PivotTable"            icon={<TableIcon className="text-violet-500" />} onClick={props.onInsertPivot} showCaret />
         <RibbonLargeButton label="Recommended Pivots"    icon={<LayoutDashboard className="text-violet-500" />} onClick={() => useRecommendedPivotsStore.getState().openPicker()} />
+        <RibbonLargeButton label="Dashboard"              icon={<LayoutDashboard className="text-rose-500" />} onClick={() => useDashboardStore.getState().openBuilder()} />
         <RibbonLargeButton label="Table"                  icon={<TableIcon className="text-blue-500" />} onClick={() => applyTablePalette()} />
         <RibbonLargeButton label="Forms"                  icon={<FormInput className="text-emerald-500" />} onClick={props.onInsertForm} showCaret />
       </RibbonGroup>
@@ -706,7 +709,7 @@ export function DataTab(props: DataTabProps) {
         <div className="flex flex-col gap-0.5">
           <RibbonButton label="From Table/Range" icon={<TableIcon className="h-3.5 w-3.5" />}    onClick={ribbonStub('From Table/Range')} />
           <RibbonButton label="Recent Sources"   icon={<History className="h-3.5 w-3.5" />}      onClick={ribbonStub('Recent Sources')} />
-          <RibbonButton label="Existing Conn."   icon={<Anchor className="h-3.5 w-3.5" />}       onClick={ribbonStub('Existing Connections')} />
+          <RibbonButton label="External Conn."   icon={<Anchor className="h-3.5 w-3.5" />}       onClick={() => useConnectorsStore.getState().openBuilder()} />
         </div>
       </RibbonGroup>
 
@@ -714,7 +717,7 @@ export function DataTab(props: DataTabProps) {
       <RibbonGroup label="Queries & Connections">
         <RibbonLargeButton label="Refresh All" icon={<RefreshCcw className="text-blue-500" />} onClick={ribbonStub('Refresh All')} showCaret />
         <div className="flex flex-col gap-0.5">
-          <RibbonButton label="Queries & Connections" icon={<Anchor className="h-3.5 w-3.5" />}     onClick={ribbonStub('Queries & Connections')} />
+          <RibbonButton label="Queries & Connections" icon={<Anchor className="h-3.5 w-3.5" />}     onClick={() => useConnectorsStore.getState().openBuilder()} />
           <RibbonButton label="Properties"             icon={<FileBarChart className="h-3.5 w-3.5" />} onClick={ribbonStub('Properties')} />
           <RibbonButton label="Workbook Links"         icon={<Link2 className="h-3.5 w-3.5" />}        onClick={ribbonStub('Workbook Links')} />
         </div>
@@ -752,7 +755,7 @@ export function DataTab(props: DataTabProps) {
         </div>
         <div className="flex flex-col gap-0.5">
           <RibbonButton label="Consolidate"       icon={<SquareStack className="h-3.5 w-3.5" />} onClick={ribbonStub('Consolidate')} />
-          <RibbonButton label="Relationships"     icon={<Webhook className="h-3.5 w-3.5" />}      onClick={ribbonStub('Relationships')} />
+          <RibbonButton label="Row Security"      icon={<ShieldCheck className="h-3.5 w-3.5 text-rose-500" />} onClick={() => useRowRlsStore.getState().openBuilder()} />
           <RibbonButton label="Clean Data ✦ AI"  icon={<RefreshCcw className="h-3.5 w-3.5 text-cyan-500" />} onClick={props.onCleanData} />
         </div>
       </RibbonGroup>

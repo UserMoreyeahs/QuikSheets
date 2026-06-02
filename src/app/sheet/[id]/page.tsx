@@ -188,6 +188,19 @@ const AdvancedFilterDialog = dynamic(
   () => import('@/features/data/components/AdvancedFilterDialog').then((m) => ({ default: m.AdvancedFilterDialog })),
   { ssr: false },
 )
+// P2 features (Dashboards / Connectors / Row-Level Security)
+const DashboardBuilder = dynamic(
+  () => import('@/features/dashboards').then((m) => ({ default: m.DashboardBuilder })),
+  { ssr: false },
+)
+const ConnectorBuilder = dynamic(
+  () => import('@/features/connectors').then((m) => ({ default: m.ConnectorBuilder })),
+  { ssr: false },
+)
+const RowRlsBuilder = dynamic(
+  () => import('@/features/row-rls').then((m) => ({ default: m.RowRlsBuilder })),
+  { ssr: false },
+)
 import { AdvancedFilterPill } from '@/features/data/components/AdvancedFilterPill'
 const PromptDialog = dynamic(
   () => import('@/components/PromptDialog').then((m) => ({ default: m.PromptDialog })),
@@ -273,6 +286,8 @@ import { useLoadAutomationsOnMount } from './hooks/useLoadAutomationsOnMount'
 import { useWorkbookName } from './hooks/useWorkbookName'
 import { useLoadTemplateDataOnMount } from './hooks/useLoadTemplateDataOnMount'
 import { useDevWindowHelpers } from './hooks/useDevWindowHelpers'
+import { useLoadP2FeaturesOnMount } from './hooks/useLoadP2FeaturesOnMount'
+import { useRowRlsStore } from '@/features/row-rls'
 import { useLocalhostDebugWindow } from './hooks/useLocalhostDebugWindow'
 import { useFormSubmissionMergeOnMount } from './hooks/useFormSubmissionMergeOnMount'
 import { useBroadcastCursorToCollab } from './hooks/useBroadcastCursorToCollab'
@@ -466,6 +481,13 @@ export default function SheetPage() {
   // Drain template data from localStorage on first mount (if this
   // workbook was created via Insert > Template).
   useLoadTemplateDataOnMount(workbookId)
+
+  // P2 features: load dashboards / connectors / row-level-security on mount.
+  useLoadP2FeaturesOnMount(workbookId)
+  // RowRlsBuilder takes isOpen/onClose props (vs the other P2 builders
+  // which read their own store internally); subscribe to that here.
+  const rowRlsBuilderOpen = useRowRlsStore((s) => s.builderOpen)
+  const closeRowRlsBuilder = useRowRlsStore((s) => s.closeBuilder)
 
   // Apply saved conditional formatting rules once after workbook hydration.
   useApplyCFOnMount(workbookId)
@@ -1424,6 +1446,12 @@ export default function SheetPage() {
       <ErrorBoundary><PrintTitlesDialog /></ErrorBoundary>
       <ErrorBoundary><FromWebDialog /></ErrorBoundary>
       <ErrorBoundary><AdvancedFilterDialog /></ErrorBoundary>
+      {/* P2 features — Dashboards / Connectors / Row-Level Security */}
+      <ErrorBoundary><DashboardBuilder /></ErrorBoundary>
+      <ErrorBoundary><ConnectorBuilder workbookId={workbookId} /></ErrorBoundary>
+      <ErrorBoundary>
+        <RowRlsBuilder isOpen={rowRlsBuilderOpen} onClose={closeRowRlsBuilder} />
+      </ErrorBoundary>
       <ErrorBoundary><PromptDialog /></ErrorBoundary>
       <ErrorBoundary><FormBuilder workbookId={workbookId} /></ErrorBoundary>
       <ErrorBoundary><PivotBuilder /></ErrorBoundary>
