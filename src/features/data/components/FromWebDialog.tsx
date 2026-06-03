@@ -29,6 +29,7 @@ import { parseFetchedTable, type ParsedTable } from '../utils/fromWebParser'
 import { pasteParsedTable } from '../utils/pasteParsedTable'
 import { colIndexToLetter } from '@/lib/cellAddress'
 import { useSheetStore } from '@/store/sheetStore'
+import { getBrowserSupabase } from '@/lib/supabase/client'
 
 type DialogState =
   | { phase: 'idle' }
@@ -55,9 +56,19 @@ export function FromWebDialog() {
     }
     setState({ phase: 'fetching' })
     try {
+      // /api/data/fetch now requires an authenticated session (it was an
+      // unauthenticated SSRF vector). Attach the Supabase access token —
+      // the same pattern saveService uses.
+      const supabase = getBrowserSupabase()
+      const accessToken = supabase
+        ? (await supabase.auth.getSession()).data.session?.access_token ?? null
+        : null
       const res = await fetch('/api/data/fetch', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
         body: JSON.stringify({ url: trimmed }),
       })
       const json = await res.json() as { text?: string; contentType?: string; error?: string }
