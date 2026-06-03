@@ -5,7 +5,7 @@ import { useSheetStore } from '@/store/sheetStore'
 import { debouncedSave, saveWorkbook, flushPendingSave } from '@/lib/saveService'
 import { cn } from '@/lib/utils'
 
-type SaveState = 'saved' | 'saving' | 'unsaved' | 'error'
+type SaveState = 'saved' | 'saving' | 'unsaved' | 'error' | 'conflict'
 
 interface SaveStatusProps {
   workbookName: string
@@ -42,6 +42,13 @@ export function SaveStatus({ workbookName, workbookData, workbookId }: SaveStatu
     const result = await saveWorkbook({ ...(id ? { id } : {}), name, data })
 
     setIsSaving(false)
+
+    if (result.conflict) {
+      // Someone else saved this workbook first. The local copy is safe;
+      // surface a conflict state — clicking it reloads to get their changes.
+      setSaveState('conflict')
+      return
+    }
 
     if (result.id && result.destination === 'supabase') {
       // Server confirmed the save. Pin the id so subsequent saves UPDATE.
@@ -130,15 +137,31 @@ export function SaveStatus({ workbookName, workbookData, workbookId }: SaveStatu
       icon: '!',
       spin: false,
     },
+    conflict: {
+      label: 'Edited elsewhere - click to reload',
+      color: 'text-amber-600',
+      icon: '!',
+      spin: false,
+    },
   } as const
 
   const current = statusConfig[saveState]
 
+  // In a conflict, clicking reloads to pull the other person's changes (the
+  // local copy is already safe in localStorage); otherwise it saves.
+  const handleClick = () => {
+    if (saveState === 'conflict') {
+      if (typeof window !== 'undefined') window.location.reload()
+      return
+    }
+    void performSave()
+  }
+
   return (
     <button
       type="button"
-      onClick={() => void performSave()}
-      title="Save (Ctrl+S)"
+      onClick={handleClick}
+      title={saveState === 'conflict' ? 'Reload to get the latest version' : 'Save (Ctrl+S)'}
       disabled={isSaving}
       className={cn(
         'flex items-center gap-1.5 rounded-lg px-3 py-1.5',

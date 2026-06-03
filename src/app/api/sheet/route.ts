@@ -62,13 +62,15 @@ export async function POST(request: Request) {
       ...(candidate.id ? { id: candidate.id } : {}),
       name: candidate.name.trim(),
       data: candidate.data,
+      ...(candidate.baseUpdatedAt ? { baseUpdatedAt: candidate.baseUpdatedAt } : {}),
     },
     authResult.user.id
   )
 
   if ('response' in result) {
+    // Includes the 409 conflict response from saveWorkbookRecord.
     return result.response
   }
 
-  return Response.json({ id: result.id })
+  return Response.json({ id: result.id, ...(result.updatedAt ? { updatedAt: result.updatedAt } : {}) })
 }

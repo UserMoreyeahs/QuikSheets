@@ -43,6 +43,28 @@ export interface SaveResult {
   destination: 'supabase' | 'localStorage'
   /** Optional error message; only set when destination is 'localStorage' due to a fall-back. */
   fallbackReason?: string
+  /**
+   * True when the server rejected the save with 409 because someone else
+   * saved this workbook first. The local copy is preserved (no data lost);
+   * the UI should prompt the user to reload and re-apply their change.
+   */
+  conflict?: boolean
+}
+
+/**
+ * Optimistic-concurrency versions: workbook id → the `updated_at` we last
+ * loaded/saved. Sent as `baseUpdatedAt` so the server can reject a stale
+ * write (409) instead of silently clobbering a concurrent edit. Populated
+ * by the load path via `noteWorkbookVersion` and refreshed on each save.
+ */
+const _workbookVersions: Record<string, string> = {}
+
+/** Record the server `updated_at` for a workbook (called after a load/save). */
+export function noteWorkbookVersion(
+  id: string | null | undefined,
+  updatedAt: string | null | undefined,
+): void {
+  if (id && updatedAt) _workbookVersions[id] = updatedAt
 }
 
 /** Auth context resolved from a SINGLE getSession() call — see getAuthContext. */
@@ -157,14 +179,29 @@ export async function saveWorkbook(payload: WorkbookSaveData): Promise<SaveResul
   }
 
   try {
+    // Attach the optimistic-concurrency token when we have one for this
+    // workbook, so the server can reject a stale write instead of
+    // overwriting a concurrent edit.
+    const baseUpdatedAt = payload.id ? _workbookVersions[payload.id] : undefined
     const res = await fetch('/api/sheet', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${accessToken}`,
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(baseUpdatedAt ? { ...payload, baseUpdatedAt } : payload),
     })
+    if (res.status === 409) {
+      // Someone else saved first. Keep the user's work locally (NO data
+      // loss) and signal a conflict so the UI can prompt a reload/merge.
+      persistLocally(payload, userId)
+      return {
+        id: payload.id ?? null,
+        destination: 'localStorage',
+        fallbackReason: 'conflict',
+        conflict: true,
+      }
+    }
     if (!res.ok) {
       // Persist locally so the user doesn't lose their work; surface
       // a reason the caller can show in the SaveStatus chip.
@@ -172,7 +209,9 @@ export async function saveWorkbook(payload: WorkbookSaveData): Promise<SaveResul
       const reason = `${res.status} ${res.statusText}`
       return { id: payload.id ?? null, destination: 'localStorage', fallbackReason: reason }
     }
-    const json = await res.json() as { id?: string }
+    const json = await res.json() as { id?: string; updatedAt?: string }
+    // Refresh our version token so the NEXT save's base matches the row.
+    noteWorkbookVersion(json.id ?? payload.id, json.updatedAt)
     return { id: json.id ?? payload.id ?? null, destination: 'supabase' }
   } catch (err) {
     // Network error → persist locally and surface the reason.
