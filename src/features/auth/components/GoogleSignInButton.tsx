@@ -47,7 +47,17 @@ export function GoogleSignInButton({ redirectTo = '/dashboard', label = 'Continu
     const callback = `${origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: callback },
+      options: {
+        redirectTo: callback,
+        // Force Google's account chooser on EVERY sign-in. Without this,
+        // Google silently re-authenticates the browser's existing session
+        // (the previously used account) and bounces straight back — so
+        // after logging out of Quiksheets, "Continue with Google" would
+        // log you back into the same account without asking. `signOut()`
+        // clears our Supabase session but can't touch Google's session,
+        // so the prompt is what actually lets the user pick an account.
+        queryParams: { prompt: 'select_account' },
+      },
     })
     if (error) {
       setError(error.message)
