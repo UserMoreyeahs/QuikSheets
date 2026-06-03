@@ -275,6 +275,7 @@ import { useProtectedRangesUiStore } from '@/features/protected-ranges/store/pro
 import { useAutomationStore } from '@/features/automation/store/automationStore'
 import { useSheetStore } from '@/store/sheetStore'
 import { useWorkbookStore } from '@/store/workbookStore'
+import { useShallow } from 'zustand/react/shallow'
 import { DEFAULT_COLS } from '@/lib/constants'
 import { colIndexToLetter } from '@/lib/cellAddress'
 import type { ImportedSheet } from '@/features/grid/utils/importUtils'
@@ -330,6 +331,10 @@ export default function SheetPage() {
   const { resolvedTheme, setTheme } = useTheme()
   const workbookId = params.id
 
+  // Narrowed, shallow-compared selectors: this page only re-renders when one
+  // of the fields it actually uses changes — NOT on every unrelated store
+  // mutation (undoStack, activeFormatting, validationRules, hiddenRows, …),
+  // which previously fired a full page re-render on every keystroke/selection.
   const {
     gridSheets,
     gridInstance,
@@ -345,9 +350,34 @@ export default function SheetPage() {
     setSelectedRange,
     setShowFindReplace,
     setSkipNextTabSync,
-  } = useSheetStore()
+  } = useSheetStore(
+    useShallow((s) => ({
+      gridSheets: s.gridSheets,
+      gridInstance: s.gridInstance,
+      replaceGridSheets: s.replaceGridSheets,
+      selectedCell: s.selectedCell,
+      selectedRange: s.selectedRange,
+      applySort: s.applySort,
+      clearFilters: s.clearFilters,
+      clearFormatOnSelection: s.clearFormatOnSelection,
+      setEditingCell: s.setEditingCell,
+      setFormulaBarValue: s.setFormulaBarValue,
+      setSelectedCell: s.setSelectedCell,
+      setSelectedRange: s.setSelectedRange,
+      setShowFindReplace: s.setShowFindReplace,
+      setSkipNextTabSync: s.setSkipNextTabSync,
+    })),
+  )
   const { sheets, activeSheetId, addSheet, replaceSheets, setActiveSheet: setActiveWorkbookSheet } =
-    useWorkbookStore()
+    useWorkbookStore(
+      useShallow((s) => ({
+        sheets: s.sheets,
+        activeSheetId: s.activeSheetId,
+        addSheet: s.addSheet,
+        replaceSheets: s.replaceSheets,
+        setActiveSheet: s.setActiveSheet,
+      })),
+    )
   const { showMap, setShowMap, toggleMap } = useDependencyMap()
   const cellHistory = useCellHistory(workbookId)
   const collab = useRealtimeCollab(workbookId)
