@@ -22,6 +22,7 @@ import { getBrowserSupabase } from './supabase/client'
 import { getClientSession } from './supabase/getClientSession'
 import { createMigrationFlag } from './supabase/migrationFlag'
 import { makeLocalStore } from './localJsonStore'
+import { logger } from '@/lib/logger'
 import type { RowVisibilityRule } from '@/features/row-rls/types'
 
 // ---------------------------------------------------------------------------
@@ -94,8 +95,7 @@ async function migrateLocalToSupabase(
 
   const { error } = await supabase.from('row_visibility_rules').insert(rows)
   if (error) {
-    // eslint-disable-next-line no-console
-    console.debug('[rowRlsApi] migration deferred:', error.message)
+    logger.debug('rowRlsApi', 'migration deferred:', error.message)
     return
   }
 
@@ -202,8 +202,7 @@ export async function saveRule(
     .upsert(row, { onConflict: 'id' })
 
   if (error) {
-    // eslint-disable-next-line no-console
-    console.debug('[rowRlsApi] saveRule error:', error.message)
+    logger.debug('rowRlsApi', 'saveRule error:', error.message)
   }
 }
 
@@ -244,8 +243,7 @@ export async function deleteRule(
     .eq('id', ruleId)
 
   if (error) {
-    // eslint-disable-next-line no-console
-    console.debug('[rowRlsApi] deleteRule error:', error.message)
+    logger.debug('rowRlsApi', 'deleteRule error:', error.message)
   }
 }
 
@@ -271,7 +269,6 @@ export async function deleteAllRulesForSheet(
     .eq('sheet_id', sheetId)
 
   if (error) {
-    // eslint-disable-next-line no-console
-    console.debug('[rowRlsApi] deleteAllRulesForSheet error:', error.message)
+    logger.debug('rowRlsApi', 'deleteAllRulesForSheet error:', error.message)
   }
 }

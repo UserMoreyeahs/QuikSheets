@@ -31,6 +31,7 @@ import {
   deleteVersion as deleteLocalVersion,
   type StoredVersion,
 } from '@/features/version-history/storage/localVersionStore'
+import { logger } from '@/lib/logger'
 import { cloneSheetWithData, getSheetMatrix } from '@/lib/fortuneSheet'
 
 // ------------------------------------------------------------------
@@ -124,8 +125,7 @@ async function migrateLocalToSupabase(
   const { error } = await supabase.from('workbook_versions').insert(rows)
   if (error) {
     // Leave the flag unset so we can retry on next load.
-    // eslint-disable-next-line no-console
-    console.debug('[versionsApi] migration deferred:', error.message)
+    logger.debug('versionsApi', 'migration deferred:', error.message)
     return
   }
   markMigrated(workbookId)

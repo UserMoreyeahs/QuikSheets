@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { X, MessageSquare, CheckCircle2, RotateCcw, Trash2, AtSign } from 'lucide-react'
 import { toast } from 'sonner'
 import { useCommentsUiStore } from '@/features/comments/store/commentsUiStore'
+import { logger } from '@/lib/logger'
 import {
   loadComments,
   resolveComment,
@@ -98,8 +99,7 @@ export function CommentsPanel({ workbookId }: { workbookId: string }) {
       toast.error('Could not update comment.')
       // revert
       setAll((prev) => prev.map((x) => (x.id === c.id ? { ...x, resolved: c.resolved } : x)))
-      // eslint-disable-next-line no-console
-      console.debug('[CommentsPanel] resolve failed:', err)
+      logger.debug('CommentsPanel', 'resolve failed:', err)
     }
     bump()
   }
@@ -113,8 +113,7 @@ export function CommentsPanel({ workbookId }: { workbookId: string }) {
       toast.success('Comment deleted.')
     } catch (err) {
       toast.error('Could not delete comment.')
-      // eslint-disable-next-line no-console
-      console.debug('[CommentsPanel] delete failed:', err)
+      logger.debug('CommentsPanel', 'delete failed:', err)
     }
     bump()
   }

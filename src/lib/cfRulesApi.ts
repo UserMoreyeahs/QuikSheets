@@ -23,6 +23,7 @@ import { getBrowserSupabase } from './supabase/client'
 import { getClientSession, type ClientSession } from './supabase/getClientSession'
 import { createMigrationFlag } from './supabase/migrationFlag'
 import { makeLocalStore } from './localJsonStore'
+import { logger } from '@/lib/logger'
 import type { CFRule } from '@/features/conditional-formatting/types'
 
 // ---------------------------------------------------------------------------
@@ -109,8 +110,7 @@ async function migrateLocalToSupabase(
 
   const { error } = await supabase.from('conditional_format_rules').insert(rows)
   if (error) {
-    // eslint-disable-next-line no-console
-    console.debug('[cfRulesApi] migration deferred:', error.message)
+    logger.debug('cfRulesApi', 'migration deferred:', error.message)
     return
   }
 
@@ -195,8 +195,7 @@ export async function saveRule(workbookId: string, sheetId: string, rule: CFRule
     .upsert(row, { onConflict: 'id' })
 
   if (error) {
-    // eslint-disable-next-line no-console
-    console.debug('[cfRulesApi] saveRule error:', error.message)
+    logger.debug('cfRulesApi', 'saveRule error:', error.message)
     // localStorage already updated above — data is not lost.
   }
 }
@@ -241,8 +240,7 @@ export async function deleteRule(
     .eq('id', ruleId)
 
   if (error) {
-    // eslint-disable-next-line no-console
-    console.debug('[cfRulesApi] deleteRule error:', error.message)
+    logger.debug('cfRulesApi', 'deleteRule error:', error.message)
     // localStorage already updated above — data is not lost.
   }
 }
@@ -272,7 +270,6 @@ export async function deleteAllRulesForSheet(
     .eq('sheet_id', sheetId)
 
   if (error) {
-    // eslint-disable-next-line no-console
-    console.debug('[cfRulesApi] deleteAllRulesForSheet error:', error.message)
+    logger.debug('cfRulesApi', 'deleteAllRulesForSheet error:', error.message)
   }
 }

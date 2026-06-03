@@ -28,6 +28,7 @@ import { useSheetStore } from '@/store/sheetStore'
 import { useWorkbookStore } from '@/store/workbookStore'
 import { colIndexToLetter } from '@/lib/cellAddress'
 import { getSheetMatrix } from '@/lib/fortuneSheet'
+import { logger } from '@/lib/logger'
 import type { Sheet } from '@fortune-sheet/core'
 
 /** Modes that the Paste Special dropdown can request. */
@@ -318,8 +319,7 @@ export async function copySelection(): Promise<void> {
     toast.success(`Copied ${payload.rows.length}×${payload.rows[0]?.length ?? 0}`)
   } catch (err) {
     toast.error('Copy failed — check browser permissions')
-    // eslint-disable-next-line no-console
-    console.debug('[clipboard] copy failed', err)
+    logger.debug('clipboard', 'copy failed', err)
   }
 }
 
@@ -389,8 +389,7 @@ export async function pasteFromClipboard(mode: PasteMode = 'all'): Promise<void>
       text = await navigator.clipboard.readText()
     } catch (err) {
       toast.error('Paste failed — clipboard read permission denied')
-      // eslint-disable-next-line no-console
-      console.debug('[clipboard] readText failed', err)
+      logger.debug('clipboard', 'readText failed', err)
       return
     }
     if (!text) {

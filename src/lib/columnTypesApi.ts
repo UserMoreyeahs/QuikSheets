@@ -23,6 +23,7 @@ import { getBrowserSupabase } from './supabase/client'
 import { getClientSession, type ClientSession } from './supabase/getClientSession'
 import { createMigrationFlag } from './supabase/migrationFlag'
 import { makeLocalStore } from './localJsonStore'
+import { logger } from '@/lib/logger'
 import type { ColumnTypeMeta } from '@/features/typed-columns/types'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -150,8 +151,7 @@ async function migrateLocalToSupabase(
     .upsert(rows, { onConflict: 'workbook_id,sheet_id,column_index' })
 
   if (error) {
-    // eslint-disable-next-line no-console
-    console.debug('[columnTypesApi] migration deferred:', error.message)
+    logger.debug('columnTypesApi', 'migration deferred:', error.message)
     return
   }
   markWorkbookMigrated(workbookId)
@@ -227,8 +227,7 @@ export async function setColumnType(
   )
 
   if (error) {
-    // eslint-disable-next-line no-console
-    console.debug('[columnTypesApi] setColumnType error:', error.message)
+    logger.debug('columnTypesApi', 'setColumnType error:', error.message)
   }
 }
 
@@ -259,7 +258,6 @@ export async function clearColumnType(
     .eq('column_index', colIndex)
 
   if (error) {
-    // eslint-disable-next-line no-console
-    console.debug('[columnTypesApi] clearColumnType error:', error.message)
+    logger.debug('columnTypesApi', 'clearColumnType error:', error.message)
   }
 }

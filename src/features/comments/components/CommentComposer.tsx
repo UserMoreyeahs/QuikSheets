@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react'
 import { X, AtSign, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import { useCommentsUiStore } from '@/features/comments/store/commentsUiStore'
+import { logger } from '@/lib/logger'
 import { createComment } from '@/lib/commentsApi'
 import { useWorkbookStore } from '@/store/workbookStore'
 
@@ -57,8 +58,7 @@ export function CommentComposer({ workbookId }: { workbookId: string }) {
       openPanel()
     } catch (err) {
       toast.error('Could not add comment.')
-      // eslint-disable-next-line no-console
-      console.debug('[CommentComposer] create failed:', err)
+      logger.debug('CommentComposer', 'create failed:', err)
     } finally {
       setSubmitting(false)
     }

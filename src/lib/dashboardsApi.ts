@@ -25,6 +25,7 @@ import { getBrowserSupabase } from './supabase/client'
 import { getClientSession } from './supabase/getClientSession'
 import { createMigrationFlag } from './supabase/migrationFlag'
 import { makeLocalStore } from './localJsonStore'
+import { logger } from '@/lib/logger'
 import type { Dashboard } from '@/features/dashboards/types'
 
 // ---------------------------------------------------------------------------
@@ -100,8 +101,7 @@ async function migrateLocalToSupabase(
 
   const { error } = await supabase.from('dashboards').insert(rows)
   if (error) {
-    // eslint-disable-next-line no-console
-    console.debug('[dashboardsApi] migration deferred:', error.message)
+    logger.debug('dashboardsApi', 'migration deferred:', error.message)
     return
   }
 
@@ -174,8 +174,7 @@ export async function saveDashboard(
     .upsert(row, { onConflict: 'id' })
 
   if (error) {
-    // eslint-disable-next-line no-console
-    console.debug('[dashboardsApi] saveDashboard error:', error.message)
+    logger.debug('dashboardsApi', 'saveDashboard error:', error.message)
   }
 }
 
@@ -201,7 +200,6 @@ export async function deleteDashboard(
     .eq('id', dashboardId)
 
   if (error) {
-    // eslint-disable-next-line no-console
-    console.debug('[dashboardsApi] deleteDashboard error:', error.message)
+    logger.debug('dashboardsApi', 'deleteDashboard error:', error.message)
   }
 }

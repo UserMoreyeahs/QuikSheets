@@ -31,6 +31,7 @@ import {
   type LocalComment,
 } from '@/features/comments/storage/localCommentsStore'
 import { insertMentionNotifications } from './notificationsApi'
+import { logger } from '@/lib/logger'
 
 /**
  * Unified comment record used by the UI. `LocalComment` is the
@@ -137,8 +138,7 @@ async function migrateLocalToSupabase(
     // Leave the flag unset so we can retry on next load. Log at debug
     // level to avoid spamming the console on permission failures
     // (e.g. viewer trying to migrate).
-    // eslint-disable-next-line no-console
-    console.debug('[commentsApi] migration deferred:', error.message)
+    logger.debug('commentsApi', 'migration deferred:', error.message)
     return
   }
   migrationFlag.mark(workbookId)

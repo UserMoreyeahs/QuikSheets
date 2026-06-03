@@ -15,6 +15,7 @@
 
 import { getBrowserSupabase } from './supabase/client'
 import { getClientSession } from './supabase/getClientSession'
+import { logger } from '@/lib/logger'
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -274,11 +275,9 @@ export async function insertMentionNotifications(opts: {
     const { error } = await supabase.from('notifications').insert(rows)
     if (error) {
       // Intentionally debug-level — notification failure is non-fatal.
-      // eslint-disable-next-line no-console
-      console.debug('[notificationsApi] mention insert failed:', error.message)
+      logger.debug('notificationsApi', 'mention insert failed:', error.message)
     }
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.debug('[notificationsApi] insertMentionNotifications error:', err)
+    logger.debug('notificationsApi', 'insertMentionNotifications error:', err)
   }
 }

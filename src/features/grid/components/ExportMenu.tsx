@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import type { ExportSheet } from '../utils/exportUtils'
 import { cn } from '@/lib/utils'
+import { logger } from '@/lib/logger'
 
 // exportUtils pulls in SheetJS (xlsx) + jsPDF — together several hundred KB.
 // They're only needed when the user actually exports, so load them on demand
@@ -39,11 +40,12 @@ const EXPORT_OPTIONS = [
 ]
 
 function logExportError(err: unknown): void {
+  // Dev-only, matching the previous behaviour. Routed through the shared
+  // logger (which guards typeof console for SSR/edge) instead of the old
+  // Reflect.get(globalThis, 'console') hack that existed only to dodge the
+  // no-console lint rule.
   if (process.env.NODE_ENV !== 'production') {
-    const consoleRef = Reflect.get(globalThis, 'console') as
-      | { error?: (message: string, value: unknown) => void }
-      | null
-    consoleRef?.error?.('Export failed:', err)
+    logger.error('export', 'Export failed:', err)
   }
 }
 
