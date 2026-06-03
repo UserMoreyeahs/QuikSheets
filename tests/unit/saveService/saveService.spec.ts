@@ -257,3 +257,44 @@ describe('id-keyed persistence round-trip', () => {
     expect(loaded?.data).toEqual({ flushed: true })
   })
 })
+
+// Optimistic concurrency: a stale save is rejected (409) instead of silently
+// overwriting someone else's edit — and the user's work is never lost.
+describe('save-conflict guard', () => {
+  it('sends baseUpdatedAt once a version is noted, surfaces 409 as conflict, and keeps data local', async () => {
+    const { saveWorkbook, noteWorkbookVersion } = await import('@/lib/saveService')
+    mockSession = { access_token: SESSION_TOKEN, user: { id: 'u1' } }
+    noteWorkbookVersion('wbc1', '2026-01-01T00:00:00Z')
+
+    let sentBase: string | undefined
+    mockFetch = async (_url, init) => {
+      sentBase = JSON.parse(String(init?.body)).baseUpdatedAt
+      return new Response(JSON.stringify({ error: 'conflict' }), { status: 409 })
+    }
+
+    const result = await saveWorkbook({ id: 'wbc1', name: 'X', data: { v: 1 } })
+    expect(sentBase).toBe('2026-01-01T00:00:00Z')
+    expect(result.conflict).toBe(true)
+    expect(result.destination).toBe('localStorage')
+    // Work preserved locally — no data loss on conflict.
+    expect(store['quiksheets_workbook:u1:id:wbc1']).toBeDefined()
+  })
+
+  it('records the returned updatedAt so the NEXT save sends it as the base', async () => {
+    const { saveWorkbook } = await import('@/lib/saveService')
+    mockSession = { access_token: SESSION_TOKEN, user: { id: 'u1' } }
+
+    let calls = 0
+    const bases: (string | undefined)[] = []
+    mockFetch = async (_url, init) => {
+      bases.push(JSON.parse(String(init?.body)).baseUpdatedAt)
+      calls += 1
+      return new Response(JSON.stringify({ id: 'wbc2', updatedAt: `T${calls}` }), { status: 200 })
+    }
+
+    await saveWorkbook({ id: 'wbc2', name: 'X', data: {} }) // no base yet
+    await saveWorkbook({ id: 'wbc2', name: 'X', data: {} }) // base = T1 (from 1st response)
+    expect(bases[0]).toBeUndefined()
+    expect(bases[1]).toBe('T1')
+  })
+})

@@ -5,6 +5,34 @@ export interface WorkbookPayload {
   id?: string
   name: string
   data: unknown
+  /**
+   * Optimistic-concurrency token: the `updated_at` the client last loaded
+   * or saved. When present on an UPDATE, the save only succeeds if the
+   * row's current `updated_at` still matches — otherwise someone else
+   * saved in the meantime and we return 409 instead of silently
+   * overwriting their work. Absent → unconditional update (first save /
+   * legacy clients), so this never blocks a save it can't reason about.
+   */
+  baseUpdatedAt?: string
+  /** Returned by the load path so the client can send it back as baseUpdatedAt. */
+  updatedAt?: string
+}
+
+/** Build a save success result, omitting updatedAt when absent (exactOptionalPropertyTypes). */
+function savedResult(id: string, updatedAt: string | undefined): { id: string; updatedAt?: string } {
+  return { id, ...(updatedAt ? { updatedAt } : {}) }
+}
+
+/** 409 returned when a stale write is detected (someone else saved first). */
+function conflictResponse(currentUpdatedAt: string | null): Response {
+  return Response.json(
+    {
+      error: 'conflict',
+      message: 'This workbook was changed by someone else since you last loaded it.',
+      currentUpdatedAt,
+    },
+    { status: 409 },
+  )
 }
 
 interface AuthenticatedUser {
@@ -74,7 +102,7 @@ export async function authenticateSheetRequest(
 export async function saveWorkbookRecord(
   payload: WorkbookPayload,
   userId: string
-): Promise<{ id: string } | { response: Response }> {
+): Promise<{ id: string; updatedAt?: string } | { response: Response }> {
   if (!supabase) {
     return {
       response: Response.json(
@@ -85,17 +113,19 @@ export async function saveWorkbookRecord(
   }
 
   if (payload.id) {
-    // Fast path: try as owner.
-    const ownerUpdate = await supabase
+    const base = payload.baseUpdatedAt
+    // Fast path: try as owner. When a base version is supplied, the update
+    // is conditional on `updated_at` still matching (optimistic concurrency).
+    let ownerQuery = supabase
       .from('workbooks')
       .update({ name: payload.name, data: payload.data })
       .eq('id', payload.id)
       .eq('owner_id', userId)
-      .select('id')
-      .maybeSingle()
+    if (base) ownerQuery = ownerQuery.eq('updated_at', base)
+    const ownerUpdate = await ownerQuery.select('id,updated_at').maybeSingle()
 
     if (ownerUpdate.data) {
-      return { id: payload.id }
+      return savedResult(payload.id, (ownerUpdate.data as { updated_at?: string }).updated_at)
     }
     if (ownerUpdate.error) {
       return {
@@ -103,6 +133,21 @@ export async function saveWorkbookRecord(
           { error: 'Failed to update workbook.', details: ownerUpdate.error.message },
           { status: 500 }
         ),
+      }
+    }
+
+    // Owner update matched 0 rows. With a base filter that can mean the owner
+    // row exists but its updated_at moved on → a real conflict (someone else
+    // saved), NOT a permissions miss. Detect it before the editor fallback.
+    if (base) {
+      const ownerCheck = await supabase
+        .from('workbooks')
+        .select('updated_at')
+        .eq('id', payload.id)
+        .eq('owner_id', userId)
+        .maybeSingle()
+      if (ownerCheck.data) {
+        return { response: conflictResponse((ownerCheck.data as { updated_at?: string }).updated_at ?? null) }
       }
     }
 
@@ -135,27 +180,46 @@ export async function saveWorkbookRecord(
       }
     }
 
-    const { error: updateError } = await service
+    let editorQuery = service
       .from('workbooks')
       .update({ name: payload.name, data: payload.data })
       .eq('id', payload.id)
+    if (base) editorQuery = editorQuery.eq('updated_at', base)
+    const editorUpdate = await editorQuery.select('id,updated_at').maybeSingle()
 
-    if (updateError) {
+    if (editorUpdate.error) {
       return {
         response: Response.json(
-          { error: 'Failed to update workbook.', details: updateError.message },
+          { error: 'Failed to update workbook.', details: editorUpdate.error.message },
           { status: 500 }
         ),
       }
     }
+    if (editorUpdate.data) {
+      return savedResult(payload.id, (editorUpdate.data as { updated_at?: string }).updated_at)
+    }
 
+    // Editor update matched 0 rows. With a base filter: conflict if the row
+    // still exists, else it's gone (404). Without a base, preserve the
+    // original behaviour and treat it as success.
+    if (base) {
+      const exists = await service
+        .from('workbooks')
+        .select('updated_at')
+        .eq('id', payload.id)
+        .maybeSingle()
+      if (exists.data) {
+        return { response: conflictResponse((exists.data as { updated_at?: string }).updated_at ?? null) }
+      }
+      return { response: Response.json({ error: 'Workbook not found.' }, { status: 404 }) }
+    }
     return { id: payload.id }
   }
 
   const { data, error } = await supabase
     .from('workbooks')
     .insert({ name: payload.name, data: payload.data, owner_id: userId })
-    .select('id')
+    .select('id,updated_at')
     .single()
 
   if (error) {
@@ -167,7 +231,8 @@ export async function saveWorkbookRecord(
     }
   }
 
-  return { id: String((data as { id: string }).id) }
+  const row = data as { id: string; updated_at?: string }
+  return savedResult(String(row.id), row.updated_at)
 }
 
 /**
@@ -201,13 +266,13 @@ export async function loadWorkbookRecord(
   // workbook is owned by this user we get the row directly.
   const ownerQuery = await supabase
     .from('workbooks')
-    .select('id,name,data')
+    .select('id,name,data,updated_at')
     .eq('id', id)
     .eq('owner_id', userId)
     .maybeSingle()
 
   if (ownerQuery.data) {
-    return ownerQuery.data as WorkbookPayload
+    return toWorkbookPayload(ownerQuery.data)
   }
 
   // Slow path: user might be an invited member. The anon client can't
@@ -245,7 +310,7 @@ export async function loadWorkbookRecord(
   // User is a verified member — load the workbook by id alone.
   const workbookQuery = await service
     .from('workbooks')
-    .select('id,name,data')
+    .select('id,name,data,updated_at')
     .eq('id', id)
     .single()
 
@@ -258,5 +323,16 @@ export async function loadWorkbookRecord(
     }
   }
 
-  return workbookQuery.data as WorkbookPayload
+  return toWorkbookPayload(workbookQuery.data)
+}
+
+/** Map a workbooks row (snake_case updated_at) to the WorkbookPayload shape. */
+function toWorkbookPayload(row: unknown): WorkbookPayload {
+  const r = (row ?? {}) as { id?: string; name?: string; data?: unknown; updated_at?: string }
+  return {
+    ...(r.id ? { id: String(r.id) } : {}),
+    name: r.name ?? '',
+    data: r.data,
+    ...(r.updated_at ? { updatedAt: r.updated_at } : {}),
+  }
 }

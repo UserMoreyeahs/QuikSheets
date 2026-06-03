@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import type { Sheet } from '@fortune-sheet/core'
 import { useSheetStore } from '@/store/sheetStore'
 import { getBrowserSupabase } from '@/lib/supabase/client'
-import { loadWorkbookData } from '@/lib/saveService'
+import { loadWorkbookData, noteWorkbookVersion } from '@/lib/saveService'
 
 /**
  * Restore a workbook's SAVED cell data when the sheet page opens.
@@ -104,7 +104,10 @@ async function resolveSavedSheets(
           headers: { Authorization: `Bearer ${token}` },
         })
         if (res.ok) {
-          const json = (await res.json()) as { workbook?: { data?: unknown } }
+          const json = (await res.json()) as { workbook?: { data?: unknown; updatedAt?: string } }
+          // Record the server version so the first save can send it as the
+          // optimistic-concurrency base (and detect a concurrent edit).
+          noteWorkbookVersion(workbookId, json.workbook?.updatedAt)
           const remote = extractSheets(json.workbook?.data)
           if (remote) return remote
         }
