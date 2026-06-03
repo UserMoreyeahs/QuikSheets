@@ -22,6 +22,9 @@ import { useSparklineStore } from '@/features/sparklines/store/sparklineStore'
 import { useSlicerStore } from '@/features/slicers/store/slicerStore'
 import { useImageStore } from '@/features/images/store/imageStore'
 import { useOverlayStore } from '@/features/overlays/store/overlayStore'
+import { getBrowserSupabase } from './supabase/client'
+import { getClientSession } from './supabase/getClientSession'
+import { logger } from './logger'
 
 export interface WorkbookExtras {
   charts: unknown[]
@@ -100,5 +103,68 @@ export function saveWorkbookExtras(workbookId: string, extras: WorkbookExtras): 
     window.localStorage.setItem(KEY(workbookId), JSON.stringify(extras))
   } catch {
     // Quota (large base64 images) or serialization failure — best-effort.
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Supabase-first persistence (cloud sync) with localStorage fallback + cache.
+// Mirrors the cfRulesApi pattern: cloud (UUID) workbooks round-trip the
+// `workbook_extras` table; local/offline workbooks use localStorage only.
+// ───────────────────────────────────────────────────────────────────────────
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * Load a workbook's extras, Supabase-first for cloud workbooks (and cache the
+ * result to localStorage), else from localStorage. Never throws.
+ */
+export async function loadWorkbookExtrasResolved(workbookId: string): Promise<WorkbookExtras | null> {
+  if (UUID_RE.test(workbookId)) {
+    try {
+      const supabase = getBrowserSupabase()
+      const session = supabase ? await getClientSession() : null
+      if (supabase && session) {
+        const { data, error } = await supabase
+          .from('workbook_extras')
+          .select('extras_json')
+          .eq('workbook_id', workbookId)
+          .maybeSingle()
+        if (!error && data) {
+          const remote: WorkbookExtras = {
+            ...EMPTY,
+            ...(((data as { extras_json?: Partial<WorkbookExtras> }).extras_json) ?? {}),
+          }
+          saveWorkbookExtras(workbookId, remote) // refresh local cache
+          return remote
+        }
+      }
+    } catch (err) {
+      logger.debug('workbookExtras', 'remote load failed; using local', err)
+    }
+  }
+  return loadWorkbookExtras(workbookId)
+}
+
+/**
+ * Persist a workbook's extras: always to localStorage (cache/offline) and, for
+ * cloud workbooks, upsert to Supabase. Never throws.
+ */
+export async function saveWorkbookExtrasResolved(
+  workbookId: string,
+  extras: WorkbookExtras,
+): Promise<void> {
+  saveWorkbookExtras(workbookId, extras)
+  if (!UUID_RE.test(workbookId)) return
+  try {
+    const supabase = getBrowserSupabase()
+    const session = supabase ? await getClientSession() : null
+    if (supabase && session) {
+      const { error } = await supabase
+        .from('workbook_extras')
+        .upsert({ workbook_id: workbookId, extras_json: extras }, { onConflict: 'workbook_id' })
+      if (error) logger.debug('workbookExtras', 'remote save failed; kept local', error.message)
+    }
+  } catch (err) {
+    logger.debug('workbookExtras', 'remote save threw; kept local', err)
   }
 }
