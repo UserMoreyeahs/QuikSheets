@@ -57,9 +57,26 @@ export async function createWorkbookAction(input: { name: string; workspaceId: s
   } = await supabase.auth.getUser()
   if (!user) return { ok: false as const, error: 'Not authenticated' }
 
+  // Ensure a unique name within the workspace so creating multiple workbooks
+  // doesn't produce a pile of identical "Untitled Workbook" cards. We dedupe
+  // server-side so EVERY create path (dashboard + in-sheet File>New) benefits,
+  // not just the dashboard. "Untitled Workbook", then " 2", " 3", …
+  let name = parsed.data.name
+  const { data: existingRows } = await supabase
+    .from('workbooks')
+    .select('name')
+    .eq('workspace_id', parsed.data.workspaceId)
+  const taken = new Set((existingRows ?? []).map((r) => (r as { name: string }).name))
+  if (taken.has(name)) {
+    const base = name.replace(/ \d+$/, '')
+    let n = 2
+    while (taken.has(`${base} ${n}`)) n += 1
+    name = `${base} ${n}`
+  }
+
   const { data: workbook, error } = await supabase
     .from('workbooks')
-    .insert({ name: parsed.data.name, workspace_id: parsed.data.workspaceId, owner_id: user.id })
+    .insert({ name, workspace_id: parsed.data.workspaceId, owner_id: user.id })
     .select('id')
     .single()
 

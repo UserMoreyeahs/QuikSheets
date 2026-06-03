@@ -32,6 +32,7 @@ import { loadWorkbookData, noteWorkbookVersion } from '@/lib/saveService'
 export function useLoadWorkbookDataOnMount(
   workbookId: string,
   workbookName: string,
+  setName?: (name: string) => void,
 ): void {
   useEffect(() => {
     if (!workbookId) return
@@ -61,7 +62,12 @@ export function useLoadWorkbookDataOnMount(
         // localStorage optional — fall back to the closure name.
       }
 
-      const sheets = await resolveSavedSheets(workbookId, effectiveName)
+      const sheets = await resolveSavedSheets(workbookId, effectiveName, (serverName) => {
+        // Reflect the authoritative Supabase name in the header (the dashboard
+        // reads names from Supabase, so this keeps the two in sync after a
+        // rename). Guard against clobbering with an empty value.
+        if (!cancelled && setName && serverName.trim()) setName(serverName)
+      })
       if (cancelled || !sheets || sheets.length === 0) return
 
       // Only replace if the grid is still on the untouched default. If the
@@ -92,6 +98,7 @@ export function useLoadWorkbookDataOnMount(
 async function resolveSavedSheets(
   workbookId: string,
   workbookName: string,
+  onServerName?: (name: string) => void,
 ): Promise<Sheet[] | null> {
   // ── Supabase (authenticated) ──────────────────────────────────────
   const supabase = getBrowserSupabase()
@@ -104,10 +111,15 @@ async function resolveSavedSheets(
           headers: { Authorization: `Bearer ${token}` },
         })
         if (res.ok) {
-          const json = (await res.json()) as { workbook?: { data?: unknown; updatedAt?: string } }
+          const json = (await res.json()) as {
+            workbook?: { data?: unknown; updatedAt?: string; name?: string }
+          }
           // Record the server version so the first save can send it as the
           // optimistic-concurrency base (and detect a concurrent edit).
           noteWorkbookVersion(workbookId, json.workbook?.updatedAt)
+          // Surface the authoritative Supabase name (keeps the header in sync
+          // with the dashboard after a rename).
+          if (json.workbook?.name && onServerName) onServerName(json.workbook.name)
           const remote = extractSheets(json.workbook?.data)
           if (remote) return remote
         }
