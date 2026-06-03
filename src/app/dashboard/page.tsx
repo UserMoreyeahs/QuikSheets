@@ -228,9 +228,21 @@ export default function DashboardPage() {
     }
   }
 
+  // A unique-per-workbook default so new sheets aren't all "Untitled
+  // Workbook" (the user couldn't tell them apart). "Untitled Workbook",
+  // then "Untitled Workbook 2", "Untitled Workbook 3", …
+  const nextUntitledName = (): string => {
+    const base = 'Untitled Workbook'
+    const existing = new Set(workbooks.map((w) => w.name))
+    if (!existing.has(base)) return base
+    let n = 2
+    while (existing.has(`${base} ${n}`)) n += 1
+    return `${base} ${n}`
+  }
+
   const startLocalWorkbook = (id: string) => {
     try {
-      localStorage.setItem(`quiksheets_workbook_name:${id}`, 'Untitled Workbook')
+      localStorage.setItem(`quiksheets_workbook_name:${id}`, nextUntitledName())
     } catch {
       // ignore
     }
@@ -251,7 +263,7 @@ export default function DashboardPage() {
         return
       }
       const result = await createWorkbookAction({
-        name: 'Untitled Workbook',
+        name: nextUntitledName(),
         workspaceId,
       })
       if (result.ok && result.id) {

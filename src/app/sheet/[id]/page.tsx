@@ -288,6 +288,7 @@ import { useLoadAutomationsOnMount } from './hooks/useLoadAutomationsOnMount'
 import { useWorkbookName } from './hooks/useWorkbookName'
 import { useLoadTemplateDataOnMount } from './hooks/useLoadTemplateDataOnMount'
 import { useLoadWorkbookDataOnMount } from './hooks/useLoadWorkbookDataOnMount'
+import { useWorkbookExtrasPersistence } from './hooks/useWorkbookExtrasPersistence'
 import { useDevWindowHelpers } from './hooks/useDevWindowHelpers'
 import { useLoadP2FeaturesOnMount } from './hooks/useLoadP2FeaturesOnMount'
 import { useRowRlsStore } from '@/features/row-rls'
@@ -487,6 +488,9 @@ export default function SheetPage() {
   // this, edits were saved but never read back — reopening showed an empty
   // grid. Skips brand-new workbooks still carrying their template seed.
   useLoadWorkbookDataOnMount(workbookId, workbookName)
+  // Persist + restore charts/pivots/sparklines/slicers/images/overlays across
+  // reloads (they live in separate stores the cell-save path never saw).
+  useWorkbookExtrasPersistence(workbookId)
 
   // P2 features: load dashboards / connectors / row-level-security on mount.
   useLoadP2FeaturesOnMount(workbookId)
