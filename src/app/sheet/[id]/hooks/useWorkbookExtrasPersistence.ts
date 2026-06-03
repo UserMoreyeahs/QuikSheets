@@ -10,8 +10,9 @@ import { useOverlayStore } from '@/features/overlays/store/overlayStore'
 import {
   applyWorkbookExtras,
   collectWorkbookExtras,
-  loadWorkbookExtras,
-  saveWorkbookExtras,
+  hasAnyExtras,
+  loadWorkbookExtrasResolved,
+  saveWorkbookExtrasResolved,
 } from '@/lib/workbookExtras'
 
 /**
@@ -28,17 +29,26 @@ import {
 export function useWorkbookExtrasPersistence(workbookId: string): void {
   useEffect(() => {
     if (!workbookId) return
+    let cancelled = false
 
-    // 1. Hydrate from storage (replaces all six stores, clearing leftovers).
-    applyWorkbookExtras(loadWorkbookExtras(workbookId))
+    // 1. Clear any leftovers from a previously-open workbook immediately,
+    //    then hydrate from storage (Supabase-first for cloud workbooks,
+    //    localStorage fallback). The async load won't clobber objects the
+    //    user added during the round-trip (hasAnyExtras guard).
+    applyWorkbookExtras(null)
+    void loadWorkbookExtrasResolved(workbookId).then((extras) => {
+      if (cancelled || !extras) return
+      if (hasAnyExtras(collectWorkbookExtras())) return
+      applyWorkbookExtras(extras)
+    })
 
-    // 2. Debounced save on any change to the six stores.
+    // 2. Debounced save on any change to the six stores (cloud + local).
     let timer: ReturnType<typeof setTimeout> | null = null
     const scheduleSave = () => {
       if (timer) clearTimeout(timer)
       timer = setTimeout(() => {
         timer = null
-        saveWorkbookExtras(workbookId, collectWorkbookExtras())
+        void saveWorkbookExtrasResolved(workbookId, collectWorkbookExtras())
       }, 1_200)
     }
 
@@ -52,9 +62,10 @@ export function useWorkbookExtrasPersistence(workbookId: string): void {
     ]
 
     return () => {
+      cancelled = true
       if (timer) clearTimeout(timer)
       // Flush so the latest objects aren't stranded in the debounce window.
-      saveWorkbookExtras(workbookId, collectWorkbookExtras())
+      void saveWorkbookExtrasResolved(workbookId, collectWorkbookExtras())
       unsubscribers.forEach((unsub) => unsub())
     }
   }, [workbookId])

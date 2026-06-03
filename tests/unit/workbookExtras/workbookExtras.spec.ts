@@ -76,4 +76,12 @@ describe('workbookExtras', () => {
   it('loadWorkbookExtras returns null for an unknown workbook', () => {
     expect(loadWorkbookExtras('nope')).toBeNull()
   })
+
+  it('resolved save/load round-trips via the localStorage fallback (no Supabase in tests)', async () => {
+    const { saveWorkbookExtrasResolved, loadWorkbookExtrasResolved } = await import('@/lib/workbookExtras')
+    applyWorkbookExtras({ charts: [{ id: 'rc1' }] })
+    await saveWorkbookExtrasResolved('wb_local_1', collectWorkbookExtras())
+    const loaded = await loadWorkbookExtrasResolved('wb_local_1')
+    expect((loaded?.charts as { id: string }[] | undefined)?.[0]?.id).toBe('rc1')
+  })
 })
