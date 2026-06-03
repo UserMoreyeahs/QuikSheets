@@ -287,6 +287,7 @@ import { useApplyCFOnMount } from './hooks/useApplyCFOnMount'
 import { useLoadAutomationsOnMount } from './hooks/useLoadAutomationsOnMount'
 import { useWorkbookName } from './hooks/useWorkbookName'
 import { useLoadTemplateDataOnMount } from './hooks/useLoadTemplateDataOnMount'
+import { useLoadWorkbookDataOnMount } from './hooks/useLoadWorkbookDataOnMount'
 import { useDevWindowHelpers } from './hooks/useDevWindowHelpers'
 import { useLoadP2FeaturesOnMount } from './hooks/useLoadP2FeaturesOnMount'
 import { useRowRlsStore } from '@/features/row-rls'
@@ -482,6 +483,10 @@ export default function SheetPage() {
   // Drain template data from localStorage on first mount (if this
   // workbook was created via Insert > Template).
   useLoadTemplateDataOnMount(workbookId)
+  // Restore SAVED cell data on reopen (Supabase or localStorage). Without
+  // this, edits were saved but never read back — reopening showed an empty
+  // grid. Skips brand-new workbooks still carrying their template seed.
+  useLoadWorkbookDataOnMount(workbookId, workbookName)
 
   // P2 features: load dashboards / connectors / row-level-security on mount.
   useLoadP2FeaturesOnMount(workbookId)
@@ -1214,7 +1219,7 @@ export default function SheetPage() {
               </button>
             )}
 
-            <SaveStatus workbookName={workbookName} workbookData={gridSheets} />
+            <SaveStatus workbookId={workbookId} workbookName={workbookName} workbookData={gridSheets} />
           </div>
 
           <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">

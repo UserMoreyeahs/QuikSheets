@@ -121,12 +121,20 @@ function persistLocally(payload: WorkbookSaveData, userId: string | null): void 
  * throws, both fields are null and the caller scopes the key by the
  * 'anon' segment.
  */
+/**
+ * Last user id seen by getAuthContext. Cached so the SYNCHRONOUS unload
+ * flush (flushPendingSave) can key localStorage under the right user
+ * segment without an async getSession() it has no time to await.
+ */
+let _lastKnownUserId: string | null = null
+
 async function getAuthContext(): Promise<AuthContext> {
   const supabase = getBrowserSupabase()
   if (!supabase) return { accessToken: null, userId: null }
   try {
     const { data } = await supabase.auth.getSession()
     const session = data.session
+    _lastKnownUserId = session?.user?.id ?? _lastKnownUserId
     return {
       accessToken: session?.access_token ?? null,
       userId: session?.user?.id ?? null,
@@ -187,26 +195,53 @@ export async function saveWorkbook(payload: WorkbookSaveData): Promise<SaveResul
  * NAME-scoped key (the id-scoped entries written by `saveWorkbook` when an
  * id is present are looked up server-side via /api/sheet, not here).
  */
-export async function loadWorkbook(name: string): Promise<WorkbookSaveData | null> {
+/**
+ * Load a workbook's saved payload from the localStorage fallback.
+ *
+ * Reads in priority order, mirroring how `saveWorkbook` writes:
+ *   1. the id-scoped key   `…:<user>:id:<id>`     (when an id is given)
+ *   2. the name-scoped key `…:<user>:name:<slug>` (current name-based)
+ *   3. the legacy key      `quiksheets_workbook_<name>` (pre-isolation)
+ * On a legacy/name hit it re-homes the blob under the id key (if an id is
+ * available) so subsequent loads are a clean hit and stop colliding with
+ * other same-named workbooks.
+ *
+ * This is what makes edits survive a reopen for LOCAL (non-Supabase)
+ * workbooks. Supabase workbooks are loaded server-side via GET /api/sheet.
+ */
+export async function loadWorkbookData(
+  opts: { id?: string; name: string },
+): Promise<WorkbookSaveData | null> {
   try {
     if (typeof window === 'undefined') return null
     const { userId } = await getAuthContext()
-    const newKey = localStorageKey({ name }, userId)
+    const idKey = opts.id ? localStorageKey({ id: opts.id, name: opts.name }, userId) : null
+    const nameKey = localStorageKey({ name: opts.name }, userId)
 
-    const fresh = window.localStorage.getItem(newKey)
-    if (fresh) return JSON.parse(fresh) as WorkbookSaveData
+    // 1. id-scoped (the unique, collision-free key).
+    if (idKey) {
+      const hit = window.localStorage.getItem(idKey)
+      if (hit) return JSON.parse(hit) as WorkbookSaveData
+    }
 
-    // Backward-compatible migration off the old name-based key.
-    const legacy = window.localStorage.getItem(legacyLocalStorageKey(name))
-    if (!legacy) return null
+    // 2. name-scoped, then 3. legacy.
+    const nameHit = window.localStorage.getItem(nameKey)
+    const legacyKey = legacyLocalStorageKey(opts.name)
+    const legacyHit = nameHit ? null : window.localStorage.getItem(legacyKey)
+    const raw = nameHit ?? legacyHit
+    if (!raw) return null
 
-    const parsed = JSON.parse(legacy) as WorkbookSaveData
-    // Re-home under the new key so subsequent loads hit the fast path.
-    try {
-      window.localStorage.setItem(newKey, legacy)
-    } catch {
-      // Quota/serialization issue on the rewrite is non-fatal: we still
-      // return the data we successfully read from the legacy key.
+    const parsed = JSON.parse(raw) as WorkbookSaveData
+    // Migrate forward to the MOST specific key available (id beats name) so
+    // the next read is a clean hit and same-named workbooks stop colliding.
+    const targetKey = idKey ?? nameKey
+    const readFromKey = nameHit ? nameKey : legacyKey
+    if (targetKey !== readFromKey) {
+      try {
+        window.localStorage.setItem(targetKey, raw)
+      } catch {
+        // Re-home is best-effort; we still return what we read.
+      }
     }
     return parsed
   } catch {
@@ -214,16 +249,58 @@ export async function loadWorkbook(name: string): Promise<WorkbookSaveData | nul
   }
 }
 
+/**
+ * Back-compat shim: load by name only. Delegates to {@link loadWorkbookData}.
+ * Prefer `loadWorkbookData({ id, name })` so id-scoped saves are found.
+ */
+export async function loadWorkbook(name: string): Promise<WorkbookSaveData | null> {
+  return loadWorkbookData({ name })
+}
+
 let _saveTimer: ReturnType<typeof setTimeout> | null = null
+let _pendingPayload: WorkbookSaveData | null = null
 
 /**
- * Auto-save with a 30s debounce. Multiple calls collapse to one save.
- * Fires Ctrl+S equivalents immediately via `saveWorkbook(payload)`.
+ * Auto-save debounce window. 2s (was 30s). 30s meant a user who typed and
+ * then closed the tab / navigated within half a minute saved NOTHING and
+ * lost their work. 2s still batches rapid keystrokes but persists almost
+ * immediately after a pause — and `flushPendingSave` covers the exit case.
+ */
+const AUTOSAVE_DEBOUNCE_MS = 2_000
+
+/**
+ * Auto-save with a short debounce. Multiple calls collapse to one save.
+ * The latest payload is retained so {@link flushPendingSave} can persist it
+ * immediately on navigation / tab close.
  */
 export function debouncedSave(payload: WorkbookSaveData): void {
+  _pendingPayload = payload
   if (_saveTimer !== null) clearTimeout(_saveTimer)
   _saveTimer = setTimeout(() => {
     _saveTimer = null
-    void saveWorkbook(payload)
-  }, 30_000)
+    const p = _pendingPayload
+    _pendingPayload = null
+    if (p) void saveWorkbook(p)
+  }, AUTOSAVE_DEBOUNCE_MS)
+}
+
+/**
+ * Flush any pending debounced save NOW. Call on route change / tab close so
+ * the last edits aren't stranded in the debounce window. Synchronously
+ * mirrors to localStorage first (survives an unload that kills the async
+ * fetch), then best-effort attempts the full save.
+ */
+export function flushPendingSave(): void {
+  if (_saveTimer !== null) {
+    clearTimeout(_saveTimer)
+    _saveTimer = null
+  }
+  const p = _pendingPayload
+  _pendingPayload = null
+  if (!p) return
+  // Synchronous local mirror — guaranteed to land even during unload.
+  // Use the last-known user id so the key matches what the load path reads
+  // (the async getSession() can't complete during unload).
+  persistLocally(p, _lastKnownUserId)
+  void saveWorkbook(p)
 }

@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useSheetStore } from '@/store/sheetStore'
-import { debouncedSave, saveWorkbook } from '@/lib/saveService'
+import { debouncedSave, saveWorkbook, flushPendingSave } from '@/lib/saveService'
 import { cn } from '@/lib/utils'
 
 type SaveState = 'saved' | 'saving' | 'unsaved' | 'error'
@@ -75,6 +75,20 @@ export function SaveStatus({ workbookName, workbookData, workbookId }: SaveStatu
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [performSave])
+
+  // Flush any pending debounced save when the user navigates away or closes
+  // the tab — otherwise edits made inside the debounce window are lost.
+  useEffect(() => {
+    const flush = () => flushPendingSave()
+    window.addEventListener('beforeunload', flush)
+    window.addEventListener('pagehide', flush)
+    return () => {
+      window.removeEventListener('beforeunload', flush)
+      window.removeEventListener('pagehide', flush)
+      // Component unmount (e.g. client-side route change) — flush too.
+      flushPendingSave()
+    }
+  }, [])
 
   const isFirstRender = useRef(true)
   useEffect(() => {

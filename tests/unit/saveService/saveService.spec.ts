@@ -229,3 +229,31 @@ describe('loadWorkbook migration', () => {
     expect(store['quiksheets_workbook:user-xyz:name:q1']).toBeDefined()
   })
 })
+
+// The actual data-loss fix: edits saved by id must be loadable by id, and
+// same-named workbooks must not clobber each other (the "all Untitled
+// Workbook share one key" bug).
+describe('id-keyed persistence round-trip', () => {
+  it('saveWorkbook (no session) round-trips through loadWorkbookData by id', async () => {
+    const { saveWorkbook, loadWorkbookData } = await import('@/lib/saveService')
+    await saveWorkbook({ id: 'wb_123', name: 'Untitled Workbook', data: { cells: 'A' } })
+    const loaded = await loadWorkbookData({ id: 'wb_123', name: 'Untitled Workbook' })
+    expect(loaded?.data).toEqual({ cells: 'A' })
+  })
+
+  it('two same-named workbooks with different ids do NOT collide', async () => {
+    const { saveWorkbook, loadWorkbookData } = await import('@/lib/saveService')
+    await saveWorkbook({ id: 'wb_A', name: 'Untitled Workbook', data: { which: 'A' } })
+    await saveWorkbook({ id: 'wb_B', name: 'Untitled Workbook', data: { which: 'B' } })
+    expect((await loadWorkbookData({ id: 'wb_A', name: 'Untitled Workbook' }))?.data).toEqual({ which: 'A' })
+    expect((await loadWorkbookData({ id: 'wb_B', name: 'Untitled Workbook' }))?.data).toEqual({ which: 'B' })
+  })
+
+  it('flushPendingSave persists the pending debounced payload immediately', async () => {
+    const { debouncedSave, flushPendingSave, loadWorkbookData } = await import('@/lib/saveService')
+    debouncedSave({ id: 'wb_flush', name: 'X', data: { flushed: true } })
+    flushPendingSave()
+    const loaded = await loadWorkbookData({ id: 'wb_flush', name: 'X' })
+    expect(loaded?.data).toEqual({ flushed: true })
+  })
+})
