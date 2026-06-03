@@ -1,6 +1,6 @@
 # Quiksheets — AI Session State
 
-> Renamed from SheetForge during R1 of `docs/REMEDIATION_CODEX_PROMPTS.md`. The legacy session notes below still describe what is on disk; new work follows the Quiksheets target stack documented in `AGENTS.md` and `docs/02_TECH_STACK_AND_DEPENDENCIES.md`.
+> Some session notes below describe earlier iterations of the codebase. New work follows the Quiksheets target stack documented in `AGENTS.md` and `docs/02_TECH_STACK_AND_DEPENDENCIES.md`.
 
 ## Stack (legacy — being migrated; new code must follow AGENTS.md)
 - Next.js 14 → **target Next.js 15.x** (R2)
@@ -36,10 +36,71 @@
 - [x] Session 21: Starter Templates + Conditional Formatting
 
 ## Current Session
-- None - Quiksheets MVP completion session complete (May 2026)
+- None — MVP launch-readiness pass complete (May 2026)
 
 ## Next Session
-- Session 22+: Optional follow-ups — Timeline slicer rendering, Live Formula Preview verification, Cell History full Supabase path
+> Last reviewed: 2026-05-27. Earlier entries below are append-log session notes — treat current-state claims with caution.
+- Wave 1 (this session) shipped: dead-code purge, redoStack cap, formula-explainer LRU cap, exportUtils lazy-loaded, CLAUDE.md hygiene.
+- Wave 2 next: extract shared persistence helpers (`getClientSession`, `createMigrationFlag`, `makeLocalStore`) and refactor the seven `src/lib/*Api.ts` modules onto them — ~40 % LOC reduction per file, behavior-preserving.
+- Wave 3+: god-file splits, perf fixes (overlay React.memo, useLivePreview incremental HF, single-pass cfEvaluator), adapter completion. See the senior-engineer audit report from 2026-05-27 for the full plan.
+
+## MVP launch-readiness session (latest) — 14 commits, 3 P0 fixes, anti-hallucination flag
+
+The user attached `QuikSheets_MVP_P0_P1_P2_with_Testing_Data.xlsx` (20 P0 + 10 P1 + 6 P2 features, plus 29 test cases T001–T029) and asked for "ship today without failure" with no hallucinated buttons. This session audited every MVP test against the codebase, fixed 3 silent P0 launch-blockers, pinned 7 new MVP regression contracts, and added an env-flag that hides every "coming soon" ribbon button in production.
+
+### P0 bugs found + fixed today (would have shipped broken otherwise)
+
+| Test | Bug | Fix |
+|---|---|---|
+| T011 share-as-editor | `loadWorkbookRecord` + `saveWorkbookRecord` in `src/lib/sheetApi.ts` filtered only on `owner_id`; invited editors got 404 on read and 0-row update on save. | Two-path lookup: owner via anon client; fallback to service-role client + `workbook_members` role check. `c91cadd` |
+| T012 auto-save | `src/lib/saveService.ts` was a localStorage-only legacy module; nothing ever POSTed to `/api/sheet`. Second user could never see edits. | Rewrote `saveWorkbook` to read the Supabase session token, POST to `/api/sheet`, fall back to localStorage on 401/403/network. `81e1f9e` |
+| T019 form submission persistence | Form-submission merge in `src/app/sheet/[id]/page.tsx` updated `gridSheets` via Zustand but relied on the 30s auto-save debounce. Page refresh within 30s lost the merged rows. | Fire `saveWorkbook` IMMEDIATELY after `replaceGridSheets` in the merge useEffect. `524ab4c` |
+
+### Anti-hallucination flag
+
+`NEXT_PUBLIC_HIDE_RIBBON_STUBS=true` (set in `.env.production`) causes `RibbonButton` / `RibbonLargeButton` / `RibbonSplitButton` to return `null` when their `onClick` is a `ribbonStub('Foo')`. Production UI shows only buttons that do real work. Dev keeps stubs visible (flag is `false` by default) so the unfinished work stays discoverable. Commit `3405c30`.
+
+### 11 stub-replacement batches across Insert / Page Layout / Formulas / Data tabs
+
+| Batch | Buttons turned real | Commit |
+|---|---|---|
+| Insert > Shapes + Icons + Text Box overlays (cell-anchored, draggable, resizable) | 3 | `845058b` |
+| Insert > Screenshot (browser getDisplayMedia → image overlay) | 1 | `b219268` |
+| Insert > Header & Footer (PDF export wired via autoTable didDrawPage) | 1 | `8a81e5d` |
+| Insert > Stock Images + Online Pictures (curated 30-photo grid + URL paste) | 2 | `5a36c40` |
+| Page Layout > Themes / Colors / Fonts (6-preset picker, drives Format-as-Table palette) | 3 | `3da0a53` |
+| Page Layout > Print Titles (rows repeated on every PDF page via autoTable head) | 1 | `205d1ad` |
+| Page Layout > Arrange — Bring Forward / Send Backward / Selection Pane | 3 | `ea3e1f5` |
+| Formulas > Watch Window (live cell value + formula pinning) | 1 | `befa729` |
+| Formulas > Remove Arrows → honest toast pointing to Map View | 1 | `befa729` |
+| Data > Get Data > From Web (server proxy + CSV/JSON parser + paste helper) | 1 | `3c28f38` |
+| Forms field auto-detect regex polish (Units/Sales/Tax/Country routed correctly) | — | `7df1990` |
+
+### MVP regression test suite (132 / 132 passing)
+
+20 NEW tests pinning the MVP contract:
+- `tests/unit/permissions/sheetApi.spec.ts` — 9 cases (owner/editor/viewer/stranger × load/save/create) for T011
+- `tests/unit/saveService/saveService.spec.ts` — 4 cases (no-session/200/403/network-error) for T012
+- `tests/unit/formula-engine/evaluateCell.spec.ts` — 7 new (SUMIF/SUMIFS/COUNTIF/COUNTIFS + 3 cross-sheet) for P1 #25 + #27
+- Plus existing 112 — total 132.
+
+### Deferred per user direction (not blocking launch)
+
+- ~~T020 Automation~~ DONE (this session) — AutomationBuilder dialog + fireTrigger wired; MockProvider fallback.
+- ~~Comments @-mentions notification~~ DONE (this session) — NotificationBell + notifications table.
+- ~~CF rules / Comments / Typed columns Supabase persistence~~ DONE (this session) — cfRulesApi/columnTypesApi/commentsApi + idempotent migrations.
+
+### Pattern: server-side anon-client + service-role fallback
+
+Pattern emerged in `sheetApi.ts` and worth documenting. When the request runs on the server, the browser supabase client has no `auth.uid()` context, so any RLS policy keyed on `auth.uid()` returns nothing. The pattern:
+1. Try the **owner fast path** with the anon client + an explicit `owner_id = userId` filter (RLS is redundant here; the filter is the access policy).
+2. Fall back to the **service-role client** to do an explicit membership/role check, and execute the query that needed RLS-bypass.
+
+This makes the application code the source of access truth instead of relying on RLS at the data layer. The `loadWorkbookRecord` + `saveWorkbookRecord` rewrites in `c91cadd` follow this pattern.
+
+### Pattern: ribbonStub marker symbol drives both visual + hide behaviour
+
+`src/features/ribbon/utils/ribbonStub.ts` exports `RIBBON_STUB_MARKER = Symbol.for('quiksheets.ribbonStub')` and a `ribbonStub(name)` factory that attaches the marker to the returned handler. Ribbon button primitives use `getStubFeatureName(onClick)` to detect the marker — that's how they style "coming soon" buttons differently AND how `NEXT_PUBLIC_HIDE_RIBBON_STUBS` hides them in production. Zero call-site refactor for the ~50 buttons that already use `ribbonStub('Foo')`.
 
 ## Quiksheets MVP completion session — patterns + bugs fixed
 Highlights from the 59-task verification + feature-build sweep. The patterns
@@ -131,7 +192,7 @@ Under `process.env.NODE_ENV !== 'production'` guard in `src/app/sheet/[id]/page.
 Each helper goes through the real store/action — no shadow state.
 
 ## Key File Locations
-- Supabase client: src/lib/supabase.ts
+- Supabase clients: src/lib/supabase/client.ts (browser anon) + src/lib/supabase/server.ts (cookie-aware server + service-role). The legacy src/lib/supabase.ts is now a back-compat shim.
 - Groq client: src/lib/groq.ts
 - HyperFormula: src/lib/hyperformula.ts
 - Global types: src/types/
@@ -250,7 +311,7 @@ Each helper goes through the real store/action — no shadow state.
 - Sheet page uses 'use client' because of useFormattingShortcuts hook
 - Formatting state lives in Zustand activeFormatting object
 - Color picker has 30 presets plus custom hex input
-- Borders and merge cells are UI-only placeholders — not wired yet
+- ~~Borders and merge cells are UI-only placeholders~~ STALE — both are wired (see src/features/ribbon/utils/cellOps.ts `applyBorder`, `mergeAcross`, `mergeVertically`, `unmerge`).
 - All toolbar dropdowns use position:fixed + getBoundingClientRect() — overflow-x-auto on the toolbar clips absolute-positioned children, so fixed positioning is mandatory
 - Sort and filter open as modal panels not inline dropdowns
 - Find/Replace opens as floating panel top-right (not modal) at fixed right-4 top-[130px]
@@ -258,7 +319,7 @@ Each helper goes through the real store/action — no shadow state.
 - Data validation rules stored in Zustand validationRules map keyed by "row:col"
 - Filter state stored in Zustand activeFilters array; filter button turns blue when activeFilters.length > 0
 - exactOptionalPropertyTypes: never assign `T | undefined` to optional prop — use conditional spread `...(val ? { prop: val } : {})`
-- Two separate Zustand stores: sheetStore (cells/formatting/data ops) + workbookStore (sheet tab metadata)
+- Three Zustand stores: sheetStore (grid data + undo + filter/sort + formatting), workbookStore (sheet tab metadata), uiStore (modal/sidebar/command-palette toggles). Many features also have their own scoped stores under `src/features/*/store/`.
 - workbookStore manages: sheets: SheetTab[], activeSheetId; initial sheet must be { id: 'sheet1', name: 'Sheet1' } to match createDefaultWorkbook()
 - FortuneSheet active sheet controlled by status: 1 in Sheet[] data; SpreadsheetGrid syncs sheetData via useEffect watching [tabSheets, activeSheetId] from workbookStore
 - Sheet sync strategy: preserve celldata of existing FortuneSheet sheets; add new default sheets for new tabs; remove stale sheets; always update status field
@@ -335,7 +396,7 @@ Each helper goes through the real store/action — no shadow state.
 - Scratchpad MAIN! references like `=MAIN!A1` resolve against the active main sheet when entered and store the resolved value.
 - Session 19 added next-themes dark mode, a header theme toggle, Command Palette via Ctrl+K, and Keyboard Shortcuts via ?.
 - Session 19 removed the visible session badge from the sheet header and replaced the hardcoded workbook name with local workbook-name state.
-- Next.js version verified as 16.2.4.
+- Next.js version pinned to 15.5.15 (per package.json). The "16.2.4" note below from Session 19 was incorrect.
 - Final local checks pass: `npm run build`, `npx tsc --noEmit`, and `npx eslint src/ --max-warnings 0`.
 - Vercel deployment URL is pending because `npx vercel --prod --yes` failed with an invalid token.
 - The attached master QuikSheets prompt files reference Univer, but this repo remains locked to FortuneSheet per the stack section above.
@@ -346,7 +407,7 @@ Each helper goes through the real store/action — no shadow state.
 - Ctrl+Shift+M merges the selected range; Ctrl+Shift+U unmerges the active merged cell.
 - Session 21 templates are hardcoded in `src/lib/templates/index.ts`; no Supabase required.
 - Session 21 template load: data stored at `quiksheets_template_data:<id>` in localStorage; sheet page reads + deletes it on first mount.
-- Session 21 CF rules stored at `quiksheets_cf_rules:<workbookId>` in localStorage, keyed by sheetId.
+- ~~Session 21 CF rules in localStorage at `quiksheets_cf_rules:<workbookId>`~~ SUPERSEDED — now Supabase-first via `src/lib/cfRulesApi.ts` (table `conditional_format_rules`); localStorage is the offline fallback only.
 - Session 21 CF styles applied directly to FortuneSheet gridSheets via `cloneSheetWithData`; backups tracked per cell.
 - Session 21 CF re-applied on sheet page load after 500ms delay to allow grid hydration.
 - Dashboard redesigned as client component with My Workbooks + Templates tabs.

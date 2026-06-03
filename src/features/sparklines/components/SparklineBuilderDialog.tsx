@@ -8,7 +8,7 @@
  * register the sparkline and SparklinesLayer renders it.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Activity, BarChart3, LineChart } from 'lucide-react'
 import {
@@ -23,6 +23,7 @@ import { useSheetStore } from '@/store/sheetStore'
 import { useWorkbookStore } from '@/store/workbookStore'
 import { colIndexToLetter } from '@/lib/cellAddress'
 import { parseA1Range } from '@/features/charts/utils/rangeUtils'
+import { getCellDisplayValue, getSheetMatrix } from '@/lib/fortuneSheet'
 
 const KIND_LABELS: Record<SparklineKind, { label: string; icon: React.ReactNode }> = {
   line:     { label: 'Line',     icon: <LineChart className="h-3.5 w-3.5" /> },
@@ -77,6 +78,31 @@ export function SparklineBuilderDialog() {
     setTargetCell(defaultTargetForSelection(state))
   }, [open, initialKind])
 
+  // Read the numeric values from the source range live so we can show a
+  // preview count and block the Insert button when the range has no
+  // numbers to plot (the most common reason new users see "nothing
+  // happens" — sparklines on a text-only column draw nothing).
+  const sourceStats = useMemo(() => {
+    const bounds = parseA1Range(sourceRange.trim().toUpperCase())
+    if (!bounds) return { total: 0, numeric: 0, valid: false }
+    const state = useSheetStore.getState()
+    const activeSheet = state.gridSheets.find((s) => s.status === 1) ?? state.gridSheets[0]
+    if (!activeSheet) return { total: 0, numeric: 0, valid: false }
+    const matrix = getSheetMatrix(activeSheet)
+    let total = 0
+    let numeric = 0
+    for (let r = bounds.rowStart; r <= bounds.rowEnd; r++) {
+      for (let c = bounds.colStart; c <= bounds.colEnd; c++) {
+        const v = getCellDisplayValue(matrix[r]?.[c] ?? null)
+        if (v === null || v === '') continue
+        total++
+        const n = Number(v)
+        if (!isNaN(n)) numeric++
+      }
+    }
+    return { total, numeric, valid: true }
+  }, [sourceRange])
+
   function handleInsert(): void {
     if (!activeSheetId) {
       toast.error('No active sheet.')
@@ -89,6 +115,14 @@ export function SparklineBuilderDialog() {
     const target = parseA1Range(targetCell.trim().toUpperCase())
     if (!target) {
       toast.error('Enter a valid target cell like G2.')
+      return
+    }
+    if (sourceStats.numeric === 0) {
+      toast.error(
+        sourceStats.total === 0
+          ? `No data in ${sourceRange.toUpperCase()} — pick a range that contains numbers.`
+          : `${sourceRange.toUpperCase()} has no numeric values — sparklines plot numbers only.`,
+      )
       return
     }
     add({
@@ -148,6 +182,21 @@ export function SparklineBuilderDialog() {
               placeholder="e.g. B2:F2"
               className="h-9 w-full rounded border border-zinc-300 px-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
             />
+            <div className="mt-1 text-[11px]">
+              {sourceStats.numeric > 0 ? (
+                <span className="text-emerald-600 dark:text-emerald-400">
+                  ✓ {sourceStats.numeric} numeric value{sourceStats.numeric === 1 ? '' : 's'} found
+                </span>
+              ) : sourceStats.total > 0 ? (
+                <span className="text-amber-600 dark:text-amber-400">
+                  ⚠ {sourceStats.total} cell{sourceStats.total === 1 ? '' : 's'} in range, but no numbers — sparklines need numeric data
+                </span>
+              ) : (
+                <span className="text-zinc-400">
+                  No data in this range yet
+                </span>
+              )}
+            </div>
           </div>
 
           <div>
@@ -176,7 +225,8 @@ export function SparklineBuilderDialog() {
           <button
             type="button"
             onClick={handleInsert}
-            className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+            disabled={sourceStats.numeric === 0}
+            className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Insert sparkline
           </button>

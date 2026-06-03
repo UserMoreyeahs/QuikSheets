@@ -1,12 +1,39 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { Suspense, useEffect, useState, useTransition } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { signInAction } from '@/features/auth/actions'
+import { GoogleSignInButton } from '@/features/auth/components/GoogleSignInButton'
 
+/**
+ * useSearchParams() forces dynamic rendering. Next.js 15 strict mode
+ * requires it to be wrapped in <Suspense> for the build to succeed.
+ * The outer LoginPage just provides the boundary; the inner component
+ * owns the form state + URL-error surfacing.
+ */
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageInner />
+    </Suspense>
+  )
+}
+
+function LoginPageInner() {
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const params = useSearchParams()
+
+  // Surface OAuth-callback errors (e.g., redirect-URL mismatch) so
+  // users see why a Google sign-in attempt failed instead of staring
+  // at a blank login form.
+  useEffect(() => {
+    const e = params?.get('error')
+    if (!e) return
+    const detail = params?.get('detail')
+    setError(detail ? `${e}: ${detail}` : e.replace(/_/g, ' '))
+  }, [params])
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-zinc-50 px-4">
@@ -18,6 +45,14 @@ export default function LoginPage() {
             Create an account
           </Link>
         </p>
+
+        <GoogleSignInButton redirectTo="/dashboard" label="Sign in with Google" />
+
+        <div className="my-5 flex items-center gap-3 text-[11px] uppercase tracking-wider text-zinc-400">
+          <div className="h-px flex-1 bg-zinc-200" />
+          or
+          <div className="h-px flex-1 bg-zinc-200" />
+        </div>
 
         <form
           action={(formData) => {

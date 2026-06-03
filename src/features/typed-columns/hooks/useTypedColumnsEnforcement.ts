@@ -33,9 +33,9 @@ export function useTypedColumnsEnforcement(workbookId: string): void {
   const loadFromWorkbook = useColumnTypesStore((s) => s.loadFromWorkbook)
   const byWorkbook = useColumnTypesStore((s) => s.byWorkbook)
 
-  // Hydrate on workbook change.
+  // Hydrate on workbook change (loadFromWorkbook is now async — fire and forget).
   useEffect(() => {
-    if (workbookId) loadFromWorkbook(workbookId)
+    if (workbookId) void loadFromWorkbook(workbookId)
   }, [workbookId, loadFromWorkbook])
 
   // Reapply display formatting when column types change.

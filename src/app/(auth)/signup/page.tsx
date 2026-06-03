@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { signUpAction } from '@/features/auth/actions'
+import { GoogleSignInButton } from '@/features/auth/components/GoogleSignInButton'
 
 export default function SignupPage() {
   const [error, setError] = useState<string | null>(null)
@@ -25,6 +26,15 @@ export default function SignupPage() {
             Check your email to confirm your account.
           </p>
         ) : (
+          <>
+            <GoogleSignInButton redirectTo="/dashboard" label="Sign up with Google" />
+
+            <div className="my-5 flex items-center gap-3 text-[11px] uppercase tracking-wider text-zinc-400">
+              <div className="h-px flex-1 bg-zinc-200" />
+              or
+              <div className="h-px flex-1 bg-zinc-200" />
+            </div>
+
           <form
             action={(formData) => {
               setError(null)
@@ -75,6 +85,7 @@ export default function SignupPage() {
               {pending ? 'Creating account…' : 'Create account'}
             </button>
           </form>
+          </>
         )}
       </div>
     </main>

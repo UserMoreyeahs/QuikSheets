@@ -14,7 +14,7 @@ export interface LocalProtectedRange {
   createdAt: number
 }
 
-const KEY = (workbookId: string) => `sheetforge_protected_ranges:${workbookId}`
+const KEY = (workbookId: string) => `quiksheets_protected_ranges:${workbookId}`
 
 function safeParse<T>(raw: string | null): T | null {
   if (!raw) return null

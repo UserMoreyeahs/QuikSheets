@@ -48,7 +48,6 @@ export interface MenuBarHandlers {
   onProtectedRanges?: () => void
 
   onAIAssistant?: () => void
-  onScratchpad?: () => void
   onShortcuts?: () => void
 
   onCommandPalette?: () => void
@@ -203,7 +202,6 @@ function buildMenus(h: MenuBarHandlers): MenuDef[] {
         wired('AI assistant', h.onAIAssistant, 'Alt+A'),
         cs('Spelling'),
         { separator: true },
-        wired('Scratchpad', h.onScratchpad, 'Ctrl+`'),
         cs('Macros'),
         cs('Form builder'),
         cs('Automations'),

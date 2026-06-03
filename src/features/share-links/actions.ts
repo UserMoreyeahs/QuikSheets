@@ -89,11 +89,11 @@ export async function resolveShareTokenAction(
   if (!service) return { ok: false, reason: 'not_found' }
   const { data } = await service
     .from('share_links')
-    .select('workbook_id, role, expires_at, is_active')
+    .select('workbook_id, role, expires_at, active')
     .eq('token', parsed.data.token)
     .maybeSingle()
   if (!data) return { ok: false, reason: 'not_found' }
-  if (!data.is_active) return { ok: false, reason: 'inactive' }
+  if (!data.active) return { ok: false, reason: 'inactive' }
   if (data.expires_at) {
     const exp = new Date(String(data.expires_at)).getTime()
     if (Number.isFinite(exp) && exp < Date.now()) return { ok: false, reason: 'expired' }
@@ -105,6 +105,50 @@ export async function resolveShareTokenAction(
   }
 }
 
+export interface ShareLinkRow {
+  id: string
+  token: string
+  workbookId: string
+  role: 'viewer' | 'editor'
+  expiresAt: string | null
+  active: boolean
+  createdAt: string
+}
+
+/**
+ * List all share links for a workbook.
+ * Requires the caller to be the workbook owner.
+ */
+export async function listShareLinksAction(
+  workbookId: string
+): Promise<{ ok: true; links: ShareLinkRow[] } | { ok: false; error: string }> {
+  const ctx = await assertCanManage(workbookId).catch(() => null)
+  if (!ctx) return { ok: false, error: 'Forbidden' }
+
+  const supabase = await getServerSupabase()
+  if (!supabase) return { ok: false, error: 'Supabase not configured' }
+
+  const { data, error } = await supabase
+    .from('share_links')
+    .select('id, token, workbook_id, role, expires_at, active, created_at')
+    .eq('workbook_id', workbookId)
+    .order('created_at', { ascending: false })
+
+  if (error) return { ok: false, error: error.message }
+
+  const links: ShareLinkRow[] = (data ?? []).map((row) => ({
+    id: String(row.id),
+    token: String(row.token),
+    workbookId: String(row.workbook_id),
+    role: (row.role === 'editor' ? 'editor' : 'viewer') as 'viewer' | 'editor',
+    expiresAt: row.expires_at ? String(row.expires_at) : null,
+    active: Boolean(row.active),
+    createdAt: String(row.created_at),
+  }))
+
+  return { ok: true, links }
+}
+
 export async function revokeShareLinkAction(input: { workbookId: string; token: string }) {
   const ctx = await assertCanManage(input.workbookId).catch(() => null)
   if (!ctx) return { ok: false as const, error: 'Forbidden' }
@@ -112,7 +156,7 @@ export async function revokeShareLinkAction(input: { workbookId: string; token: 
   if (!supabase) return { ok: false as const, error: 'Supabase not configured' }
   const { error } = await supabase
     .from('share_links')
-    .update({ is_active: false })
+    .update({ active: false })
     .eq('workbook_id', input.workbookId)
     .eq('token', input.token)
   if (error) return { ok: false as const, error: error.message }

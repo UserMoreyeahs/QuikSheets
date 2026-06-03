@@ -2,7 +2,7 @@
 
 |Session|Name|Goal|Main Deliverables|
 |---|---|---|---|
-|1|Codex Context and Repo Documentation|Create all durable project context files before implementation.|Create/verify AGENTS.md, README.md, docs folder, .env.example.; Document Quiksheets naming rule and SheetForge legacy mapping.; Do not install packages or build UI yet.; Commit docs only.|
+|1|Codex Context and Repo Documentation|Create all durable project context files before implementation.|Create/verify AGENTS.md, README.md, docs folder, .env.example.; Document Quiksheets naming rule.; Do not install packages or build UI yet.; Commit docs only.|
 |2|Next.js 15 Foundation|Initialize Quiksheets app foundation.|Create Next.js 15.x app with React 19 and TypeScript strict.; Configure App Router, Tailwind, shadcn base, ESLint, Prettier.; Create required folder structure.; Add Zod env validation skeleton.; Add health route, landing route, protected dashboard placeholder.|
 |3|Supabase Auth, Workspace, Schema, RLS|Create backend foundation.|Add Supabase client/server helpers.; Create migrations for profiles, workspaces, workspace_members, workbooks, workbook_members.; Implement signup/login/logout/reset password pages.; Add protected routes and unauthorized page.; Add initial RLS policies.|
 |4|Workbook Dashboard and Template Shell|Build dashboard before grid.|List workbooks through TanStack Query.; Create workbook with default Sheet1.; Add workspace switcher shell.; Add template gallery shell with starter categories.; Persist workbook creation in Supabase.|

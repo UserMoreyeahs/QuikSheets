@@ -17,8 +17,8 @@ export interface LocalShareLink {
   active: boolean
 }
 
-const KEY = (workbookId: string) => `sheetforge_share_links:${workbookId}`
-const TOKEN_KEY = (token: string) => `sheetforge_share_token:${token}`
+const KEY = (workbookId: string) => `quiksheets_share_links:${workbookId}`
+const TOKEN_KEY = (token: string) => `quiksheets_share_token:${token}`
 
 function safeParse<T>(raw: string | null): T | null {
   if (!raw) return null

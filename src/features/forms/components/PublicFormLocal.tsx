@@ -1,16 +1,18 @@
 'use client'
 
 /**
- * PublicFormLocal
- * --------------------------------------------------------------------------
- * localStorage-backed twin of PublicFormClient.  Reads the form definition
- * from `sheetforge_form:<id>` and writes submissions to
- * `sheetforge_form_submissions:<id>` — those are then merged into the source
- * workbook on next sheet-page mount.
+ * PublicFormLocal — legacy /form/[id] entry point.
+ *
+ * Forms used to be stored exclusively in localStorage and the link
+ * looked like /form/<uuid>. After the move to Supabase, new forms are
+ * served from /forms/<slug>, but old links still need to resolve. This
+ * component looks up the form via `getFormById` (which checks Supabase
+ * first, then falls back to localStorage), and submits via the same
+ * `submitForm(slug, …)` path as the new public route.
  */
 
 import { useEffect, useState, useTransition } from 'react'
-import { getForm, appendSubmission } from '@/features/forms/storage/localFormStore'
+import { getFormById, submitForm } from '@/lib/formsApi'
 import type { FormDefinition } from '@/features/forms/types'
 
 export function PublicFormLocal({ formId }: { formId: string }) {
@@ -21,9 +23,15 @@ export function PublicFormLocal({ formId }: { formId: string }) {
   const [pending, startTransition] = useTransition()
 
   useEffect(() => {
-    const stored = getForm(formId)
-    setForm(stored)
-    setLoaded(true)
+    let cancelled = false
+    void getFormById(formId).then((result) => {
+      if (cancelled) return
+      setForm(result)
+      setLoaded(true)
+    })
+    return () => {
+      cancelled = true
+    }
   }, [formId])
 
   if (!loaded) {
@@ -43,7 +51,7 @@ export function PublicFormLocal({ formId }: { formId: string }) {
   if (!form.isPublic) {
     return (
       <div className="w-full max-w-lg rounded-2xl border border-amber-200 bg-amber-50 p-8 text-center text-sm text-amber-700">
-        This form is not public.
+        This form is not accepting submissions.
       </div>
     )
   }
@@ -85,11 +93,19 @@ export function PublicFormLocal({ formId }: { formId: string }) {
             }
             setError(null)
             startTransition(async () => {
-              try {
-                appendSubmission(form.id ?? formId, { formId: form.id ?? formId, values })
+              const submitterEmail = (() => {
+                for (const field of form.fields) {
+                  if (field.kind === 'email' && typeof values[field.id] === 'string') {
+                    return String(values[field.id])
+                  }
+                }
+                return undefined
+              })()
+              const result = await submitForm(form.slug, values, submitterEmail)
+              if (!result.ok) {
+                setError(result.error ?? 'Submission failed. Please try again.')
+              } else {
                 setSuccess(true)
-              } catch {
-                setError('Submission failed. Please try again.')
               }
             })
           }}

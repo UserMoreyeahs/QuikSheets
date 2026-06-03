@@ -21,6 +21,7 @@
 import { createBrowserClient } from '@supabase/ssr'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { publicEnv } from '@/lib/env'
+import { logger } from '@/lib/logger'
 
 let cached: SupabaseClient | null = null
 let lockHandlerInstalled = false
@@ -49,8 +50,7 @@ function installLockErrorHandler(): void {
     ) {
       event.preventDefault()
       // Optional: log at debug level so we still know it happened
-      // eslint-disable-next-line no-console
-      console.debug('[supabase] Ignored benign auth-lock contention:', msg)
+      logger.debug('supabase', 'Ignored benign auth-lock contention:', msg)
     }
   })
 }

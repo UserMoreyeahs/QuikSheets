@@ -217,31 +217,40 @@ export function useSmartPaste() {
     state.columns.forEach((column) => {
       sheetState.setActiveFormatting(TYPE_FORMAT[column.type] ?? TYPE_FORMAT.text)
     })
-    sheetState.setGridSheets(applyColumnFormats(sheetState.gridSheets, state, activeSheetId))
+    // replaceGridSheets — applying column-wide formats to the pasted
+    // region is a wholesale write FortuneSheet's internal state hasn't
+    // seen, so we MUST bump hydrationVersion to force a remount so the
+    // new formats render.  See sheetStore.setGridSheets vs replaceGridSheets.
+    sheetState.replaceGridSheets(applyColumnFormats(sheetState.gridSheets, state, activeSheetId))
     setState(null)
     setIsApplying(false)
   }, [activeSheetId, state])
 
   const editDetection = useCallback(() => {
     if (!state) return
-    const edited = window.prompt(
-      'Edit detected columns as comma-separated names:',
-      state.columns.map((column) => column.name).join(', ')
-    )
-    if (!edited) return
+    const snapshot = state
+    void (async () => {
+      const { promptDialog } = await import('@/components/PromptDialog')
+      const edited = await promptDialog({
+        title: 'Edit detected columns',
+        message: 'Comma-separated column names. We\'ll pair them positionally with the pasted data.',
+        defaultValue: snapshot.columns.map((column) => column.name).join(', '),
+      })
+      if (!edited) return
 
-    const names = edited
-      .split(',')
-      .map((name) => name.trim())
-      .filter(Boolean)
+      const names = edited
+        .split(',')
+        .map((name) => name.trim())
+        .filter(Boolean)
 
-    setState({
-      ...state,
-      columns: state.columns.map((column, index) => ({
-        ...column,
-        name: names[index] ?? column.name,
-      })),
-    })
+      setState({
+        ...snapshot,
+        columns: snapshot.columns.map((column, index) => ({
+          ...column,
+          name: names[index] ?? column.name,
+        })),
+      })
+    })()
   }, [state])
 
   return useMemo(

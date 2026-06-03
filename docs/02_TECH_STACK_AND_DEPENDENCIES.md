@@ -22,7 +22,7 @@
 
 ## Key Corrections From Legacy Context
 
-Legacy files may mention SheetForge, Next.js 14, FortuneSheet as primary, HyperFormula as mandatory, and Groq `llama3-70b-8192`. Override all of that.
+Earlier iterations referenced Next.js 14, FortuneSheet as primary, HyperFormula as mandatory, and Groq `llama3-70b-8192`. Override all of that.
 
 Use:
 - Quiksheets as the application name.

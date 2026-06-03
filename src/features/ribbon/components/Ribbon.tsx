@@ -87,14 +87,22 @@ export interface RibbonHandlers {
   onInsertPivot?: () => void
   onCleanData?: () => void
   onForecast?: () => void
+  onGoalSeek?: () => void
   // ── Data ────────────────────────────────────────────
   onMapView: () => void
   onDedupe?: () => void
+  /** Group the currently-selected rows (Data > Outline > Group). */
+  onGroupRows?: () => void
+  /** Ungroup the innermost group at the current row selection. */
+  onUngroupRows?: () => void
   // ── Review / Collab / Sharing ───────────────────────
   onComments?: () => void
   onShareLink?: () => void
   onProtectedRanges?: () => void
   onVersionHistory?: () => void
+  // ── Automation ──────────────────────────────────────
+  onCreateAutomation?: (() => void) | undefined
+  onViewAutomationRuns?: (() => void) | undefined
   // ── Review / Help ───────────────────────────────────
   onShortcuts: () => void
   // ── View toggles ────────────────────────────────────
@@ -284,6 +292,9 @@ export function Ribbon({ handlers }: { handlers: RibbonHandlers }) {
             onDedupe={handlers.onDedupe}
             onCleanData={handlers.onCleanData}
             onForecast={handlers.onForecast}
+            onGroupRows={handlers.onGroupRows}
+            onUngroupRows={handlers.onUngroupRows}
+            onGoalSeek={handlers.onGoalSeek}
           />
         )}
         {activeTab === 'review' && (
@@ -319,7 +330,12 @@ export function Ribbon({ handlers }: { handlers: RibbonHandlers }) {
             onZoomReset={handlers.onZoomReset ?? (() => {})}
           />
         )}
-        {activeTab === 'automate' && <AutomateTab />}
+        {activeTab === 'automate' && (
+          <AutomateTab
+            onCreateAutomation={handlers.onCreateAutomation}
+            onViewAutomationRuns={handlers.onViewAutomationRuns}
+          />
+        )}
         {activeTab === 'help' && <HelpTab onShortcuts={handlers.onShortcuts} />}
       </div>
     </div>

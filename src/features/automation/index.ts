@@ -1,0 +1,5 @@
+export { AutomationBuilder } from './components/AutomationBuilder'
+export { AutomationRunsPanel } from './components/AutomationRunsPanel'
+export { useAutomationStore } from './store/automationStore'
+export { fireTrigger, buildEvent } from './triggerClient'
+export type { AutomationDefinition, TriggerEvent, TriggerConfig, TriggerType, ActionType } from './types'

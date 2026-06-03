@@ -5,7 +5,6 @@
  * - Dependency Map (Ctrl+M)
  * - Column DNA panel
  * - Cell History panel
- * - Private Scratchpad (Ctrl+`)
  * - Row Summarizer (Alt+S)
  * - Conditional Formatting dialog
  * - Chart Builder
@@ -56,26 +55,6 @@ test.describe('Dependency Map', () => {
     await page.keyboard.press('Control+m')
     await page.waitForTimeout(300)
     expect(errors).toHaveLength(0)
-  })
-})
-
-test.describe('Scratchpad', () => {
-  test.beforeEach(async ({ page }) => {
-    await gotoSheet(page)
-  })
-
-  test('Ctrl+` opens Scratchpad panel without crash', async ({ page }) => {
-    const { errors } = capturePageErrors(page)
-    await page.locator('body').click()
-    await page.keyboard.press('Control+`')
-    await page.waitForTimeout(600)
-    const pad = page.locator('[class*="ScratchpadPanel"], [class*="scratchpad"]').first()
-    if (await pad.count() > 0) {
-      await expect(pad).toBeVisible()
-    }
-    expect(errors).toHaveLength(0)
-    // Close
-    await page.keyboard.press('Control+`')
   })
 })
 

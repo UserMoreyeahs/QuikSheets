@@ -5,9 +5,7 @@ Date: 2026-04-26
 Status: Codex-ready planning package
 
 ## 1. Product Name
-The application name is **Quiksheets**.
-
-Legacy uploaded files may refer to **SheetForge**. Treat that name as historical source context only. Every new file, component, route, database slug, package name, README, AGENTS file, and UI string must use **Quiksheets**.
+The application name is **Quiksheets**. All files, components, routes, database slugs, package names, READMEs, AGENTS files, and UI strings use this name.
 
 ## 2. Product Goal
 Build a browser-based spreadsheet application that feels familiar like Google Sheets or Excel but adds AI-native workflows for formulas, data cleaning, selected-row summarization, natural-language filtering, column typing, column health, dependency mapping, forms, automations, templates, collaboration, and dashboards.

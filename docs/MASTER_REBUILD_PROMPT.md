@@ -54,7 +54,7 @@ Treat the **Testing_Data** sheet (T001–T029) as the acceptance battery. A feat
 
 ## CURRENT STATE (the inheritance)
 
-You inherit a partial build at `C:\ChatGPT\sheetforge` that drifted from spec. Honest summary:
+You inherit a partial Quiksheets build that drifted from spec. Honest summary:
 
 **What works and should be preserved:**
 - Supabase project at `https://anfvgmlgsthhdhwncxzt.supabase.co` with the full normalized schema (22 tables) and corrected RLS policies (migrations `0001_…` through `0010_break_cross_table_recursion.sql`).

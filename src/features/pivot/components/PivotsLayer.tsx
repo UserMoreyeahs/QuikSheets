@@ -70,12 +70,14 @@ function PivotPanel({
   const [size, setSize] = useState({ w: DEFAULT_W, h: DEFAULT_H })
   const [slicerMenu, setSlicerMenu] = useState(false)
   const addSlicer = useSlicerStore((s) => s.addSlicer)
-  const gridSheets = useSheetStore((s) => s.gridSheets)
+  // Narrow selector — re-render only when the ACTIVE sheet reference
+  // changes; edits on other sheets are skipped (Zustand's Object.is
+  // equality holds for the find() result when that sheet is untouched).
+  const activeSheet = useSheetStore((s) => s.gridSheets.find((g) => g.status === 1) ?? s.gridSheets[0])
   // Position is now controlled by parent (defaultLeft/defaultTop)
   const pos = { x: defaultLeft, y: defaultTop }
 
   function insertSlicer(colIndex: number, kind: 'list' | 'timeline') {
-    const activeSheet = gridSheets.find((s) => s.status === 1) ?? gridSheets[0]
     if (!activeSheet) return
     const matrix = getRangeMatrix(activeSheet, pivot.sourceRange)
     const dataRows = pivot.hasHeader ? matrix.slice(1) : matrix

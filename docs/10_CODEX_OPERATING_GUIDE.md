@@ -16,7 +16,7 @@ A full app prompt causes skipped persistence, fake UI, weak tests, and architect
 ## 3. How To Review Codex Output
 Check:
 - Did it follow AGENTS.md?
-- Did it use Quiksheets, not SheetForge?
+- Did it consistently use the name **Quiksheets**?
 - Did it avoid deprecated stack choices?
 - Did it update docs if architecture changed?
 - Did tests/build pass?

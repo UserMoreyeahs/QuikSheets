@@ -89,3 +89,39 @@ export async function listAutomationRunsAction(automationId: string) {
     .limit(50)
   return data ?? []
 }
+
+export async function toggleAutomationAction(automationId: string, enabled: boolean) {
+  const supabase = await getServerSupabase()
+  if (!supabase) return { ok: false as const, error: 'Supabase not configured' }
+  const { error } = await supabase
+    .from('automations')
+    .update({ enabled })
+    .eq('id', automationId)
+  if (error) return { ok: false as const, error: error.message }
+  return { ok: true as const }
+}
+
+export async function retryAutomationRunAction(runId: string) {
+  const supabase = await getServerSupabase()
+  if (!supabase) return { ok: false as const, error: 'Supabase not configured' }
+
+  // Fetch the original run to get its input_json
+  const { data: run, error: fetchErr } = await supabase
+    .from('automation_runs')
+    .select('input_json')
+    .eq('id', runId)
+    .single()
+
+  if (fetchErr || !run) return { ok: false as const, error: 'Run not found' }
+
+  const inputJson = run.input_json as { event?: unknown }
+  if (!inputJson.event) return { ok: false as const, error: 'No event payload in run' }
+
+  try {
+    const { dispatchTriggerEvent } = await import('./dispatcher')
+    await dispatchTriggerEvent(inputJson.event as import('./types').TriggerEvent)
+    return { ok: true as const }
+  } catch (err) {
+    return { ok: false as const, error: err instanceof Error ? err.message : 'Retry failed' }
+  }
+}

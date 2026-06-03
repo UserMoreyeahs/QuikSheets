@@ -18,7 +18,7 @@ export interface LocalComment {
   createdAt: number
 }
 
-const KEY = (workbookId: string) => `sheetforge_comments:${workbookId}`
+const KEY = (workbookId: string) => `quiksheets_comments:${workbookId}`
 
 function parse(raw: string | null): LocalComment[] {
   if (!raw) return []

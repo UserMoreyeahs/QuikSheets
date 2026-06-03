@@ -5,7 +5,7 @@
 // picks up the new functions.
 import '@/lib/formulajsPatches'
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import { useParams, useRouter } from 'next/navigation'
 import { Network, Upload, ChevronLeft, ChevronRight } from 'lucide-react'
@@ -15,6 +15,8 @@ import { toast } from 'sonner'
 import { CommandPalette, type CommandPaletteItem } from '@/components/CommandPalette'
 import { KeyboardShortcuts } from '@/components/KeyboardShortcuts'
 import { ThemeToggle } from '@/components/ThemeToggle'
+import { UserMenu } from '@/components/UserMenu'
+import { NotificationBell } from '@/components/NotificationBell'
 import { WorkbookSidebar } from '@/features/workbook/components/WorkbookSidebar'
 import { createWorkbookAction } from '@/features/workbook/actions'
 import { getBrowserSupabase } from '@/lib/supabase/client'
@@ -34,21 +36,41 @@ import { useFormattingShortcuts } from '@/features/toolbar'
 import { useExcelKeyboardShortcuts } from '@/features/toolbar/hooks/useExcelKeyboardShortcuts'
 import { Ribbon } from '@/features/ribbon/components/Ribbon'
 import { StatusBar } from '@/features/ribbon/components/StatusBar'
+import { useOutlineStore } from '@/features/outline/store/outlineStore'
 import { SheetTabsBar } from '@/features/sheets'
 import { SortPanel } from '@/features/grid/components/SortPanel'
 import { FilterPanel } from '@/features/grid/components/FilterPanel'
 import { FindReplace } from '@/features/grid/components/FindReplace'
 import { DataValidation } from '@/features/grid/components/DataValidation'
-import { ImportModal } from '@/features/grid/components/ImportModal'
 import { ExportMenu } from '@/features/grid/components/ExportMenu'
 import { SaveStatus } from '@/features/grid/components/SaveStatus'
-import { exportToCSV, exportToExcelFidelity, exportToPDF } from '@/features/grid/utils/exportUtils'
+// Lazy-load the export module (xlsx + jspdf + jspdf-autotable ≈ 2 MB) on
+// first invocation so it doesn't bloat the initial /sheet/[id] bundle. The
+// wrappers below preserve the original `typeof` signatures so every call
+// site stays byte-identical; the browser caches the chunk after first use.
+import type * as ExportUtils from '@/features/grid/utils/exportUtils'
+const loadExportUtils = () => import('@/features/grid/utils/exportUtils')
+const exportToCSV: typeof ExportUtils.exportToCSV = (...args) => {
+  void loadExportUtils().then((m) => m.exportToCSV(...args))
+}
+const exportToExcelFidelity: typeof ExportUtils.exportToExcelFidelity = async (...args) =>
+  (await loadExportUtils()).exportToExcelFidelity(...args)
+const exportToPDF: typeof ExportUtils.exportToPDF = (...args) => {
+  void loadExportUtils().then((m) => m.exportToPDF(...args))
+}
 import { buildExportExtras } from '@/features/grid/utils/exportExtrasAdapter'
 // Lazy-loaded heavy panels — these render only when their respective UI
 // stores have `open: true`, so deferring their JS bundle keeps the initial
 // /sheet/[id] payload lean. Each `next/dynamic` import is split into its
 // own chunk fetched on demand.
 import { useDependencyMap, type DependencyMapCellTarget } from '@/features/dependency-map'
+// ImportModal pulls in SheetJS (xlsx, ~400KB) via importUtils. It's only
+// rendered when the user opens Import, so load it lazily to keep that weight
+// out of the eager /sheet/[id] bundle.
+const ImportModal = dynamic(
+  () => import('@/features/grid/components/ImportModal').then((m) => ({ default: m.ImportModal })),
+  { ssr: false },
+)
 const DependencyMap = dynamic(
   () => import('@/features/dependency-map').then((m) => ({ default: m.DependencyMap })),
   { ssr: false },
@@ -66,13 +88,7 @@ const ColumnDNAPanel = dynamic(
   () => import('@/features/column-dna').then((m) => ({ default: m.ColumnDNAPanel })),
   { ssr: false },
 )
-import { ScratchpadToggle, useScratchpad } from '@/features/scratchpad'
-const ScratchpadPanel = dynamic(
-  () => import('@/features/scratchpad').then((m) => ({ default: m.ScratchpadPanel })),
-  { ssr: false },
-)
 import { RowSummarizer, useRowSummarizer } from '@/features/row-summarizer'
-import { applyAllCFRules } from '@/features/conditional-formatting'
 const ConditionalFormatting = dynamic(
   () => import('@/features/conditional-formatting').then((m) => ({ default: m.ConditionalFormatting })),
   { ssr: false },
@@ -88,13 +104,6 @@ const NameManagerDialog = dynamic(
 )
 import { useNamedRangesStore } from '@/features/named-ranges/namedRangesStore'
 import { useCFStore } from '@/features/conditional-formatting/store/cfStore'
-import { useColumnTypesStore } from '@/features/typed-columns/store/columnTypesStore'
-import { useSlicerStore } from '@/features/slicers/store/slicerStore'
-import { parseClipboardText } from '@/features/smart-paste/utils/clipboardParser'
-import { applyRulesToSheet, evaluateRules } from '@/features/conditional-formatting/utils/cfEvaluator'
-import * as cellOps from '@/features/ribbon/utils/cellOps'
-import { installHyperlinkFollow } from '@/features/ribbon/utils/cellOps'
-import { usePrintSettingsStore } from '@/features/page-layout/printSettingsStore'
 const CleanDataPanel = dynamic(
   () => import('@/features/data-cleaning/components/CleanDataPanel').then((m) => ({ default: m.CleanDataPanel })),
   { ssr: false },
@@ -137,6 +146,68 @@ const RecommendedPivotsDialog = dynamic(
   () => import('@/features/pivot/components/RecommendedPivotsDialog').then((m) => ({ default: m.RecommendedPivotsDialog })),
   { ssr: false },
 )
+const OverlaysLayer = dynamic(
+  () => import('@/features/overlays/components/OverlaysLayer').then((m) => ({ default: m.OverlaysLayer })),
+  { ssr: false },
+)
+const ShapePicker = dynamic(
+  () => import('@/features/overlays/components/ShapePicker').then((m) => ({ default: m.ShapePicker })),
+  { ssr: false },
+)
+const IconPicker = dynamic(
+  () => import('@/features/overlays/components/IconPicker').then((m) => ({ default: m.IconPicker })),
+  { ssr: false },
+)
+const HeaderFooterDialog = dynamic(
+  () => import('@/features/page-layout/components/HeaderFooterDialog').then((m) => ({ default: m.HeaderFooterDialog })),
+  { ssr: false },
+)
+const StockImagePicker = dynamic(
+  () => import('@/features/images/components/StockImagePicker').then((m) => ({ default: m.StockImagePicker })),
+  { ssr: false },
+)
+const ThemePicker = dynamic(
+  () => import('@/features/themes/components/ThemePicker').then((m) => ({ default: m.ThemePicker })),
+  { ssr: false },
+)
+const PrintTitlesDialog = dynamic(
+  () => import('@/features/page-layout/components/PrintTitlesDialog').then((m) => ({ default: m.PrintTitlesDialog })),
+  { ssr: false },
+)
+const SelectionPane = dynamic(
+  () => import('@/features/page-layout/components/SelectionPane').then((m) => ({ default: m.SelectionPane })),
+  { ssr: false },
+)
+const WatchWindow = dynamic(
+  () => import('@/features/watch-window/components/WatchWindow').then((m) => ({ default: m.WatchWindow })),
+  { ssr: false },
+)
+const FromWebDialog = dynamic(
+  () => import('@/features/data/components/FromWebDialog').then((m) => ({ default: m.FromWebDialog })),
+  { ssr: false },
+)
+const AdvancedFilterDialog = dynamic(
+  () => import('@/features/data/components/AdvancedFilterDialog').then((m) => ({ default: m.AdvancedFilterDialog })),
+  { ssr: false },
+)
+// P2 features (Dashboards / Connectors / Row-Level Security)
+const DashboardBuilder = dynamic(
+  () => import('@/features/dashboards').then((m) => ({ default: m.DashboardBuilder })),
+  { ssr: false },
+)
+const ConnectorBuilder = dynamic(
+  () => import('@/features/connectors').then((m) => ({ default: m.ConnectorBuilder })),
+  { ssr: false },
+)
+const RowRlsBuilder = dynamic(
+  () => import('@/features/row-rls').then((m) => ({ default: m.RowRlsBuilder })),
+  { ssr: false },
+)
+import { AdvancedFilterPill } from '@/features/data/components/AdvancedFilterPill'
+const PromptDialog = dynamic(
+  () => import('@/components/PromptDialog').then((m) => ({ default: m.PromptDialog })),
+  { ssr: false },
+)
 import { useTextToColsStore } from '@/features/data/store/textToColsStore'
 const FormBuilder = dynamic(
   () => import('@/features/forms/components/FormBuilder').then((m) => ({ default: m.FormBuilder })),
@@ -161,6 +232,11 @@ const ForecastPanel = dynamic(
   { ssr: false },
 )
 import { useForecastStore } from '@/features/forecasting/store/forecastStore'
+const GoalSeekDialog = dynamic(
+  () => import('@/features/goal-seek').then((m) => ({ default: m.GoalSeekDialog })),
+  { ssr: false },
+)
+import { useGoalSeekStore } from '@/features/goal-seek'
 const CommentsPanel = dynamic(
   () => import('@/features/comments/components/CommentsPanel').then((m) => ({ default: m.CommentsPanel })),
   { ssr: false },
@@ -187,7 +263,16 @@ const ProtectedRangesDialog = dynamic(
   () => import('@/features/protected-ranges/components/ProtectedRangesDialog').then((m) => ({ default: m.ProtectedRangesDialog })),
   { ssr: false },
 )
+const AutomationBuilder = dynamic(
+  () => import('@/features/automation/components/AutomationBuilder').then((m) => ({ default: m.AutomationBuilder })),
+  { ssr: false },
+)
+const AutomationRunsPanel = dynamic(
+  () => import('@/features/automation/components/AutomationRunsPanel').then((m) => ({ default: m.AutomationRunsPanel })),
+  { ssr: false },
+)
 import { useProtectedRangesUiStore } from '@/features/protected-ranges/store/protectedRangesUiStore'
+import { useAutomationStore } from '@/features/automation/store/automationStore'
 import { useSheetStore } from '@/store/sheetStore'
 import { useWorkbookStore } from '@/store/workbookStore'
 import { DEFAULT_COLS } from '@/lib/constants'
@@ -196,6 +281,18 @@ import type { ImportedSheet } from '@/features/grid/utils/importUtils'
 import type { ExportSheet } from '@/features/grid/utils/exportUtils'
 import type { SheetTab, SortDirection } from '@/types/sheet.types'
 import type { Sheet } from '@fortune-sheet/core'
+import { useSidebarCollapsed } from './hooks/useSidebarCollapsed'
+import { useSheetPageGlobalListeners } from './hooks/useSheetPageGlobalListeners'
+import { useApplyCFOnMount } from './hooks/useApplyCFOnMount'
+import { useLoadAutomationsOnMount } from './hooks/useLoadAutomationsOnMount'
+import { useWorkbookName } from './hooks/useWorkbookName'
+import { useLoadTemplateDataOnMount } from './hooks/useLoadTemplateDataOnMount'
+import { useDevWindowHelpers } from './hooks/useDevWindowHelpers'
+import { useLoadP2FeaturesOnMount } from './hooks/useLoadP2FeaturesOnMount'
+import { useRowRlsStore } from '@/features/row-rls'
+import { useLocalhostDebugWindow } from './hooks/useLocalhostDebugWindow'
+import { useFormSubmissionMergeOnMount } from './hooks/useFormSubmissionMergeOnMount'
+import { useBroadcastCursorToCollab } from './hooks/useBroadcastCursorToCollab'
 
 function toExportRows(sheet?: Sheet): (string | number | boolean | null)[][] {
   if (!sheet) return []
@@ -263,14 +360,7 @@ export default function SheetPage() {
   const nameManagerOpen = useNamedRangesStore((s) => s.dialogOpen)
 
   // Broadcast cursor position to other users via Realtime.
-  // Use collab.broadcastCursor directly (stable useCallback ref) — do NOT
-  // include the whole `collab` object (recreated every render → infinite loop).
-  const { broadcastCursor } = collab
-  useEffect(() => {
-    if (selectedCell && activeSheetId) {
-      broadcastCursor(activeSheetId, selectedCell.row, selectedCell.col)
-    }
-  }, [selectedCell, activeSheetId, broadcastCursor])
+  useBroadcastCursorToCollab(selectedCell, activeSheetId, collab.broadcastCursor)
 
   const [showSort, setShowSort] = useState(false)
   const [showFilter, setShowFilter] = useState(false)
@@ -279,174 +369,27 @@ export default function SheetPage() {
   const [showCommandPalette, setShowCommandPalette] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [showCF, setShowCF] = useState(false)
-  // Sidebar starts expanded on BOTH server and client so the initial
-  // hydration markup matches. Without this guarantee Next.js logs a
-  // "hydration failed" recoverable error because window.innerWidth is
-  // only defined on the client. After mount we sync to the user's saved
-  // preference (or auto-collapse on narrow viewports).
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  useEffect(() => {
-    // 1) Honour an explicit user preference if present.
-    try {
-      const saved = window.localStorage.getItem('quiksheets_sidebar_collapsed')
-      if (saved === '1') {
-        setSidebarCollapsed(true)
-        return
-      }
-      if (saved === '0') {
-        setSidebarCollapsed(false)
-        return
-      }
-    } catch {
-      // localStorage unavailable — fall through to viewport heuristic.
-    }
-    // 2) No preference: collapse on narrow viewports.
-    if (window.innerWidth < 768) setSidebarCollapsed(true)
-  }, [])
-  // Auto-collapse the sidebar on viewport resize crossing the breakpoint.
-  useEffect(() => {
-    function onResize() {
-      if (window.innerWidth < 768) setSidebarCollapsed(true)
-    }
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
-  // Persist the user's choice so it carries across reloads / new tabs.
-  useEffect(() => {
-    try {
-      window.localStorage.setItem('quiksheets_sidebar_collapsed', sidebarCollapsed ? '1' : '0')
-    } catch {
-      /* ignore */
-    }
-  }, [sidebarCollapsed])
+  // Sidebar state + the 3 effects that keep it in sync (mount-time pref
+  // load, resize listener, persist-on-change). Extracted to a focused
+  // hook as the first Wave 4 page.tsx slice.
+  const [sidebarCollapsed, setSidebarCollapsed] = useSidebarCollapsed()
 
-  // Install Ctrl+Click hyperlink-follow on the canvas. Idempotent.
-  useEffect(() => {
-    installHyperlinkFollow()
-  }, [])
-
-  // Listen for quiksheets:toggle-map (fired by Trace Precedents/Dependents).
-  // Routed through a CustomEvent so cellOps doesn't need a direct dependency
-  // on the page-component's state.
-  useEffect(() => {
-    function handle() { toggleMap() }
-    window.addEventListener('quiksheets:toggle-map', handle)
-    return () => window.removeEventListener('quiksheets:toggle-map', handle)
-  }, [toggleMap])
-
-  // UX-1: NL filter bar visibility + Ctrl+Shift+L shortcut to toggle.
+  // Global listeners (hyperlink-follow + toggle-map event + Ctrl+Shift+L)
+  // extracted into a focused hook as the second Wave 4 page.tsx slice.
+  useSheetPageGlobalListeners({ toggleMap })
   const nlFilterVisible = useNLFilterUiStore((s) => s.visible)
-  const toggleNlFilter = useNLFilterUiStore((s) => s.toggle)
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'L' || e.key === 'l')) {
-        e.preventDefault()
-        toggleNlFilter()
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [toggleNlFilter])
 
-  // Dev-only: expose the live grid instance + a 2-D test-data seeder on
-  // window so we can verify Insert > Chart/Table/Pivot end-to-end with
-  // real data. Stripped from production bundles.
-  //
-  // The seeder writes directly into gridSheets via replaceGridSheets so
-  // both FortuneSheet AND the Zustand mirror (which ChartsLayer / PivotsLayer
-  // read from) end up in sync — calling FortuneSheet's setCellValue alone
-  // updates the canvas but doesn't always fire onChange in time.
-  useEffect(() => {
-    if (process.env.NODE_ENV === 'production') return
-    ;(window as unknown as { __qsGrid?: unknown }).__qsGrid = gridInstance
-    ;(window as unknown as { __qsSeed?: (rows: unknown[][]) => void }).__qsSeed = (rows) => {
-      const state = useSheetStore.getState()
-      const sheets = state.gridSheets.length ? state.gridSheets : [{ id: activeSheetId, name: 'Sheet1', status: 1 }]
-      const targetSheetIdx = Math.max(0, sheets.findIndex((s) => s.status === 1))
-      const target = sheets[targetSheetIdx]
-      if (!target) {
-        return
-      }
-      const buildCell = (v: unknown) =>
-        v === null || v === undefined
-          ? null
-          : typeof v === 'number'
-            ? { ct: { fa: 'General', t: 'n' }, m: String(v), v }
-            : { ct: { fa: 'General', t: 'g' }, m: String(v), v: String(v) }
-      const celldata = rows.flatMap((row, r) =>
-        row.map((v, c) => ({ r, c, v: buildCell(v) })).filter((e) => e.v !== null),
-      )
-      // Also populate the 2-D `data` matrix because FortuneSheet renders
-      // from `data`, not celldata, when the workbook is hydrated via the
-      // `data` prop. Build a 100x26 matrix (default sheet size).
-      const ROWS = 100
-      const COLS = 26
-      const matrix: (ReturnType<typeof buildCell> | null)[][] = Array.from(
-        { length: ROWS },
-        () => Array<ReturnType<typeof buildCell> | null>(COLS).fill(null),
-      )
-      rows.forEach((row, r) => {
-        if (r >= ROWS) return
-        row.forEach((v, c) => {
-          if (c >= COLS) return
-          matrix[r]![c] = buildCell(v)
-        })
-      })
-      const nextSheets = sheets.map((s, i) =>
-        i === targetSheetIdx
-          ? ({ ...s, celldata, data: matrix } as typeof s)
-          : s,
-      )
-      state.replaceGridSheets(nextSheets)
-    }
-    // Dev helpers — verification surface that mirrors the real stores
-    // so scripted tests can drive features without window.prompt() etc.
-    // Stripped from production via the process.env.NODE_ENV guard at
-    // the top of this useEffect.
-    ;(window as unknown as { __qsSetColType?: (sheetId: string, col: number, type: string) => void }).__qsSetColType =
-      (sheetId, col, type) => useColumnTypesStore.getState().setColumnType(sheetId, col, { type: type as never })
-    ;(window as unknown as { __qsClearColType?: (sheetId: string, col: number) => void }).__qsClearColType =
-      (sheetId, col) => useColumnTypesStore.getState().clearColumnType(sheetId, col)
-    ;(window as unknown as { __qsListPivots?: () => Array<{ id: string; name: string }> }).__qsListPivots = () =>
-      usePivotUiStore.getState().pivots.map((p) => ({ id: p.id, name: p.name }))
-    ;(window as unknown as { __qsParseClipboard?: (text: string) => unknown }).__qsParseClipboard = (text) =>
-      parseClipboardText(text)
-    ;(window as unknown as { __qsAddSlicer?: (pivotId: string, columnIndex: number, label: string, allValues: string[]) => string }).__qsAddSlicer =
-      (pivotId, columnIndex, label, allValues) =>
-        useSlicerStore.getState().addSlicer({
-          label, kind: 'list', pivotId, columnIndex, allValues,
-          selected: [], x: 200, y: 600, width: 200, height: 240,
-        })
-    ;(window as unknown as { __qsAddName?: (name: string, range: string) => void }).__qsAddName =
-      (name, range) => useNamedRangesStore.getState().addName(workbookId, { name, range, scope: 'workbook' })
-    ;(window as unknown as { __qsListNames?: () => Array<{ name: string; range: string }> }).__qsListNames = () =>
-      useNamedRangesStore.getState().getNamesForWorkbook(workbookId) as unknown as Array<{ name: string; range: string }>
-    ;(window as unknown as { __qsAddFilter?: (col: number, operator: string, value: string) => void }).__qsAddFilter =
-      (col, operator, value) => useSheetStore.getState().addFilter({ columnIndex: col, operator: operator as never, value })
-    ;(window as unknown as { __qsClearFilters?: () => void }).__qsClearFilters = () => useSheetStore.getState().clearFilters()
-    ;(window as unknown as { __qsAddCFGreaterThan?: (sheetId: string, range: string, threshold: number, bgColor: string) => void }).__qsAddCFGreaterThan =
-      (sheetId, range, threshold, bgColor) => {
-        useCFStore.getState().addRule(sheetId, {
-          range,
-          condition: { type: 'cell_value', operator: 'greater', value: String(threshold) },
-          format: { fill: bgColor },
-          priority: 0,
-        })
-        useCFStore.getState().applyToActiveSheet()
-      }
-  }, [gridInstance, activeSheetId, workbookId])
+  // Dev-only window.__qs* test-surface helpers (no-op in production).
+  useDevWindowHelpers(workbookId)
   const [showFormulaBarUI, setShowFormulaBarUI] = useState(true)
   const [showGridlines, setShowGridlines] = useState(true)
   const [zoomLevel, setZoomLevel] = useState(1.0)
-  const [workbookName, setWorkbookName] = useState(() =>
-    workbookId === 'demo' ? 'Demo Spreadsheet' : `Workbook ${workbookId.slice(0, 8)}`
-  )
+  const [workbookName, setWorkbookName] = useWorkbookName(workbookId)
   const [isEditingName, setIsEditingName] = useState(false)
 
   const activeSheet = sheets.find((sheet) => sheet.id === activeSheetId)
   const activeGridSheet = gridSheets.find((sheet) => sheet.id === activeSheetId) ?? gridSheets[0]
   const columnDNA = useColumnDNA(activeGridSheet)
-  const scratchpad = useScratchpad({ sheetId: activeSheetId, mainSheetData: activeGridSheet })
   const rowSummarizer = useRowSummarizer()
   const activeSheetMatrix = useMemo(
     () => (activeGridSheet ? getSheetMatrix(activeGridSheet) : []),
@@ -497,85 +440,9 @@ export default function SheetPage() {
     [activeSheetMatrix, nlFilterColumnSchema]
   )
 
-  useEffect(() => {
-    const isLocalDebugSession =
-      window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    if (!isLocalDebugSession) return
-
-    const debugWindow = window as Window & {
-      __quiksheetsDebug?: {
-        getSheetState: typeof useSheetStore.getState
-        getWorkbookState: typeof useWorkbookStore.getState
-        // feature panel stores — exposed for headless smoke testing
-        chartBuilder: { open: () => void; close: () => void }
-        pivotBuilder: { open: () => void; close: () => void }
-        formBuilder:  { open: () => void; close: () => void }
-        cleanData:    { open: () => void; close: () => void }
-        forecast:     { open: () => void; close: () => void }
-        comments:     { openPanel: () => void; closePanel: () => void; openComposer: (t: { sheetId: string; cellAddress: string }) => void }
-        versionHistory: { open: () => void; close: () => void }
-        share:        { open: () => void; close: () => void }
-        protectedRanges: { open: () => void; close: () => void }
-        cf: typeof useCFStore.getState
-        cfDebug: {
-          evaluateRules: typeof evaluateRules
-          applyRulesToSheet: typeof applyRulesToSheet
-        }
-        cellOps: typeof cellOps
-        printSettings: typeof usePrintSettingsStore.getState
-      }
-    }
-
-    debugWindow.__quiksheetsDebug = {
-      getSheetState: useSheetStore.getState,
-      getWorkbookState: useWorkbookStore.getState,
-      chartBuilder: {
-        open:  () => useChartPanelStore.getState().openBuilder(),
-        close: () => useChartPanelStore.getState().closeBuilder(),
-      },
-      pivotBuilder: {
-        open:  () => usePivotUiStore.getState().openBuilder(),
-        close: () => usePivotUiStore.getState().closeBuilder(),
-      },
-      formBuilder: {
-        open:  () => useFormBuilderStore.getState().open(),
-        close: () => useFormBuilderStore.getState().close(),
-      },
-      cleanData: {
-        open:  () => useCleanDataStore.getState().open(),
-        close: () => useCleanDataStore.getState().close(),
-      },
-      forecast: {
-        open:  () => useForecastStore.getState().open(),
-        close: () => useForecastStore.getState().close(),
-      },
-      comments: {
-        openPanel:    () => useCommentsUiStore.getState().openPanel(),
-        closePanel:   () => useCommentsUiStore.getState().closePanel(),
-        openComposer: (t) => useCommentsUiStore.getState().openComposer(t),
-      },
-      versionHistory: {
-        open:  () => useVersionUiStore.getState().open(),
-        close: () => useVersionUiStore.getState().close(),
-      },
-      share: {
-        open:  () => useShareDialogStore.getState().open(),
-        close: () => useShareDialogStore.getState().close(),
-      },
-      protectedRanges: {
-        open:  () => useProtectedRangesUiStore.getState().open(),
-        close: () => useProtectedRangesUiStore.getState().close(),
-      },
-      cf: useCFStore.getState,
-      cfDebug: { evaluateRules, applyRulesToSheet },
-      cellOps,
-      printSettings: usePrintSettingsStore.getState,
-    }
-
-    return () => {
-      delete debugWindow.__quiksheetsDebug
-    }
-  }, [])
+  // window.__quiksheetsDebug surface for local Playwright smoke runs
+  // (no-op outside localhost / 127.0.0.1).
+  useLocalhostDebugWindow()
 
   const getActiveSheetData = useCallback((): ExportSheet => {
     return {
@@ -612,113 +479,23 @@ export default function SheetPage() {
     })
   }, [workbookId, sheets, gridSheets])
 
-  useEffect(() => {
-    try {
-      const storedName = window.localStorage.getItem(`quiksheets_workbook_name:${workbookId}`)
-      if (storedName?.trim()) {
-        setWorkbookName(storedName)
-      }
-    } catch {
-      // Local storage is optional; the in-memory workbook name remains usable.
-    }
-  }, [workbookId])
+  // Drain template data from localStorage on first mount (if this
+  // workbook was created via Insert > Template).
+  useLoadTemplateDataOnMount(workbookId)
 
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(`quiksheets_workbook_name:${workbookId}`, workbookName)
-    } catch {
-      // Local storage is optional; saves still proceed through SaveStatus.
-    }
-  }, [workbookId, workbookName])
+  // P2 features: load dashboards / connectors / row-level-security on mount.
+  useLoadP2FeaturesOnMount(workbookId)
+  // RowRlsBuilder takes isOpen/onClose props (vs the other P2 builders
+  // which read their own store internally); subscribe to that here.
+  const rowRlsBuilderOpen = useRowRlsStore((s) => s.builderOpen)
+  const closeRowRlsBuilder = useRowRlsStore((s) => s.closeBuilder)
 
-  // Load template data if this workbook was created from a template
-  useEffect(() => {
-    try {
-      const templateKey = `quiksheets_template_data:${workbookId}`
-      const raw = window.localStorage.getItem(templateKey)
-      if (!raw) return
+  // Apply saved conditional formatting rules once after workbook hydration.
+  useApplyCFOnMount(workbookId)
 
-      const templateSheets = JSON.parse(raw) as Sheet[]
-      window.localStorage.removeItem(templateKey)
-
-      const templateTabs: SheetTab[] = templateSheets.map((sheet, index) => ({
-        id: typeof sheet.id === 'string' ? sheet.id : `sheet${index + 1}`,
-        name: sheet.name,
-        color: null,
-        isHidden: false,
-        order: index,
-      }))
-      const firstId = templateTabs[0]?.id ?? 'sheet1'
-
-      const { replaceSheets } = useWorkbookStore.getState()
-      replaceSheets(templateTabs, firstId)
-      replaceGridSheets(templateSheets)
-    } catch {
-      // Template data missing or corrupt; start with default sheet
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Apply saved conditional formatting rules once after the workbook loads
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      applyAllCFRules(workbookId)
-    }, 500)
-    return () => window.clearTimeout(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Merge pending form submissions into the workbook on mount
-  useEffect(() => {
-    void (async () => {
-      const { listFormsForWorkbook, takeSubmissions } = await import(
-        '@/features/forms/storage/localFormStore'
-      )
-      const { cloneSheetWithData, getSheetMatrix } = await import('@/lib/fortuneSheet')
-      const forms = listFormsForWorkbook(workbookId)
-      if (forms.length === 0) return
-
-      const state = useSheetStore.getState()
-      let nextSheets = state.gridSheets
-      let didChange = false
-
-      for (const form of forms) {
-        const subs = takeSubmissions(form.id)
-        if (subs.length === 0) continue
-        const sheetIdx = nextSheets.findIndex((s) => s.id === form.sheetId)
-        if (sheetIdx < 0) continue
-        const sheet = nextSheets[sheetIdx]
-        if (!sheet) continue
-        const matrix = getSheetMatrix(sheet)
-        const next = matrix.map((row) => [...(row ?? [])])
-        // start writing at the first empty row at the bottom
-        let writeRow = next.length
-        for (const sub of subs) {
-          let row = next[writeRow]
-          if (!row) {
-            row = []
-            next[writeRow] = row
-          }
-          for (const field of form.fields) {
-            const raw = sub.values[field.id]
-            const display = raw === undefined || raw === null ? '' : String(raw)
-            row[field.columnIndex] = { v: display, m: display }
-          }
-          writeRow++
-        }
-        nextSheets = nextSheets.map((s, i) =>
-          i === sheetIdx ? cloneSheetWithData(s, next) : s
-        )
-        didChange = true
-      }
-
-      if (didChange) {
-        useSheetStore.getState().replaceGridSheets(nextSheets)
-        toast.success('Form submissions added to the sheet.')
-      }
-    })()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // Merge pending form submissions into the workbook on mount + run
+  // the one-time formsApi localStorage → Supabase migration.
+  useFormSubmissionMergeOnMount(workbookId, workbookName)
 
   const handleQuickSort = useCallback(
     (direction: SortDirection) => {
@@ -1228,6 +1005,48 @@ export default function SheetPage() {
     toast.success(`Removed ${duplicateCount} duplicate row${duplicateCount === 1 ? '' : 's'}`)
   }, [gridSheets, activeSheetId, replaceGridSheets])
 
+  // ── Outline (Group / Ungroup rows) ───────────────────────────────────────
+  // Group: adds a row group and immediately collapses it so the user sees
+  // the hide effect (we don't render gutter markers yet — the button is the
+  // only collapse trigger). Ungroup: removes the innermost group covering
+  // the current selection and restores its hidden rows.
+  const handleGroupRows = useCallback(() => {
+    if (!selectedRange) {
+      toast.message('Select two or more rows to group')
+      return
+    }
+    const startRow = Math.min(selectedRange.start.row, selectedRange.end.row)
+    const endRow = Math.max(selectedRange.start.row, selectedRange.end.row)
+    const outline = useOutlineStore.getState()
+    const result = outline.addGroup(activeSheetId, startRow, endRow)
+    if (!result.ok) {
+      toast.error(result.reason)
+      return
+    }
+    outline.toggleCollapse(activeSheetId, result.group.id)
+    const hidden = Array.from(useOutlineStore.getState().getHiddenRows(activeSheetId))
+    useSheetStore.getState().setOutlineHiddenRows(activeSheetId, hidden)
+    toast.success(`Grouped rows ${startRow + 1}-${endRow + 1}`)
+  }, [selectedRange, activeSheetId])
+
+  const handleUngroupRows = useCallback(() => {
+    if (!selectedRange) {
+      toast.message('Select rows in an existing group to ungroup')
+      return
+    }
+    const startRow = Math.min(selectedRange.start.row, selectedRange.end.row)
+    const endRow = Math.max(selectedRange.start.row, selectedRange.end.row)
+    const outline = useOutlineStore.getState()
+    const removed = outline.removeGroup(activeSheetId, startRow, endRow)
+    if (!removed) {
+      toast.message('No group covers this selection')
+      return
+    }
+    const hidden = Array.from(useOutlineStore.getState().getHiddenRows(activeSheetId))
+    useSheetStore.getState().setOutlineHiddenRows(activeSheetId, hidden)
+    toast.success(`Ungrouped rows ${removed.startRow + 1}-${removed.endRow + 1}`)
+  }, [selectedRange, activeSheetId])
+
   // ── Row Summarizer shortcut ──────────────────────────────────────────────
   const handleRowSummarizer = useCallback(() => {
     if (!selectedRange) {
@@ -1339,10 +1158,18 @@ export default function SheetPage() {
   const openFormBuilder = useFormBuilderStore((s) => s.open)
   const openPivotBuilder = usePivotUiStore((s) => s.openBuilder)
   const openForecast = useForecastStore((s) => s.open)
+  const openGoalSeek = useGoalSeekStore((s) => s.open)
   const openCommentsPanel = useCommentsUiStore((s) => s.openPanel)
   const openVersionHistory = useVersionUiStore((s) => s.open)
   const openShareDialog = useShareDialogStore((s) => s.open)
   const openProtectedRanges = useProtectedRangesUiStore((s) => s.open)
+
+  // ── Automation ──────────────────────────────────────────────────────────────
+  const { openDialog: openAutomationDialog, openRuns: openAutomationRuns } = useAutomationStore()
+
+  // Pre-load enabled automations for this workbook so the grid's
+  // trigger pipeline can evaluate conditions synchronously.
+  useLoadAutomationsOnMount(workbookId)
 
   return (
     <main className="flex h-screen w-screen overflow-hidden bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
@@ -1425,6 +1252,8 @@ export default function SheetPage() {
             </button>
 
             <PresenceAvatars />
+            <NotificationBell />
+            <UserMenu />
             <ThemeToggle />
           </div>
         </header>
@@ -1465,9 +1294,15 @@ export default function SheetPage() {
             onInsertPivot: openPivotBuilder,
             onCleanData: openCleanData,
             onForecast: openForecast,
+            onGoalSeek: openGoalSeek,
             // Formulas / Data
             onMapView: toggleMap,
             onDedupe: handleDedupe,
+            onGroupRows: handleGroupRows,
+            onUngroupRows: handleUngroupRows,
+            // Automation
+            onCreateAutomation: openAutomationDialog,
+            onViewAutomationRuns: openAutomationRuns,
             // Review / Collab
             onComments: openCommentsPanel,
             onShareLink: openShareDialog,
@@ -1489,6 +1324,8 @@ export default function SheetPage() {
 
       {nlFilterVisible && <NLFilterBar columnSchema={nlFilterColumnSchema} sampleData={nlFilterSampleData} />}
 
+      <ErrorBoundary silent><AdvancedFilterPill /></ErrorBoundary>
+
       <div className="relative flex-1 overflow-hidden">
         <SpreadsheetGrid
           workbookId={workbookId}
@@ -1505,6 +1342,9 @@ export default function SheetPage() {
         <ErrorBoundary silent><ChartsLayer /></ErrorBoundary>
         <ErrorBoundary silent><ImagesLayer /></ErrorBoundary>
         <ErrorBoundary silent><SparklinesLayer /></ErrorBoundary>
+        <ErrorBoundary silent><OverlaysLayer /></ErrorBoundary>
+        <ErrorBoundary silent><SelectionPane /></ErrorBoundary>
+        <ErrorBoundary silent><WatchWindow /></ErrorBoundary>
         <ErrorBoundary silent><PivotsLayer /></ErrorBoundary>
         <ErrorBoundary silent><SlicersLayer /></ErrorBoundary>
         <ErrorBoundary silent><FillHandle /></ErrorBoundary>
@@ -1561,17 +1401,6 @@ export default function SheetPage() {
         onExport={rowSummarizer.exportReport}
         onInsertBelow={rowSummarizer.insertBelowSelection}
       />
-      <ScratchpadToggle isOpen={scratchpad.isOpen} onToggle={scratchpad.toggleScratchpad} />
-      {scratchpad.isOpen && (
-        <ScratchpadPanel
-          data={scratchpad.scratchpadData}
-          isOpen={scratchpad.isOpen}
-          mainSheetData={scratchpad.mainSheetData}
-          onChange={scratchpad.setScratchpadData}
-          onClear={scratchpad.clearScratchpadData}
-          onClose={scratchpad.closeScratchpad}
-        />
-      )}
       <CommandPalette
         isOpen={showCommandPalette}
         items={commandItems}
@@ -1600,14 +1429,34 @@ export default function SheetPage() {
       <ErrorBoundary><SlicerBuilderDialog /></ErrorBoundary>
       <ErrorBoundary><SparklineBuilderDialog /></ErrorBoundary>
       <ErrorBoundary><RecommendedPivotsDialog /></ErrorBoundary>
+      <ErrorBoundary><ShapePicker /></ErrorBoundary>
+      <ErrorBoundary><IconPicker /></ErrorBoundary>
+      <ErrorBoundary><HeaderFooterDialog /></ErrorBoundary>
+      <ErrorBoundary><StockImagePicker /></ErrorBoundary>
+      <ErrorBoundary><ThemePicker /></ErrorBoundary>
+      <ErrorBoundary><PrintTitlesDialog /></ErrorBoundary>
+      <ErrorBoundary><FromWebDialog /></ErrorBoundary>
+      <ErrorBoundary><AdvancedFilterDialog /></ErrorBoundary>
+      {/* P2 features — Dashboards / Connectors / Row-Level Security */}
+      <ErrorBoundary><DashboardBuilder /></ErrorBoundary>
+      <ErrorBoundary><ConnectorBuilder workbookId={workbookId} /></ErrorBoundary>
+      <ErrorBoundary>
+        <RowRlsBuilder isOpen={rowRlsBuilderOpen} onClose={closeRowRlsBuilder} />
+      </ErrorBoundary>
+      <ErrorBoundary><PromptDialog /></ErrorBoundary>
       <ErrorBoundary><FormBuilder workbookId={workbookId} /></ErrorBoundary>
       <ErrorBoundary><PivotBuilder /></ErrorBoundary>
       <ErrorBoundary><ForecastPanel /></ErrorBoundary>
+      <ErrorBoundary><GoalSeekDialog /></ErrorBoundary>
       <ErrorBoundary><CommentsPanel workbookId={workbookId} /></ErrorBoundary>
       <ErrorBoundary><CommentComposer workbookId={workbookId} /></ErrorBoundary>
       <ErrorBoundary><VersionHistoryPanel workbookId={workbookId} /></ErrorBoundary>
       <ErrorBoundary><ShareDialog workbookId={workbookId} workbookName={workbookName} /></ErrorBoundary>
       <ErrorBoundary><ProtectedRangesDialog workbookId={workbookId} /></ErrorBoundary>
+      <ErrorBoundary>
+        <AutomationBuilder workbookId={workbookId} sheets={sheets.map((s) => ({ id: s.id, name: s.name }))} />
+      </ErrorBoundary>
+      <ErrorBoundary><AutomationRunsPanel workbookId={workbookId} /></ErrorBoundary>
       </div>
     </main>
   )

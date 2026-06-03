@@ -2,7 +2,7 @@
 -- Replaces the legacy workbooks(data jsonb) shape with a normalized model.
 -- Per docs/04_DATABASE_SCHEMA_AND_RLS.md §1.
 
--- Drop legacy schema if it exists from the SheetForge era. Safe because the
+-- Drop legacy schema if it exists from an earlier iteration. Safe because the
 -- only user data lived in localStorage at that point; the legacy `workbooks`
 -- table was empty in dev. If you have prod data on the legacy table, run
 -- a manual migration first.

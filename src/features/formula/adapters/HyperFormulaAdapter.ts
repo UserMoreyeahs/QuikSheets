@@ -3,9 +3,31 @@
  *
  * Only this file may import 'hyperformula'. All evaluation/validation/
  * dependency requests across the app must route through getFormulaEngine().
+ *
+ * Singleton pattern
+ * -----------------
+ * Previously each method called HyperFormula.buildFromSheets(...) then
+ * .destroy() per invocation.  For callers in tight loops (live preview,
+ * recalculate-on-type) this was wasteful — each call paid full parse+build
+ * overhead and GC pressure.
+ *
+ * Now we use the long-lived singleton from getHyperFormulaInstance() (backed
+ * by src/lib/hyperformula.ts).  Between calls we:
+ *   1. Remove all sheets currently loaded in the singleton.
+ *   2. Add the sheets from the input workbook.
+ *   3. Set content and evaluate.
+ *
+ * We do NOT call .destroy() — the singleton stays alive for the session.
+ * destroyHyperFormulaInstance() in lib/hyperformula.ts is available for
+ * test teardown.
+ *
+ * validateFormula is the only method that still needs a temporary instance
+ * because it is purely syntactic (no workbook context) and the singleton
+ * may be mid-operation when validation is called from the formula bar.
+ * We use HyperFormula.buildEmpty + destroy for that case only.
  */
 import { HyperFormula } from 'hyperformula'
-import { HYPERFORMULA_CONFIG } from '@/lib/hyperformula'
+import { HYPERFORMULA_CONFIG, getHyperFormulaInstance } from '@/lib/hyperformula'
 import type {
   FormulaContext,
   FormulaDependency,
@@ -16,12 +38,34 @@ import type {
   FormulaWorkbook,
 } from '../FormulaEngineAdapter'
 
-function toHfSheets(workbook: FormulaWorkbook): Record<string, (FormulaValue | null)[][]> {
-  return workbook.sheets
-}
+/**
+ * Load the given workbook into the singleton instance.
+ * Removes every existing sheet then adds+populates the new ones.
+ * Returns the prepared HyperFormula instance.
+ */
+function loadWorkbookIntoSingleton(workbook: FormulaWorkbook): HyperFormula {
+  const hf = getHyperFormulaInstance()
 
-function buildInstance(workbook: FormulaWorkbook): HyperFormula {
-  return HyperFormula.buildFromSheets(toHfSheets(workbook), HYPERFORMULA_CONFIG)
+  // Remove all sheets currently in the singleton
+  const existingNames = hf.getSheetNames()
+  for (const name of existingNames) {
+    const id = hf.getSheetId(name)
+    if (id !== undefined) {
+      hf.removeSheet(id)
+    }
+  }
+
+  // Add + populate sheets from the workbook.
+  // addSheet() returns the sheet name (string); getSheetId() gives the numeric ID
+  // needed by setSheetContent.
+  for (const [name, grid] of Object.entries(workbook.sheets)) {
+    hf.addSheet(name)
+    const sheetId = hf.getSheetId(name)
+    if (sheetId === undefined) continue
+    hf.setSheetContent(sheetId, grid as (string | number | boolean | null)[][])
+  }
+
+  return hf
 }
 
 export class HyperFormulaAdapter implements FormulaEngineAdapter {
@@ -31,9 +75,8 @@ export class HyperFormulaAdapter implements FormulaEngineAdapter {
     if (!formula.startsWith('=')) {
       return { ok: true, value: formula }
     }
-    let hf: HyperFormula | null = null
     try {
-      hf = buildInstance(context.workbook)
+      const hf = loadWorkbookIntoSingleton(context.workbook)
       const sheetId = hf.getSheetId(context.cell.sheetName)
       if (sheetId === undefined) return { ok: false, error: 'Sheet not found' }
       hf.setCellContents(
@@ -51,19 +94,18 @@ export class HyperFormulaAdapter implements FormulaEngineAdapter {
       return { ok: true, value: value as FormulaValue }
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : 'Evaluation failed' }
-    } finally {
-      hf?.destroy()
     }
+    // No finally/destroy — singleton stays alive
   }
 
   validateFormula(formula: string): { ok: boolean; error?: string } {
     if (!formula.startsWith('=')) return { ok: true }
     const body = formula.slice(1).trim()
     if (body.length === 0) return { ok: false, error: 'EMPTY' }
+    // Syntax-only check: build a minimal throw-away instance so we don't
+    // disturb the singleton's sheet state during a live formula-bar edit.
     let hf: HyperFormula | null = null
     try {
-      // hf.validateFormula is a syntax-only check that ignores evaluation
-      // errors like CYCLE; building an empty instance is enough.
       hf = HyperFormula.buildEmpty(HYPERFORMULA_CONFIG)
       const ok = hf.validateFormula(formula)
       return ok ? { ok: true } : { ok: false, error: 'INVALID' }
@@ -75,9 +117,8 @@ export class HyperFormulaAdapter implements FormulaEngineAdapter {
   }
 
   getDependencies(cell: FormulaDependency, workbook: FormulaWorkbook): FormulaDependency[] {
-    let hf: HyperFormula | null = null
     try {
-      hf = buildInstance(workbook)
+      const hf = loadWorkbookIntoSingleton(workbook)
       const sheetId = hf.getSheetId(cell.sheetName)
       if (sheetId === undefined) return []
       const precedents = hf.getCellPrecedents({ sheet: sheetId, row: cell.row, col: cell.col })
@@ -96,35 +137,28 @@ export class HyperFormulaAdapter implements FormulaEngineAdapter {
       return deps
     } catch {
       return []
-    } finally {
-      hf?.destroy()
     }
   }
 
   recalculateWorkbook(workbook: FormulaWorkbook): FormulaWorkbook {
-    let hf: HyperFormula | null = null
-    try {
-      hf = buildInstance(workbook)
-      const out: Record<string, FormulaValue[][]> = {}
-      for (const name of Object.keys(workbook.sheets)) {
-        const sheetId = hf.getSheetId(name)
-        if (sheetId === undefined) continue
-        const dims = hf.getSheetDimensions(sheetId)
-        const grid: FormulaValue[][] = []
-        for (let r = 0; r < dims.height; r++) {
-          const row: FormulaValue[] = []
-          for (let c = 0; c < dims.width; c++) {
-            const v = hf.getCellValue({ sheet: sheetId, row: r, col: c })
-            row.push(v && typeof v === 'object' ? null : (v as FormulaValue))
-          }
-          grid.push(row)
+    const hf = loadWorkbookIntoSingleton(workbook)
+    const out: Record<string, FormulaValue[][]> = {}
+    for (const name of Object.keys(workbook.sheets)) {
+      const sheetId = hf.getSheetId(name)
+      if (sheetId === undefined) continue
+      const dims = hf.getSheetDimensions(sheetId)
+      const grid: FormulaValue[][] = []
+      for (let r = 0; r < dims.height; r++) {
+        const row: FormulaValue[] = []
+        for (let c = 0; c < dims.width; c++) {
+          const v = hf.getCellValue({ sheet: sheetId, row: r, col: c })
+          row.push(v && typeof v === 'object' ? null : (v as FormulaValue))
         }
-        out[name] = grid
+        grid.push(row)
       }
-      return { sheets: out, activeSheetName: workbook.activeSheetName }
-    } finally {
-      hf?.destroy()
+      out[name] = grid
     }
+    return { sheets: out, activeSheetName: workbook.activeSheetName }
   }
 
   explainFormulaStructure(formula: string): FormulaStructure {

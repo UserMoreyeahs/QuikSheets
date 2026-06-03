@@ -35,7 +35,6 @@ const SHORTCUT_GROUPS = [
     category: 'AI Features',
     shortcuts: [
       ['=?', 'AI formula assistant'],
-      ['Ctrl+`', 'Private scratchpad'],
       ['Ctrl+M', 'Dependency map'],
     ],
   },

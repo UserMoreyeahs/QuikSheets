@@ -4,10 +4,12 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { FileSpreadsheet, Plus, Sparkles, Clock, Layers, Trash2, Search, ArrowDownUp } from 'lucide-react'
 import { TEMPLATES, TEMPLATE_CATEGORIES, type TemplateCategory, type TemplateDefinition } from '@/lib/templates'
+import { createSampleWorkbook } from '@/lib/defaultSheet'
 import type { Sheet } from '@fortune-sheet/core'
 import { useDashboardWorkbooks, type DashboardWorkbook } from '@/features/workbook/useDashboardWorkbooks'
 import { createWorkbookAction, deleteWorkbookAction } from '@/features/workbook/actions'
 import { getBrowserSupabase } from '@/lib/supabase/client'
+import { UserMenu } from '@/components/UserMenu'
 
 function formatDate(iso?: string): string {
   if (!iso) return ''
@@ -201,7 +203,6 @@ export default function DashboardPage() {
           localStorage.removeItem(`quiksheets_template_data:${wb.id}`)
           localStorage.removeItem(`quiksheets_workbook_${wb.name}`)
           localStorage.removeItem(`quiksheets_cf_rules:${wb.id}`)
-          localStorage.removeItem(`quiksheets_scratchpad:${wb.id}`)
         } catch {
           // ignore
         }
@@ -214,28 +215,39 @@ export default function DashboardPage() {
   const filteredTemplates =
     selectedCategory === 'All' ? TEMPLATES : TEMPLATES.filter((t) => t.category === selectedCategory)
 
+  // Seed a new workbook with the friendly sample table via the
+  // template-data hydration key (drained on mount by
+  // useLoadTemplateDataOnMount). Works for both local and Supabase
+  // workbooks — on a Supabase workbook the hydrated sample is persisted
+  // by the first auto-save.
+  const seedSampleData = (id: string) => {
+    try {
+      localStorage.setItem(`quiksheets_template_data:${id}`, JSON.stringify(createSampleWorkbook()))
+    } catch {
+      // localStorage unavailable; the workbook just opens empty.
+    }
+  }
+
+  const startLocalWorkbook = (id: string) => {
+    try {
+      localStorage.setItem(`quiksheets_workbook_name:${id}`, 'Untitled Workbook')
+    } catch {
+      // ignore
+    }
+    seedSampleData(id)
+    router.push(`/sheet/${id}`)
+  }
+
   const handleNewWorkbook = () => {
     if (!hasAuth) {
-      const id = `wb_${Date.now()}`
-      try {
-        localStorage.setItem(`quiksheets_workbook_name:${id}`, 'Untitled Workbook')
-      } catch {
-        // ignore
-      }
-      router.push(`/sheet/${id}`)
+      startLocalWorkbook(`wb_${Date.now()}`)
       return
     }
 
     startTransition(async () => {
       const workspaceId = await pickPrimaryWorkspaceId()
       if (!workspaceId) {
-        const id = `wb_${Date.now()}`
-        try {
-          localStorage.setItem(`quiksheets_workbook_name:${id}`, 'Untitled Workbook')
-        } catch {
-          // ignore
-        }
-        router.push(`/sheet/${id}`)
+        startLocalWorkbook(`wb_${Date.now()}`)
         return
       }
       const result = await createWorkbookAction({
@@ -243,15 +255,10 @@ export default function DashboardPage() {
         workspaceId,
       })
       if (result.ok && result.id) {
+        seedSampleData(result.id)
         router.push(`/sheet/${result.id}`)
       } else {
-        const id = `wb_${Date.now()}`
-        try {
-          localStorage.setItem(`quiksheets_workbook_name:${id}`, 'Untitled Workbook')
-        } catch {
-          // ignore
-        }
-        router.push(`/sheet/${id}`)
+        startLocalWorkbook(`wb_${Date.now()}`)
       }
     })
   }
@@ -265,14 +272,17 @@ export default function DashboardPage() {
             <FileSpreadsheet className="h-6 w-6 text-blue-600" />
             <span className="text-lg font-bold text-zinc-900 dark:text-zinc-50">Quiksheets</span>
           </div>
-          <button
-            onClick={handleNewWorkbook}
-            disabled={pending}
-            className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
-          >
-            <Plus className="h-4 w-4" />
-            {pending ? 'Creating…' : 'New workbook'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleNewWorkbook}
+              disabled={pending}
+              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+            >
+              <Plus className="h-4 w-4" />
+              {pending ? 'Creating…' : 'New workbook'}
+            </button>
+            <UserMenu />
+          </div>
         </div>
       </header>
 

@@ -17,7 +17,7 @@ export function useCellHistory(workbookId: string | null | undefined) {
     gridSheets,
     selectedCell,
     setFormulaBarValue,
-    setGridSheets,
+    replaceGridSheets,
   } = useSheetStore()
   const { activeSheetId } = useWorkbookStore()
   const [showHistory, setShowHistory] = useState(false)
@@ -92,7 +92,11 @@ export function useCellHistory(workbookId: string | null | undefined) {
       const nextSheets = gridSheets.map((gridSheet, index) =>
         index === resolvedSheetIndex ? nextSheet : gridSheet
       )
-      setGridSheets(nextSheets)
+      // replaceGridSheets — restoring a historical cell value is a
+      // wholesale write FortuneSheet's internal state hasn't seen, so
+      // we MUST bump hydrationVersion to force a remount.  See the
+      // comment on sheetStore.setGridSheets for the distinction.
+      replaceGridSheets(nextSheets)
 
       if (
         selectedCell &&
@@ -103,7 +107,7 @@ export function useCellHistory(workbookId: string | null | undefined) {
         setFormulaBarValue(result.restoredValue ?? '')
       }
     },
-    [gridSheets, selectedCell, setFormulaBarValue, setGridSheets]
+    [gridSheets, selectedCell, setFormulaBarValue, replaceGridSheets]
   )
 
   const handleRestore = useCallback(

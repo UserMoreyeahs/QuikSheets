@@ -47,7 +47,12 @@ export async function middleware(request: NextRequest) {
 
   if (!user) {
     const loginUrl = new URL('/login', request.url)
-    loginUrl.searchParams.set('next', pathname)
+    // Only ever round-trip a same-origin path. A protocol-relative value
+    // like "//evil.com" is a valid pathname but turns the post-login
+    // redirect into an open redirect (phishing). Single leading slash only.
+    const safeNext =
+      pathname.startsWith('/') && !pathname.startsWith('//') ? pathname : '/dashboard'
+    loginUrl.searchParams.set('next', safeNext)
     return NextResponse.redirect(loginUrl)
   }
 

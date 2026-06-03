@@ -1,8 +1,11 @@
 import * as XLSX from 'xlsx'
 import { saveAs } from 'file-saver'
-import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
 import type { Sheet } from '@fortune-sheet/core'
+import { sanitizeCellForExport, sanitizeMatrixForExport } from './sanitizeForExport'
+
+// PDF export was extracted into a sub-module (Wave 4). The original
+// public API is re-exported here so call sites stay byte-identical.
+export { exportToPDF } from './exportUtils/pdf'
 
 // xlsx-js-style is a 320 KB fork of xlsx with style-write support. Code-split:
 // only loads on the first call to exportToExcelFidelity, not on initial page load.
@@ -338,7 +341,11 @@ export async function exportToExcelFidelity(
           xlsxCell.v = cell.v
           xlsxCell.t = 'b'
         } else if (hasContent) {
-          xlsxCell.v = String(cell.v)
+          // Plain text value: neutralize leading =/+/-/@/tab/CR so it can't
+          // execute as a formula when the .xlsx is opened (OWASP CSV Injection).
+          // The authored-formula (cell.f) branch above is deliberately NOT
+          // guarded — those are real user formulas, not attacker text.
+          xlsxCell.v = sanitizeCellForExport(String(cell.v))
           xlsxCell.t = 's'
         } else {
           // Border-only cell: emit empty string with type 's' so xlsx records the addr
@@ -497,7 +504,9 @@ export function exportToExcel(
   const workbook = XLSX.utils.book_new()
 
   sheets.forEach((sheet) => {
-    const worksheet = XLSX.utils.aoa_to_sheet(sheet.data)
+    // Neutralize formula-injection payloads in string cells before writing.
+    // Numbers / booleans / null pass through sanitizeMatrixForExport unchanged.
+    const worksheet = XLSX.utils.aoa_to_sheet(sanitizeMatrixForExport(sheet.data))
     XLSX.utils.book_append_sheet(workbook, worksheet, sheet.name)
   })
 
@@ -513,133 +522,10 @@ export function exportToCSV(
   sheet: ExportSheet,
   fileName: string = 'Quiksheets Export'
 ): void {
-  const worksheet = XLSX.utils.aoa_to_sheet(sheet.data)
+  // Neutralize formula-injection payloads in string cells before the
+  // sheet_to_csv round-trip. Numbers / booleans / null are left as-is.
+  const worksheet = XLSX.utils.aoa_to_sheet(sanitizeMatrixForExport(sheet.data))
   const csv = XLSX.utils.sheet_to_csv(worksheet)
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
   saveAs(blob, `${fileName}.csv`)
-}
-
-/** Read current print settings (orientation/margins/printArea/paperSize). */
-function readPrintSettings(): {
-  orientation: 'portrait' | 'landscape'
-  format: string
-  marginsMm: { top: number; right: number; bottom: number; left: number }
-  printRange: { startRow: number; endRow: number; startCol: number; endCol: number } | null
-} {
-  // Lazy import to avoid making exportUtils.ts depend on the page-layout module
-  // tree at the top level (keeps the legacy exportToCSV / exportToExcel paths
-  // free of the print-settings dep).
-  type PrintStore = {
-    getState(): {
-      orientation: 'portrait' | 'landscape'
-      paperSize: string
-      margins: { top: number; right: number; bottom: number; left: number }
-      printArea: { range: string } | null
-    }
-  }
-  let store: PrintStore | null = null
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    store = require('@/features/page-layout/printSettingsStore').usePrintSettingsStore as PrintStore
-  } catch { /* fallback to defaults */ }
-
-  if (!store) {
-    return {
-      orientation: 'landscape',
-      format: 'a4',
-      marginsMm: { top: 19, right: 18, bottom: 19, left: 18 },
-      printRange: null,
-    }
-  }
-
-  const s = store.getState()
-  // Convert inches to mm (1 inch = 25.4 mm)
-  const marginsMm = {
-    top:    s.margins.top * 25.4,
-    right:  s.margins.right * 25.4,
-    bottom: s.margins.bottom * 25.4,
-    left:   s.margins.left * 25.4,
-  }
-
-  // Parse print area range "A1:F25" → indices
-  let printRange = null as ReturnType<typeof readPrintSettings>['printRange']
-  if (s.printArea?.range) {
-    const m = s.printArea.range.toUpperCase().match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/)
-    if (m) {
-      function colLetterToIndex(letter: string): number {
-        let result = 0
-        for (let i = 0; i < letter.length; i++) result = result * 26 + (letter.charCodeAt(i) - 64)
-        return result - 1
-      }
-      printRange = {
-        startCol: colLetterToIndex(m[1]!),
-        startRow: parseInt(m[2]!, 10) - 1,
-        endCol: colLetterToIndex(m[3]!),
-        endRow: parseInt(m[4]!, 10) - 1,
-      }
-    }
-  }
-
-  return {
-    orientation: s.orientation,
-    format: s.paperSize,
-    marginsMm,
-    printRange,
-  }
-}
-
-export function exportToPDF(
-  sheet: ExportSheet,
-  fileName: string = 'Quiksheets Export'
-): void {
-  const settings = readPrintSettings()
-  const doc = new jsPDF({ orientation: settings.orientation, unit: 'mm', format: settings.format })
-
-  doc.setFontSize(14)
-  doc.setTextColor(30, 30, 30)
-  doc.text(sheet.name, 14, 15)
-
-  doc.setFontSize(9)
-  doc.setTextColor(120, 120, 120)
-  doc.text(`Exported from Quiksheets - ${new Date().toLocaleDateString()}`, 14, 22)
-
-  if (sheet.data.length === 0) {
-    doc.setFontSize(11)
-    doc.setTextColor(30, 30, 30)
-    doc.text('No data to export', 14, 35)
-    doc.save(`${fileName}.pdf`)
-    return
-  }
-
-  // If a print area is set, slice the data to that range. Otherwise use all rows.
-  let workingData = sheet.data
-  if (settings.printRange) {
-    const { startRow, endRow, startCol, endCol } = settings.printRange
-    workingData = sheet.data
-      .slice(startRow, endRow + 1)
-      .map((row) => row.slice(startCol, endCol + 1))
-  }
-
-  const firstRow = workingData[0] ?? []
-  const headers = firstRow.map((header) => (header !== null ? String(header) : ''))
-  const body = workingData
-    .slice(1)
-    .map((row) => row.map((cell) => (cell !== null ? String(cell) : '')))
-
-  autoTable(doc, {
-    head: [headers],
-    body,
-    startY: 28,
-    styles: { fontSize: 9, cellPadding: 3 },
-    headStyles: { fillColor: [30, 30, 30], textColor: [255, 255, 255], fontStyle: 'bold' },
-    alternateRowStyles: { fillColor: [248, 248, 248] },
-    margin: {
-      top: settings.marginsMm.top,
-      right: settings.marginsMm.right,
-      bottom: settings.marginsMm.bottom,
-      left: settings.marginsMm.left,
-    },
-  })
-
-  doc.save(`${fileName}.pdf`)
 }

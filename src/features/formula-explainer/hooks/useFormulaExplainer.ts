@@ -103,6 +103,13 @@ export function useFormulaExplainer(gridSheets: Sheet[]) {
           sensitivityNote:
             data.sensitivityNote ?? 'Changing referenced cells can change the result.',
         }
+        // LRU-cap the cache at 200 entries so a long session can't grow it
+        // unboundedly. Map iteration order is insertion order, so the first
+        // key is the oldest — drop it before inserting a new one.
+        if (cacheRef.current.size >= 200) {
+          const oldestKey = cacheRef.current.keys().next().value
+          if (oldestKey !== undefined) cacheRef.current.delete(oldestKey)
+        }
         cacheRef.current.set(cacheKey, nextExplanation)
         setExplanation(nextExplanation)
       } catch (error) {

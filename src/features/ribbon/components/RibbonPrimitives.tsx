@@ -6,6 +6,30 @@ import { cn } from '@/lib/utils'
 import { getStubFeatureName } from '../utils/ribbonStub'
 
 /**
+ * Anti-hallucination flag: ribbon button primitives skip rendering
+ * buttons whose onClick was tagged via ribbonStub() ("coming soon"
+ * placeholders). This keeps the shipped UI honest — every visible
+ * button does something real.
+ *
+ * Policy:
+ *   - PRODUCTION builds hide stubs BY DEFAULT. Previously this relied on
+ *     NEXT_PUBLIC_HIDE_RIBBON_STUBS=true being set at build time on the
+ *     host; when that env var was missing from the Vercel build, ~75
+ *     "coming soon" buttons shipped visible and looked broken to users.
+ *     Defaulting to hidden in production removes that footgun.
+ *   - Set NEXT_PUBLIC_SHOW_RIBBON_STUBS=true to force stubs visible in a
+ *     production build (internal demos / QA).
+ *   - DEV always shows stubs so unfinished work stays discoverable,
+ *     unless NEXT_PUBLIC_HIDE_RIBBON_STUBS=true is set explicitly.
+ *
+ * Read once at module load so it's tree-shaken by the bundler.
+ */
+const HIDE_RIBBON_STUBS =
+  process.env.NEXT_PUBLIC_HIDE_RIBBON_STUBS === 'true' ||
+  (process.env.NODE_ENV === 'production' &&
+    process.env.NEXT_PUBLIC_SHOW_RIBBON_STUBS !== 'true')
+
+/**
  * RibbonGroup — vertical block on the ribbon containing several buttons,
  * with a small label at the bottom and a divider on the right edge (Excel-style).
  *
@@ -63,6 +87,7 @@ export function RibbonButton({
   shortcut?: string
 }) {
   const stubName = getStubFeatureName(onClick)
+  if (stubName && HIDE_RIBBON_STUBS) return null
   const title = stubName
     ? `${label} — coming soon`
     : shortcut
@@ -113,6 +138,7 @@ export function RibbonLargeButton({
   showCaret?: boolean
 }) {
   const stubName = getStubFeatureName(onClick)
+  if (stubName && HIDE_RIBBON_STUBS) return null
   return (
     <button
       type="button"
@@ -221,6 +247,7 @@ export function RibbonSplitButton({
   shortcut?: string
 }) {
   const stubName = getStubFeatureName(onMainClick) ?? getStubFeatureName(onCaretClick)
+  if (stubName && HIDE_RIBBON_STUBS) return null
   return (
     <div className={cn('inline-flex h-[26px] items-stretch overflow-hidden rounded', stubName && 'opacity-60')}>
       <button

@@ -19,6 +19,7 @@ import { NextResponse } from 'next/server'
 import { dispatchTriggerEvent } from '@/features/automation/dispatcher'
 import { getServerSupabase } from '@/lib/supabase/server'
 import { consumeToken } from '@/lib/rateLimit'
+import { logger } from '@/lib/logger'
 
 const eventSchema = z.object({
   workbookId: z.string().uuid(),
@@ -68,8 +69,7 @@ export async function POST(request: Request) {
   // Fire-and-forget. The dispatcher writes to `automation_runs` so the
   // outcome is observable from the UI; we don't make the client wait.
   void dispatchTriggerEvent(parsed.data).catch((err) => {
-    // eslint-disable-next-line no-console
-    console.error('[automation] dispatch failed', err)
+    logger.error('automation', 'dispatch failed', err)
   })
 
   return NextResponse.json({ accepted: true }, { status: 202 })

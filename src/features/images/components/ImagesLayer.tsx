@@ -15,6 +15,8 @@ import { useEffect, useRef } from 'react'
 import { X, GripVertical, Image as ImageIcon } from 'lucide-react'
 import { useImageStore } from '../store/imageStore'
 import { useSheetStore } from '@/store/sheetStore'
+import { useShallow } from 'zustand/react/shallow'
+import type { Sheet } from '@fortune-sheet/core'
 import { useGridScroll, cellToPixelPosition } from '@/features/grid/hooks/useGridScroll'
 import { colIndexToLetter } from '@/lib/cellAddress'
 
@@ -29,13 +31,22 @@ function ImagesLayerInner() {
   const removeImage = useImageStore((s) => s.removeImage)
   const moveImage = useImageStore((s) => s.moveImage)
   const resizeImage = useImageStore((s) => s.resizeImage)
-  const gridSheets = useSheetStore((s) => s.gridSheets)
+  // Narrow selector — re-render only when a sheet THIS layer cares about changes.
+  const sheetMap = useSheetStore(
+    useShallow((s) => {
+      const ids = new Set(images.map((img) => img.sheetId))
+      const map: Record<string, Sheet | undefined> = {}
+      ids.forEach((id) => { map[id] = s.gridSheets.find((g) => g.id === id) })
+      map['__active__'] = s.gridSheets.find((g) => g.status === 1)
+      return map
+    })
+  )
   const scrollOffset = useGridScroll()
 
   return (
     <>
       {images.map((img) => {
-        const sheet = gridSheets.find((s) => s.id === img.sheetId) ?? gridSheets.find((s) => s.status === 1)
+        const sheet = sheetMap[img.sheetId] ?? sheetMap['__active__']
         if (!sheet) return null
         const anchorPos = cellToPixelPosition(img.anchorRow, img.anchorCol, scrollOffset)
         const anchorLabel = `${colIndexToLetter(img.anchorCol)}${img.anchorRow + 1}`

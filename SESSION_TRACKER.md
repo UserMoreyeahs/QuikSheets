@@ -1,6 +1,6 @@
 # Quiksheets Session Tracker
 
-> Renamed from SheetForge during R1. New sessions follow the remediation plan in `docs/REMEDIATION_CODEX_PROMPTS.md`.
+> New sessions follow the remediation plan in `docs/REMEDIATION_CODEX_PROMPTS.md`.
 
 ## Sessions
 
