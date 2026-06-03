@@ -18,7 +18,7 @@ import { ThemeToggle } from '@/components/ThemeToggle'
 import { UserMenu } from '@/components/UserMenu'
 import { NotificationBell } from '@/components/NotificationBell'
 import { WorkbookSidebar } from '@/features/workbook/components/WorkbookSidebar'
-import { createWorkbookAction } from '@/features/workbook/actions'
+import { createWorkbookAction, renameWorkbookAction } from '@/features/workbook/actions'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 import {
   createSheetFromImportedData,
@@ -419,6 +419,17 @@ export default function SheetPage() {
   const [workbookName, setWorkbookName] = useWorkbookName(workbookId)
   const [isEditingName, setIsEditingName] = useState(false)
 
+  // Commit an inline workbook-name edit. useWorkbookName already mirrors the
+  // name to localStorage; for a Supabase-backed (UUID) workbook we ALSO persist
+  // it to the server via renameWorkbookAction — otherwise the dashboard (which
+  // reads names from Supabase) keeps showing the old name after a rename.
+  const commitWorkbookName = useCallback(() => {
+    setIsEditingName(false)
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(workbookId)
+    const name = workbookName.trim()
+    if (isUuid && name) void renameWorkbookAction({ id: workbookId, name })
+  }, [workbookId, workbookName])
+
   const activeSheet = sheets.find((sheet) => sheet.id === activeSheetId)
   const activeGridSheet = gridSheets.find((sheet) => sheet.id === activeSheetId) ?? gridSheets[0]
   const columnDNA = useColumnDNA(activeGridSheet)
@@ -517,7 +528,7 @@ export default function SheetPage() {
   // Restore SAVED cell data on reopen (Supabase or localStorage). Without
   // this, edits were saved but never read back — reopening showed an empty
   // grid. Skips brand-new workbooks still carrying their template seed.
-  useLoadWorkbookDataOnMount(workbookId, workbookName)
+  useLoadWorkbookDataOnMount(workbookId, workbookName, setWorkbookName)
   // Persist + restore charts/pivots/sparklines/slicers/images/overlays across
   // reloads (they live in separate stores the cell-save path never saw).
   useWorkbookExtrasPersistence(workbookId)
@@ -1236,9 +1247,10 @@ export default function SheetPage() {
                 type="text"
                 value={workbookName}
                 onChange={(e) => setWorkbookName(e.target.value)}
-                onBlur={() => setIsEditingName(false)}
+                onBlur={() => commitWorkbookName()}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === 'Escape') setIsEditingName(false)
+                  if (e.key === 'Enter') commitWorkbookName()
+                  else if (e.key === 'Escape') setIsEditingName(false)
                 }}
                 autoFocus
                 className="w-[260px] rounded border border-blue-400 bg-blue-50 px-2 py-0.5 text-sm text-zinc-800 outline-none dark:bg-blue-500/15 dark:text-blue-100"
