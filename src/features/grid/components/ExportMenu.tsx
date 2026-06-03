@@ -1,9 +1,15 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import { exportToCSV, exportToExcel, exportToPDF } from '../utils/exportUtils'
 import type { ExportSheet } from '../utils/exportUtils'
 import { cn } from '@/lib/utils'
+
+// exportUtils pulls in SheetJS (xlsx) + jsPDF — together several hundred KB.
+// They're only needed when the user actually exports, so load them on demand
+// instead of at module scope (which dragged them into the eager /sheet/[id]
+// bundle). handleExport is already async + shows an "Exporting…" state, so the
+// one-time dynamic import is invisible.
+const loadExportUtils = () => import('../utils/exportUtils')
 
 interface ExportMenuProps {
   workbookName: string
@@ -64,6 +70,8 @@ export function ExportMenu({ workbookName, getActiveSheetData, getAllSheetsData 
     try {
       // Let the loading state paint before the synchronous export work starts.
       await new Promise<void>((resolve) => setTimeout(resolve, 100))
+
+      const { exportToCSV, exportToExcel, exportToPDF } = await loadExportUtils()
 
       if (type === 'xlsx') {
         exportToExcel(getAllSheetsData(), workbookName)

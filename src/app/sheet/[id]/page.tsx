@@ -42,7 +42,6 @@ import { SortPanel } from '@/features/grid/components/SortPanel'
 import { FilterPanel } from '@/features/grid/components/FilterPanel'
 import { FindReplace } from '@/features/grid/components/FindReplace'
 import { DataValidation } from '@/features/grid/components/DataValidation'
-import { ImportModal } from '@/features/grid/components/ImportModal'
 import { ExportMenu } from '@/features/grid/components/ExportMenu'
 import { SaveStatus } from '@/features/grid/components/SaveStatus'
 // Lazy-load the export module (xlsx + jspdf + jspdf-autotable ≈ 2 MB) on
@@ -65,6 +64,13 @@ import { buildExportExtras } from '@/features/grid/utils/exportExtrasAdapter'
 // /sheet/[id] payload lean. Each `next/dynamic` import is split into its
 // own chunk fetched on demand.
 import { useDependencyMap, type DependencyMapCellTarget } from '@/features/dependency-map'
+// ImportModal pulls in SheetJS (xlsx, ~400KB) via importUtils. It's only
+// rendered when the user opens Import, so load it lazily to keep that weight
+// out of the eager /sheet/[id] bundle.
+const ImportModal = dynamic(
+  () => import('@/features/grid/components/ImportModal').then((m) => ({ default: m.ImportModal })),
+  { ssr: false },
+)
 const DependencyMap = dynamic(
   () => import('@/features/dependency-map').then((m) => ({ default: m.DependencyMap })),
   { ssr: false },
