@@ -176,11 +176,18 @@ export function SpreadsheetGrid({
   const workbookStructureKey = useMemo(
     () => {
       // hydrationVersion forces a remount whenever the sheet store does a
-      // wholesale replaceGridSheets / setGridSheets — that's what import,
-      // template-load, and bulk operations like dedupe / paste rely on.
-      // FortuneSheet only hydrates from the `data` prop on initial mount,
-      // so without this counter, importing into the same sheet IDs left
-      // the grid showing the old empty data.
+      // wholesale replaceGridSheets — that's what import, template-load,
+      // and bulk operations like dedupe / paste / CF rely on.
+      // FortuneSheet only hydrates from the `data` prop on (re)mount, so
+      // without this counter, importing into the same sheet IDs left the
+      // grid showing the old empty data.
+      //
+      // NOTE: the per-keystroke flicker the user reported is fixed at the
+      // SOURCE — setGridSheets no longer bumps hydrationVersion (see
+      // sheetStore), so typing never changes this key and never remounts
+      // FortuneSheet. The `data` prop still gets a fresh reference each
+      // keystroke, but FortuneSheet is uncontrolled after mount and ignores
+      // it, so that's harmless.
       const structural = gridSheets
         .map((sheet) => `${sheet.id}:${sheet.name}:${sheet.order}:${sheet.hide ?? 0}`)
         .join('|')

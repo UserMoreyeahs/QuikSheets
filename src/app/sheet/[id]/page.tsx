@@ -82,11 +82,6 @@ const ColumnDNAPanel = dynamic(
   () => import('@/features/column-dna').then((m) => ({ default: m.ColumnDNAPanel })),
   { ssr: false },
 )
-import { ScratchpadToggle, useScratchpad } from '@/features/scratchpad'
-const ScratchpadPanel = dynamic(
-  () => import('@/features/scratchpad').then((m) => ({ default: m.ScratchpadPanel })),
-  { ssr: false },
-)
 import { RowSummarizer, useRowSummarizer } from '@/features/row-summarizer'
 const ConditionalFormatting = dynamic(
   () => import('@/features/conditional-formatting').then((m) => ({ default: m.ConditionalFormatting })),
@@ -389,7 +384,6 @@ export default function SheetPage() {
   const activeSheet = sheets.find((sheet) => sheet.id === activeSheetId)
   const activeGridSheet = gridSheets.find((sheet) => sheet.id === activeSheetId) ?? gridSheets[0]
   const columnDNA = useColumnDNA(activeGridSheet)
-  const scratchpad = useScratchpad({ sheetId: activeSheetId, mainSheetData: activeGridSheet })
   const rowSummarizer = useRowSummarizer()
   const activeSheetMatrix = useMemo(
     () => (activeGridSheet ? getSheetMatrix(activeGridSheet) : []),
@@ -1401,17 +1395,6 @@ export default function SheetPage() {
         onExport={rowSummarizer.exportReport}
         onInsertBelow={rowSummarizer.insertBelowSelection}
       />
-      <ScratchpadToggle isOpen={scratchpad.isOpen} onToggle={scratchpad.toggleScratchpad} />
-      {scratchpad.isOpen && (
-        <ScratchpadPanel
-          data={scratchpad.scratchpadData}
-          isOpen={scratchpad.isOpen}
-          mainSheetData={scratchpad.mainSheetData}
-          onChange={scratchpad.setScratchpadData}
-          onClear={scratchpad.clearScratchpadData}
-          onClose={scratchpad.closeScratchpad}
-        />
-      )}
       <CommandPalette
         isOpen={showCommandPalette}
         items={commandItems}
