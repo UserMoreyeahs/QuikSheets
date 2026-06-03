@@ -13,6 +13,7 @@
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import type { ExportSheet } from '../exportUtils'
+import { sanitizeCellForExport } from '../sanitizeForExport'
 
 const EMPTY_HF = {
   headerLeft: '',
@@ -180,8 +181,11 @@ export function exportToPDF(
   // every page. If the user set rows 1:3, those rows become the head;
   // the body picks up from row 4 onwards. If no Print Titles, the
   // first row of working data acts as the head (Excel-default).
+  // Stringify a cell for the PDF table AND neutralize formula-injection
+  // payloads: a PDF cell can be copy-pasted straight into Excel/Sheets, so a
+  // leading =/+/-/@/tab/CR still warrants the apostrophe guard. null → ''.
   const cellToStr = (cell: ExportSheet['data'][number][number]) =>
-    cell !== null ? String(cell) : ''
+    cell !== null ? sanitizeCellForExport(String(cell)) : ''
   let headRows: string[][]
   let bodyStartIndex: number
   if (settings.printTitleRows) {

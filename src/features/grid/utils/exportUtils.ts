@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx'
 import { saveAs } from 'file-saver'
 import type { Sheet } from '@fortune-sheet/core'
+import { sanitizeCellForExport, sanitizeMatrixForExport } from './sanitizeForExport'
 
 // PDF export was extracted into a sub-module (Wave 4). The original
 // public API is re-exported here so call sites stay byte-identical.
@@ -340,7 +341,11 @@ export async function exportToExcelFidelity(
           xlsxCell.v = cell.v
           xlsxCell.t = 'b'
         } else if (hasContent) {
-          xlsxCell.v = String(cell.v)
+          // Plain text value: neutralize leading =/+/-/@/tab/CR so it can't
+          // execute as a formula when the .xlsx is opened (OWASP CSV Injection).
+          // The authored-formula (cell.f) branch above is deliberately NOT
+          // guarded — those are real user formulas, not attacker text.
+          xlsxCell.v = sanitizeCellForExport(String(cell.v))
           xlsxCell.t = 's'
         } else {
           // Border-only cell: emit empty string with type 's' so xlsx records the addr
@@ -499,7 +504,9 @@ export function exportToExcel(
   const workbook = XLSX.utils.book_new()
 
   sheets.forEach((sheet) => {
-    const worksheet = XLSX.utils.aoa_to_sheet(sheet.data)
+    // Neutralize formula-injection payloads in string cells before writing.
+    // Numbers / booleans / null pass through sanitizeMatrixForExport unchanged.
+    const worksheet = XLSX.utils.aoa_to_sheet(sanitizeMatrixForExport(sheet.data))
     XLSX.utils.book_append_sheet(workbook, worksheet, sheet.name)
   })
 
@@ -515,7 +522,9 @@ export function exportToCSV(
   sheet: ExportSheet,
   fileName: string = 'Quiksheets Export'
 ): void {
-  const worksheet = XLSX.utils.aoa_to_sheet(sheet.data)
+  // Neutralize formula-injection payloads in string cells before the
+  // sheet_to_csv round-trip. Numbers / booleans / null are left as-is.
+  const worksheet = XLSX.utils.aoa_to_sheet(sanitizeMatrixForExport(sheet.data))
   const csv = XLSX.utils.sheet_to_csv(worksheet)
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
   saveAs(blob, `${fileName}.csv`)
