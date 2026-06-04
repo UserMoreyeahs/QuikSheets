@@ -509,6 +509,36 @@ function pushFormatToGrid(
       })
     }
   }
+
+  // Grow the affected rows to fit a larger font (Excel parity). FortuneSheet
+  // does NOT auto-resize the row when font size increases, so big text was
+  // clipped by the default ~19px row — and on empty cells the change was
+  // invisible entirely. Grow-only: never shrink (preserves manual heights and
+  // avoids clobbering other content when the font is *decreased*).
+  if (formatting.fontSize !== undefined) {
+    try {
+      const rows: number[] = []
+      range.forEach((sr) => {
+        const start = sr.row[0] ?? 0
+        const end = sr.row[1] ?? start
+        for (let r = start; r <= end; r += 1) rows.push(r)
+      })
+      // FortuneSheet's default row height is ~19px at font 11; scale with size.
+      const needed = Math.round(formatting.fontSize * 1.33) + 6
+      const inst = instance as unknown as {
+        getRowHeight?: (rows: number[]) => Record<number, number>
+        setRowHeight?: (info: Record<string, number>) => void
+      }
+      const current = inst.getRowHeight?.(rows) ?? {}
+      const update: Record<string, number> = {}
+      rows.forEach((r) => {
+        if (needed > (current[r] ?? 19)) update[String(r)] = needed
+      })
+      if (Object.keys(update).length > 0) inst.setRowHeight?.(update)
+    } catch {
+      /* row auto-grow is best-effort — never block the format apply */
+    }
+  }
 }
 
 export const useSheetStore = create<SheetState & SheetActions>()(
