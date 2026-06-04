@@ -8,6 +8,7 @@ import React, {
   KeyboardEvent,
 } from 'react'
 import { useSheetStore } from '@/store/sheetStore'
+import { useShallow } from 'zustand/react/shallow'
 import { useWorkbookStore } from '@/store/workbookStore'
 import { toCellNotation } from '@/lib/cellAddress'
 import { cn } from '@/lib/utils'
@@ -33,7 +34,20 @@ export function FormulaBar() {
     editingCell,
     setEditingCell,
     validationRules,
-  } = useSheetStore()
+  } = useSheetStore(
+    // Shallow-selected slice: re-render only when these fields change, not on
+    // every sheetStore mutation.
+    useShallow((s) => ({
+      selectedCell: s.selectedCell,
+      gridSheets: s.gridSheets,
+      gridInstance: s.gridInstance,
+      formulaBarValue: s.formulaBarValue,
+      setFormulaBarValue: s.setFormulaBarValue,
+      editingCell: s.editingCell,
+      setEditingCell: s.setEditingCell,
+      validationRules: s.validationRules,
+    })),
+  )
   const { activeSheetId } = useWorkbookStore()
 
   const inputRef = useRef<HTMLInputElement>(null)
