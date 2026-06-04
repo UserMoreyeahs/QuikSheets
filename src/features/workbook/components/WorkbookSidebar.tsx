@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import {
   Clock,
   FileSpreadsheet,
@@ -27,8 +26,18 @@ export function WorkbookSidebar({
   collapsed = false,
   onNewWorkbook,
 }: WorkbookSidebarProps) {
-  const router = useRouter()
   const { workbooks, isLoading } = useDashboardWorkbooks()
+
+  // Switching workbooks must be a FULL navigation, not a client-side
+  // router.push: the /sheet/[id] route segment is reused, so a client nav
+  // does NOT remount the page — which would leak the previous workbook's
+  // global Zustand state (grid data, filters, undo stack, watch-window,
+  // print settings, …) into the newly-opened one. A full document load
+  // guarantees a clean slate. Do NOT "optimize" this back to router.push.
+  const switchToWorkbook = (id: string) => {
+    if (id === activeWorkbookId) return
+    window.location.assign(`/sheet/${id}`)
+  }
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
 
   useEffect(() => {
@@ -110,7 +119,7 @@ export function WorkbookSidebar({
               isLocal={wb.source === 'local'}
               isActive={wb.id === activeWorkbookId}
               isFavorite
-              onClick={() => router.push(`/sheet/${wb.id}`)}
+              onClick={() => switchToWorkbook(wb.id)}
               onToggleFavorite={() => toggleFavorite(wb.id)}
             />
           ))
@@ -131,7 +140,7 @@ export function WorkbookSidebar({
               isLocal={wb.source === 'local'}
               isActive={wb.id === activeWorkbookId}
               isFavorite={favorites.has(wb.id)}
-              onClick={() => router.push(`/sheet/${wb.id}`)}
+              onClick={() => switchToWorkbook(wb.id)}
               onToggleFavorite={() => toggleFavorite(wb.id)}
             />
           ))

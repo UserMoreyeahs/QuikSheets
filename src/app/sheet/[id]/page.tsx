@@ -1170,7 +1170,10 @@ export default function SheetPage() {
         } catch {
           /* ignore */
         }
-        router.push(`/sheet/${id}`)
+        // Full navigation (not router.push): the /sheet/[id] segment is reused,
+        // so a client nav wouldn't remount the page and the previous workbook's
+        // global store state would leak into the new one. See WorkbookSidebar.
+        window.location.assign(`/sheet/${id}`)
         return
       }
       const {
@@ -1194,7 +1197,8 @@ export default function SheetPage() {
       }
       const result = await createWorkbookAction({ name: 'Untitled Workbook', workspaceId })
       if (result.ok && result.id) {
-        router.push(`/sheet/${result.id}`)
+        // Full navigation — clean slate for the new workbook (see above).
+        window.location.assign(`/sheet/${result.id}`)
       } else {
         toast.error(result.error ?? 'Could not create workbook')
       }
