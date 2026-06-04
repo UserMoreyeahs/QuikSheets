@@ -178,6 +178,7 @@ export async function loadComments(workbookId: string): Promise<CommentRecord[]>
   if (error || !data) {
     // RLS deny / network blip — fall back to local cache so the panel
     // still renders something.
+    logger.warn('commentsApi', 'listComments failed; serving local cache (possible schema/RLS drift)', error?.message)
     return listLocalComments(workbookId).map(localToRecord)
   }
   return (data as DbCommentRow[]).map(dbRowToRecord)
@@ -235,6 +236,7 @@ export async function createComment(input: {
   if (error || !data) {
     // Network / RLS deny → mirror to localStorage so the user doesn't
     // lose their comment.
+    logger.warn('commentsApi', 'addComment failed; stored locally only (not synced)', error?.message)
     const local = addLocalComment({
       workbookId: input.workbookId,
       sheetId: input.sheetId,

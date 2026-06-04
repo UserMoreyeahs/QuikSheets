@@ -152,6 +152,7 @@ export async function loadRules(
     .eq('workbook_id', workbookId)
 
   if (error || !data) {
+    logger.warn('rowRlsApi', 'loadRules failed; serving local cache (possible schema/RLS drift)', error?.message)
     return readLocal(workbookId)
   }
 

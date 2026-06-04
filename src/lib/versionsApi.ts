@@ -164,6 +164,7 @@ export async function listVersions(workbookId: string): Promise<VersionRecord[]>
     .limit(50)
 
   if (error || !data) {
+    logger.warn('versionsApi', 'listVersions failed; serving local snapshots (possible schema/RLS drift)', error?.message)
     return listLocalVersions(workbookId).map(localToRecord)
   }
   return (data as DbVersionRow[]).map(dbRowToRecord)
@@ -204,6 +205,7 @@ export async function snapshotVersion(
 
   if (error || !data) {
     // Network / RLS deny — mirror to localStorage.
+    logger.warn('versionsApi', 'snapshotVersion failed; stored locally only', error?.message)
     const stored = localSnapshot(workbookId, sheets, resolvedLabel)
     return localToRecord(stored)
   }
@@ -230,8 +232,8 @@ export async function restoreVersion(
   // Step 1 — safety snapshot (best-effort; never blocks the restore).
   try {
     await snapshotVersion(workbookId, currentSheets, 'Auto-saved before restore')
-  } catch {
-    // continue
+  } catch (e) {
+    logger.debug('versionsApi', 'pre-restore safety snapshot failed (restore continues)', e)
   }
 
   const supabase = getBrowserSupabase()
@@ -251,7 +253,10 @@ export async function restoreVersion(
     .eq('workbook_id', workbookId)
     .maybeSingle()
 
-  if (error || !data) return null
+  if (error || !data) {
+    if (error) logger.warn('versionsApi', 'restoreVersion fetch failed', error.message)
+    return null
+  }
 
   const snap = (data as { snapshot: unknown }).snapshot
   return extractSheets(snap)
@@ -296,7 +301,8 @@ export async function deleteVersion(workbookId: string, versionId: string): Prom
     .eq('workbook_id', workbookId)
 
   if (error) {
-    // RLS deny (not owner) — fail silently; the panel will re-list.
+    // RLS deny (not owner) or schema drift — was failing silently.
+    logger.warn('versionsApi', 'editLabel failed', error.message)
   }
 }
 
