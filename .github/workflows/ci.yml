@@ -1,0 +1,60 @@
+name: CI
+
+# Runs the quality gates that were previously only run by hand. Protects
+# develop + main (the deploy branch) from regressions before Vercel ships them.
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+
+# A newer push to the same branch/PR cancels the older in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Typecheck · Lint · Test · Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npx eslint src/ tests/ --max-warnings 0
+      - name: Unit tests
+        run: npm test
+      - name: Build
+        run: npm run build
+
+  schema-drift:
+    name: Schema drift guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Asserts the live DB has every column the app depends on (the guard that
+      # caught the workbooks.data / dashboards.updated_at / forms drift). Skips
+      # gracefully when the repo secrets aren't configured, so forks/PRs without
+      # DB access still pass.
+      - name: Schema drift check
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -n "$NEXT_PUBLIC_SUPABASE_URL" ] && [ -n "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            npm run db:check-drift
+          else
+            echo "⏭  schema-drift skipped — add NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY"
+            echo "   as repository secrets (Settings → Secrets → Actions) to enable this guard."
+          fi
