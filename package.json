@@ -14,7 +14,9 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:isolated": "node scripts/run-e2e.mjs",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "db:schema:generate": "node scripts/generate-live-schema.mjs",
+    "db:check-drift": "node scripts/check-schema-drift.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",

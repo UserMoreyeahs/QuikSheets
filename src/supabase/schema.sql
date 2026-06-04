@@ -1,3 +1,11 @@
+-- ⚠️ DEPRECATED — DO NOT USE. This file does NOT match the live database and
+-- cannot rebuild production (e.g. it predates the normalized model + every
+-- table added since). Canonical column reference:
+--   src/supabase/schema.live.generated.sql   (generated from the live DB)
+-- Authoritative DDL (RLS, functions, triggers, the workbooks.data column):
+--   src/supabase/migrations/0001..0013 (applied in order via the dashboard).
+-- Kept only for history. See docs/setup/SCHEMA.md.
+
 -- Workbooks table
 create table if not exists workbooks (
   id uuid default gen_random_uuid() primary key,

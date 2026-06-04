@@ -1,3 +1,9 @@
+-- ⚠️ DEPRECATED — DO NOT USE. This file is a stale partial copy and does NOT
+-- match the live database. Canonical column reference:
+--   src/supabase/schema.live.generated.sql   (generated from the live DB)
+-- Authoritative DDL: src/supabase/migrations/0001..0013 (applied in order).
+-- Kept only for history. See docs/setup/SCHEMA.md.
+
 -- Quiksheets — workspace-level tables.
 -- Per docs/04_DATABASE_SCHEMA_AND_RLS.md §1.
 

@@ -1,3 +1,11 @@
+-- ⚠️ DEPRECATED — DO NOT USE / DO NOT APPLY. This file does NOT match the live
+-- database: it drops workbooks.data (the app saves cells there), uses
+-- forms.fields_json/is_public (live + code use fields/accepts_submissions), and
+-- omits tables the code requires. Applying it to a fresh project yields a DB
+-- that cannot save a cell. Canonical column reference:
+--   src/supabase/schema.live.generated.sql   (generated from the live DB)
+-- Authoritative DDL: src/supabase/migrations/0001..0013. See docs/setup/SCHEMA.md.
+
 -- Quiksheets — workspace-level tables.
 -- Per docs/04_DATABASE_SCHEMA_AND_RLS.md §1.
 
