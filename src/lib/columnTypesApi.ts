@@ -186,6 +186,7 @@ export async function loadColumnTypes(workbookId: string): Promise<WorkbookColum
 
   if (error || !data) {
     // Network / RLS deny — fall back to local cache.
+    logger.warn('columnTypesApi', 'load failed; serving local cache (possible schema/RLS drift)', error?.message)
     return readLocalMap(workbookId)
   }
 

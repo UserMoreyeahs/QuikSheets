@@ -22,6 +22,7 @@
  */
 
 import { getBrowserSupabase } from '@/lib/supabase/client'
+import { logger } from '@/lib/logger'
 import type { FormDefinition, FormField, FormSubmission } from '@/features/forms/types'
 
 // ── localStorage fallback (legacy contract) ───────────────────────────────
@@ -199,7 +200,8 @@ export async function loadForms(workbookId: string): Promise<FormDefinition[]> {
       return listFormsLocal(workbookId)
     }
     return (data as FormRow[]).map(rowToForm)
-  } catch {
+  } catch (e) {
+    logger.warn('formsApi', 'loadForms failed; serving localStorage forms', e)
     return listFormsLocal(workbookId)
   }
 }
@@ -221,8 +223,8 @@ export async function getFormBySlug(slug: string): Promise<FormDefinition | null
       if (!error && data) {
         return rowToForm(data as FormRow)
       }
-    } catch {
-      // fall through
+    } catch (e) {
+      logger.warn('formsApi', 'Supabase request failed; falling back to localStorage', e)
     }
   }
   if (inBrowser()) {
@@ -249,8 +251,8 @@ export async function getFormById(id: string): Promise<FormDefinition | null> {
       if (!error && data) {
         return rowToForm(data as FormRow)
       }
-    } catch {
-      // fall through
+    } catch (e) {
+      logger.warn('formsApi', 'Supabase request failed; falling back to localStorage', e)
     }
   }
   if (inBrowser()) {
@@ -304,8 +306,8 @@ export async function createForm(input: CreateFormInput): Promise<FormDefinition
           return rowToForm(data as FormRow)
         }
       }
-    } catch {
-      // fall through
+    } catch (e) {
+      logger.warn('formsApi', 'Supabase request failed; falling back to localStorage', e)
     }
   }
 
@@ -342,8 +344,8 @@ export async function updateForm(id: string, updates: UpdateFormInput): Promise<
       if (Object.keys(payload).length === 0) return
       const { error } = await supabase.from('forms').update(payload).eq('id', id)
       if (!error) return
-    } catch {
-      // fall through
+    } catch (e) {
+      logger.warn('formsApi', 'Supabase request failed; falling back to localStorage', e)
     }
   }
 
@@ -373,8 +375,8 @@ export async function deleteForm(id: string): Promise<void> {
         if (inBrowser()) deleteFormLocal(id)
         return
       }
-    } catch {
-      // fall through
+    } catch (e) {
+      logger.warn('formsApi', 'Supabase request failed; falling back to localStorage', e)
     }
   }
   if (inBrowser()) deleteFormLocal(id)
@@ -426,8 +428,8 @@ export async function submitForm(
         }
         return { ok: true, id: (data as { id: string }).id }
       }
-    } catch {
-      // fall through
+    } catch (e) {
+      logger.warn('formsApi', 'Supabase request failed; falling back to localStorage', e)
     }
   }
 
@@ -468,8 +470,8 @@ export async function listSubmissions(formId: string): Promise<SubmittedSubmissi
           submittedAt: row.submitted_at,
         }))
       }
-    } catch {
-      // fall through
+    } catch (e) {
+      logger.warn('formsApi', 'Supabase request failed; falling back to localStorage', e)
     }
   }
   if (!inBrowser()) return []
@@ -549,8 +551,9 @@ export async function migrateLocalFormsToSupabase(): Promise<number> {
           .from('forms')
           .upsert(payload, { onConflict: 'slug' })
         if (!error) migrated++
-      } catch {
-        // skip this form; continue migrating others
+        else logger.warn('formsApi', 'migrate: upsert returned error; skipping form', error.message)
+      } catch (e) {
+        logger.warn('formsApi', 'migrate: upsert threw; skipping form', e)
       }
     }
 
@@ -575,7 +578,8 @@ export async function migrateLocalFormsToSupabase(): Promise<number> {
 
     localStorage.setItem(MIGRATION_DONE_KEY, 'true')
     return migrated
-  } catch {
+  } catch (e) {
+    logger.warn('formsApi', 'migrateLocalFormsToSupabase failed', e)
     return 0
   }
 }

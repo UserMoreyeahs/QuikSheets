@@ -107,7 +107,10 @@ export async function loadNotifications(): Promise<NotificationRecord[]> {
     .order('created_at', { ascending: false })
     .limit(50)
 
-  if (error || !data) return []
+  if (error || !data) {
+    if (error) logger.warn('notificationsApi', 'list failed; returning empty', error.message)
+    return []
+  }
   return (data as DbNotificationRow[]).map(dbRowToRecord)
 }
 
@@ -127,7 +130,10 @@ export async function unreadCount(): Promise<number> {
     .eq('user_id', userId)
     .eq('read', false)
 
-  if (error) return 0
+  if (error) {
+    logger.warn('notificationsApi', 'unreadCount failed; returning 0', error.message)
+    return 0
+  }
   return count ?? 0
 }
 
@@ -139,11 +145,12 @@ export async function markRead(notificationId: string): Promise<void> {
   const userId = supabase ? await getCurrentUserId() : null
   if (!supabase || !userId) return
 
-  await supabase
+  const { error } = await supabase
     .from('notifications')
     .update({ read: true })
     .eq('id', notificationId)
     .eq('user_id', userId)
+  if (error) logger.warn('notificationsApi', 'markRead failed', error.message)
 }
 
 /**
@@ -155,11 +162,12 @@ export async function markAllRead(): Promise<void> {
   const userId = supabase ? await getCurrentUserId() : null
   if (!supabase || !userId) return
 
-  await supabase
+  const { error } = await supabase
     .from('notifications')
     .update({ read: true })
     .eq('user_id', userId)
     .eq('read', false)
+  if (error) logger.warn('notificationsApi', 'markAllRead failed', error.message)
 }
 
 // ---------------------------------------------------------------------------
@@ -197,7 +205,10 @@ export async function resolveMentionsToUserIds(
     .eq('workbook_id', workbookId)
     .limit(100)
 
-  if (error || !data) return result
+  if (error || !data) {
+    if (error) logger.warn('notificationsApi', 'resolveMentions query failed', error.message)
+    return result
+  }
 
   type MemberRow = {
     user_id: string

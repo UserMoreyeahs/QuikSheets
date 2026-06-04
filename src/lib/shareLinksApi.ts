@@ -18,6 +18,7 @@
  */
 
 import { getBrowserSupabase } from '@/lib/supabase/client'
+import { logger } from '@/lib/logger'
 import {
   createLocalShareLink,
   listLocalShareLinks,
@@ -167,6 +168,7 @@ export async function createLink(input: CreateLinkInput): Promise<ShareLink> {
       void migrateLocalLinksOnce(input.workbookId)
       return rowToShareLink(data as Record<string, unknown>)
     }
+    if (error) logger.warn('shareLinksApi', 'createLink failed; creating local link instead (403=not owner, else schema/RLS)', error.message)
     // fall through to localStorage on error (e.g. 403 – user is not the owner)
   }
 
@@ -196,6 +198,7 @@ export async function listLinks(workbookId: string): Promise<ShareLink[]> {
     if (!error && data) {
       return (data as Record<string, unknown>[]).map(rowToShareLink)
     }
+    if (error) logger.warn('shareLinksApi', 'listLinks failed; serving local links (possible schema/RLS drift)', error.message)
   }
 
   // localStorage fallback
@@ -209,12 +212,15 @@ export async function revokeLink(workbookId: string, token: string): Promise<voi
   const supabase = getBrowserSupabase()
 
   if (supabase) {
-    await supabase
+    const { error } = await supabase
       .from('share_links')
       .update({ active: false })
       .eq('workbook_id', workbookId)
       .eq('token', token)
-    // Don't early-return on error — always revoke the local copy too
+    // Don't early-return on error — always revoke the local copy too. But DO
+    // surface it: a failed server-side revoke leaves the link live while the UI
+    // shows it revoked (security-relevant).
+    if (error) logger.warn('shareLinksApi', 'revokeLink remote update failed; link may still be active server-side', error.message)
   }
 
   revokeLocalShareLink(workbookId, token)

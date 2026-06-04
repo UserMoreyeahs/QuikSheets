@@ -147,6 +147,7 @@ export async function loadRules(workbookId: string): Promise<Record<string, CFRu
 
   if (error || !data) {
     // RLS deny / network blip — fall back to localStorage.
+    logger.warn('cfRulesApi', 'loadRules failed; serving localStorage (possible schema/RLS drift)', error?.message)
     return readLocalRules(workbookId)
   }
 

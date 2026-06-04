@@ -23,6 +23,7 @@
  */
 
 import { getBrowserSupabase } from './supabase/client'
+import { logger } from './logger'
 import type { ConnectorConnection, ConnectorKind } from '@/features/connectors/types'
 import { connectorRegistry } from '@/features/connectors/connectors/index'
 
@@ -170,6 +171,7 @@ export async function loadConnections(workbookId: string): Promise<ConnectorConn
         writeToLocalStorage(workbookId, connections)
         return connections
       }
+      if (error) logger.warn('connectorsApi', 'loadConnections failed; serving local cache (possible schema/RLS drift)', error.message)
     }
   }
 
@@ -202,8 +204,9 @@ export async function saveConnection(conn: ConnectorConnection): Promise<void> {
   const userId = session.session.user.id
   const row = connectionToRow(conn, userId)
 
-  await supabase.from('connector_connections').upsert(row, { onConflict: 'id' })
-  // Error is silently swallowed — localStorage already has the data
+  const { error } = await supabase.from('connector_connections').upsert(row, { onConflict: 'id' })
+  // localStorage already has the data; surface remote failure so it isn't invisible.
+  if (error) logger.warn('connectorsApi', 'saveConnection upsert failed; kept local copy', error.message)
 }
 
 /**
@@ -221,7 +224,8 @@ export async function deleteConnection(workbookId: string, id: string): Promise<
   const { data: session } = await supabase.auth.getSession()
   if (!session.session) return
 
-  await supabase.from('connector_connections').delete().eq('id', id)
+  const { error } = await supabase.from('connector_connections').delete().eq('id', id)
+  if (error) logger.warn('connectorsApi', 'deleteConnection failed; removed locally only', error.message)
 }
 
 /**
@@ -241,10 +245,11 @@ export async function updateLastSynced(workbookId: string, id: string): Promise<
   const { data: session } = await supabase.auth.getSession()
   if (!session.session) return
 
-  await supabase
+  const { error } = await supabase
     .from('connector_connections')
     .update({ last_synced_at: iso })
     .eq('id', id)
+  if (error) logger.warn('connectorsApi', 'updateLastSynced failed; updated locally only', error.message)
 }
 
 /**

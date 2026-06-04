@@ -134,6 +134,7 @@ export async function loadDashboards(workbookId: string): Promise<Dashboard[]> {
     .order('created_at', { ascending: true })
 
   if (error || !data) {
+    logger.warn('dashboardsApi', 'loadDashboards failed; serving local cache (possible schema/RLS drift)', error?.message)
     return readLocal(workbookId)
   }
 

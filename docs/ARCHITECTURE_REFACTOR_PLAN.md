@@ -422,7 +422,7 @@ context-menu/overlays extract to hooks. Dialogs use **one** open-state mechanism
 | Stage | Theme | Contains | Depends on | Effort | Risk |
 |---|---|---|---|---|---|
 | **0** | **Quick wins** | ✅ P2-C `optimizePackageImports` (done); P2-H `sendBeacon` deferred (beacon can't set the auth header — needs body/cookie auth). *P1-G dead-code & P2-B xlsx-split already resolved on `develop`.* | — | S | ~none |
-| **1** | **Make failures visible** | P1-A(1) `logger.warn` on every fallback branch + kill 7 `catch {}` in formsApi | — | S | low |
+| **1** | **Make failures visible** | ✅ DONE — `logger.warn` on every silent fallback across all 10 persistence modules (formsApi/cfRules/columnTypes/rowRls/dashboards/comments/connectors/shareLinks/versions/notifications); killed the bare `catch {}` in formsApi; captured discarded write-results (incl. the security-adjacent silent share-link revoke). Logging-only, behavior-preserving. | — | S | low |
 | **2** | **Stop state leaks** | P0-B `resetWorkbookScope()` registry; P0-C key load hooks on `[workbookId]`; P1-3 demo reset; P2-I counters | 1 (for logs) | M | med |
 | **3** | **Kill the re-render storm** | P1-E `useShallow` on the 9 whole-store subscribers | — | M | low |
 | **4** | **Collapse typing cost** | P0-D clone-once + cheap dirty check + delta-history; P0-E skip-if-unchanged autosave; P1-I narrow remount key | 3 | M–L | med |
