@@ -6,6 +6,23 @@ const nextConfig = {
   devIndicators: {
     position: 'bottom-right',
   },
+  // Tree-shake barrel-heavy UI deps so only the icons/primitives actually
+  // used land in each chunk (lucide-react alone exports ~1.5k icons). Pure
+  // build-time optimization — no runtime behavior change.
+  experimental: {
+    optimizePackageImports: [
+      'lucide-react',
+      'framer-motion',
+      '@radix-ui/react-dialog',
+      '@radix-ui/react-dropdown-menu',
+      '@radix-ui/react-popover',
+      '@radix-ui/react-scroll-area',
+      '@radix-ui/react-separator',
+      '@radix-ui/react-slot',
+      '@radix-ui/react-tabs',
+      '@radix-ui/react-tooltip',
+    ],
+  },
 };
 
 export default nextConfig;
