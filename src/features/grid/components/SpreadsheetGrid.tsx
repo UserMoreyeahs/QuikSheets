@@ -17,6 +17,7 @@ import { createDefaultSheet } from '@/lib/defaultSheet'
 import { DEFAULT_CELL_HEIGHT, DEFAULT_CELL_WIDTH, DEFAULT_COLS, DEFAULT_ROWS } from '@/lib/constants'
 import { colIndexToLetter, fromCellNotation, toCellNotation } from '@/lib/cellAddress'
 import { useSheetStore } from '@/store/sheetStore'
+import { useShallow } from 'zustand/react/shallow'
 import { useWorkbookStore } from '@/store/workbookStore'
 import { FormulaTooltip, useFormulaExplainer } from '@/features/formula-explainer'
 import { SmartPasteBanner, useSmartPaste } from '@/features/smart-paste'
@@ -112,7 +113,26 @@ export function SpreadsheetGrid({
     setSkipNextTabSync,
     validationRules,
     hydrationVersion,
-  } = useSheetStore()
+  } = useSheetStore(
+    // Subscribe to only the fields this component uses (shallow-compared) so it
+    // no longer re-renders on every unrelated sheetStore mutation (isSaving,
+    // findResults, undoStack, activeFormatting, sortConfig, …).
+    useShallow((s) => ({
+      gridSheets: s.gridSheets,
+      replaceGridSheets: s.replaceGridSheets,
+      setGridInstance: s.setGridInstance,
+      setGridSheets: s.setGridSheets,
+      setSelectedCell: s.setSelectedCell,
+      setSelectedRange: s.setSelectedRange,
+      setFormulaBarValue: s.setFormulaBarValue,
+      updateCell: s.updateCell,
+      resetFormatting: s.resetFormatting,
+      skipNextTabSync: s.skipNextTabSync,
+      setSkipNextTabSync: s.setSkipNextTabSync,
+      validationRules: s.validationRules,
+      hydrationVersion: s.hydrationVersion,
+    })),
+  )
   const { sheets: tabSheets, activeSheetId } = useWorkbookStore()
 
   const workbookRef = useRef<WorkbookInstance | null>(null)
@@ -1090,8 +1110,9 @@ export function SpreadsheetGrid({
           }}
           onFormatCells={() => {
             setContextMenu(null)
-            // Surface the Home tab's Number Format dropdown by focusing it
-            // via a custom event — wired up at the FormattingToolbar level.
+            // Surface the Home tab's Number Format dropdown. The Ribbon
+            // listens for this event, switches to the Home tab, and opens
+            // the Number Format dropdown (see Ribbon.tsx).
             window.dispatchEvent(new CustomEvent('quiksheets:open-format-cells'))
           }}
           onInsertHyperlink={() => {
