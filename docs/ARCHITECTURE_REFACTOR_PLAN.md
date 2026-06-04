@@ -8,6 +8,14 @@
 > **Author:** senior-architecture audit pass (4 parallel deep-dives:
 > data layer · state · components · performance), June 2026.
 > **Scope:** `src/` (64,115 LOC; 76% in `features/`).
+>
+> **Validation note:** all findings below were re-checked against the **live
+> `develop` branch** (the deployed tree). The audit's broad sweep also touched a
+> stale local worktree (57 commits behind), which produced two findings that are
+> **already resolved on `develop`** — they are struck through and retained for
+> transparency: *(a)* the `FormattingToolbar`/`QuickToolbar` dead code was already
+> removed; *(b)* `ImportModal`/`xlsx` is already `dynamic()`-split. Every P0 and
+> the remaining P1/P2 items are confirmed present on `develop`.
 
 ---
 
@@ -31,7 +39,7 @@ cross-workbook state leaks, type-flicker) and that cap scalability.
 | 2 | **No reset-on-workbook-switch** for ~7 stores; mount-load hooks have empty deps | Opening workbook B can show A's filters/undo/watches/print-settings and may not load B's cells. The charts-leak we already fixed is one instance of a general class. | **P0** |
 | 3 | **Per-keystroke O(workbook) work** — 4× full clone + 3× full `JSON.stringify` + full-matrix diff, then the whole blob re-serialized for autosave | Sets the data-volume ceiling (~10–20k cells smooth; lag by 50k). The "type-flicker" history lives here. | **P0 (scale)** |
 | 4 | **Persistence boilerplate** — 11 near-identical `*Api.ts` modules (54 `getBrowserSupabase()` calls, 76 fallback branches) with **silent `catch {}`** | ~700–800 LOC of duplication and, worse, every failure is an *invisible* downgrade to localStorage — the mechanism that hid #1. | **P1** |
-| 5 | **God-modules** — sheet page (1515), `sheetStore` (1132), `SpreadsheetGrid` (1128), ribbon `OtherTabs` (1098) + a 62-field prop-drilled handler object | Maintainability tax on every change; couples unrelated concerns; ~1082 LOC of it is provably **dead code**. | **P1** |
+| 5 | **God-modules** — sheet page (1514), `sheetStore` (1132), `SpreadsheetGrid` (1128), ribbon `OtherTabs` (1098) + a 62-field prop-drilled handler object | Maintainability tax on every change; couples unrelated concerns into single 1000+ LOC files. | **P1** |
 
 **Headline posture:** the architecture is salvageable without a rewrite. The plan
 is a sequence of small, reversible refactors that (a) make failures *observable*,
@@ -245,11 +253,12 @@ with 38 inline `getState()` calls. *Fix:* decompose into `<WorkbookProviders>`
 (`useRibbonCommand(id)`), collapsing "add a command" from a 3-file change to 1.
 **Effort L · Risk med (pure structure; gate on e2e).**
 
-**P1-G · ~1082 LOC of dead code**
-*Components.* `QuickToolbar.tsx` (527) — zero references. `FormattingToolbar.tsx`
-(555) — only a barrel re-export (`toolbar/index.ts:1`), never rendered (the app uses
-the ribbon). *Verified by grep.* *Fix:* delete both + the barrel line; keep
-`useFormattingShortcuts`. **Effort S · Risk ~none.** → **Stage 0 quick win.**
+**~~P1-G · ~1082 LOC of dead code~~ — ALREADY RESOLVED on `develop`**
+*Components.* The audit (reading a stale worktree) flagged `QuickToolbar.tsx` (527)
+and `FormattingToolbar.tsx` (555) as dead. On live `develop` **both files no longer
+exist** (removed in a prior commit; `toolbar/index.ts` exports only
+`useFormattingShortcuts`; the sole remaining reference is a stale comment at
+`SpreadsheetGrid.tsx:1094`). No action needed beyond optionally tidying that comment.
 
 **P1-H · `SpreadsheetGrid` owns 7+ concerns incl. automation trigger-firing**
 *Components.* Beyond rendering: the 6-ref store↔grid sync machine, a 139-LOC
@@ -272,9 +281,11 @@ M · Risk med (verify add/remove still hydrate; gate on sheet-mgmt tests).**
   write-through-in-action vs separate cell/extras paths) — unify the
   "UUID→Supabase else localStorage" branch into one `persistWorkbookResource`
   helper. *Data/state. M.*
-- **P2-B · `xlsx` (~900 KB) static in the /sheet bundle** via `ImportModal`
-  (`page.tsx:42` → `importUtils.ts:1 import * as XLSX`). Export was lazy-loaded;
-  import was missed. `dynamic()` it. *Bundle. S · low risk.*
+- **~~P2-B · `xlsx` static in the /sheet bundle~~ — ALREADY RESOLVED on `develop`.**
+  The audit (stale worktree) flagged a static `ImportModal` import. On live
+  `develop` `ImportModal` is already `dynamic()`-imported (`page.tsx:70`, with a
+  comment noting it pulls in SheetJS), so `xlsx` is already code-split out of the
+  initial route bundle. No action needed.
 - **P2-C · No `experimental.optimizePackageImports`** in `next.config.mjs` for
   `lucide-react` / `@radix-ui/*` / `framer-motion`. *Bundle. S.*
 - **P2-D · Custom-formula validation rebuilds the whole workbook in HF per edit**
@@ -410,7 +421,7 @@ context-menu/overlays extract to hooks. Dialogs use **one** open-state mechanism
 
 | Stage | Theme | Contains | Depends on | Effort | Risk |
 |---|---|---|---|---|---|
-| **0** | **Quick wins** | P1-G delete dead code; P2-B lazy `xlsx`; P2-C `optimizePackageImports`; P2-H `sendBeacon` | — | S | ~none |
+| **0** | **Quick wins** | ✅ P2-C `optimizePackageImports` (done); P2-H `sendBeacon` deferred (beacon can't set the auth header — needs body/cookie auth). *P1-G dead-code & P2-B xlsx-split already resolved on `develop`.* | — | S | ~none |
 | **1** | **Make failures visible** | P1-A(1) `logger.warn` on every fallback branch + kill 7 `catch {}` in formsApi | — | S | low |
 | **2** | **Stop state leaks** | P0-B `resetWorkbookScope()` registry; P0-C key load hooks on `[workbookId]`; P1-3 demo reset; P2-I counters | 1 (for logs) | M | med |
 | **3** | **Kill the re-render storm** | P1-E `useShallow` on the 9 whole-store subscribers | — | M | low |
@@ -457,7 +468,8 @@ keystroke re-render storm — all behind the green gate, no product behavior cha
   7 bare `catch {}` in `formsApi` · 1 module UUID-gates.
 - **God-files:** page 1515 · sheetStore 1132 · SpreadsheetGrid 1128 · OtherTabs 1098
   · cellOps 881 · PivotBuilder 788.
-- **Dead code:** QuickToolbar 527 + FormattingToolbar 555 = **1082 LOC**.
+- **Dead code:** QuickToolbar 527 + FormattingToolbar 555 = 1082 LOC — **already
+  removed on `develop`** (present only in the stale audit worktree).
 - **Schema artifacts:** 4, none matching the live DB.
 - **Data-volume ceiling:** ~10–20k cells smooth · lag ~50k · unusable ~100k+ (one sheet).
 
