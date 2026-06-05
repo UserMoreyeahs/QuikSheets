@@ -65,7 +65,6 @@ const publicSchema = z.object({
   NEXT_PUBLIC_APP_URL: trimmedString.optional().default('http://localhost:3000'),
   NEXT_PUBLIC_SUPABASE_URL: optionalString,
   NEXT_PUBLIC_SUPABASE_ANON_KEY: optionalString,
-  NEXT_PUBLIC_ENGINE: z.enum(['fortune', 'univer']).optional().default('fortune'),
 
   // Feature flags
   NEXT_PUBLIC_FF_PIVOT: booleanFlag,
@@ -75,7 +74,6 @@ const publicSchema = z.object({
   NEXT_PUBLIC_FF_ROW_RLS: booleanFlag,
   NEXT_PUBLIC_FF_FORECAST: booleanFlag,
   NEXT_PUBLIC_REALTIME_CRDT: booleanFlag,
-  NEXT_PUBLIC_FEATURE_UNIVER_PRO: booleanFlag,
 })
 
 function readPublicEnv() {
@@ -88,7 +86,6 @@ function readPublicEnv() {
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: supabasePublicKey,
-    NEXT_PUBLIC_ENGINE: process.env.NEXT_PUBLIC_ENGINE,
     NEXT_PUBLIC_FF_PIVOT: process.env.NEXT_PUBLIC_FF_PIVOT,
     NEXT_PUBLIC_FF_DASHBOARDS: process.env.NEXT_PUBLIC_FF_DASHBOARDS,
     NEXT_PUBLIC_FF_MACROS: process.env.NEXT_PUBLIC_FF_MACROS,
@@ -96,7 +93,6 @@ function readPublicEnv() {
     NEXT_PUBLIC_FF_ROW_RLS: process.env.NEXT_PUBLIC_FF_ROW_RLS,
     NEXT_PUBLIC_FF_FORECAST: process.env.NEXT_PUBLIC_FF_FORECAST,
     NEXT_PUBLIC_REALTIME_CRDT: process.env.NEXT_PUBLIC_REALTIME_CRDT,
-    NEXT_PUBLIC_FEATURE_UNIVER_PRO: process.env.NEXT_PUBLIC_FEATURE_UNIVER_PRO,
   })
 }
 
