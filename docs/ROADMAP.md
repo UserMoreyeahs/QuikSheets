@@ -52,7 +52,7 @@ After #1, run `npm run db:check-drift` — it should go green, confirming cloud 
 | 4 | **Make the persistence fallback visible in the UI** — a sticky "Not syncing to cloud" banner when a logged-in user's save lands in localStorage (the logging exists; promote a *config* failure to a user-facing warning). | This class of outage (forms/dashboards/workbooks.data) has hidden 4× because "DB rejected" and "offline" look identical. Make it loud. |
 | 5 | **CI-applied migrations** — `0013` sat unapplied because applying is manual. Add a deploy step (Supabase CLI `db push`, or a checked gate) so migrations can't lag the code. | The *process* fix that prevents the whole "silently on localStorage" class. |
 | 6 | **Error monitoring** (Sentry or similar) on client + API routes. | You currently find bugs only when a user reports them. |
-| 7 | **Delete / archive the stray Supabase project** `anfvgmlgsthhdhwncxzt` and re-point the MCP at the canonical project. | It's a footgun — the MCP keeps targeting the empty one. |
+| 7 | ✅ MCP re-pointed at the canonical project (`.mcp.json` → `mrvzwwfnimqufendjfhj`). **Remaining:** delete/archive the stray project `anfvgmlgsthhdhwncxzt` in the Supabase dashboard so it can never be targeted again. | It was a footgun — the MCP kept targeting the empty one. |
 | 8 | **Decide + message collaboration semantics** (single-editor v1, or commit to Phase 3). | Sets user expectations honestly; avoids "my edits vanished" reports. |
 
 ## Phase 2 — Stabilize & maintainability (weeks; fund if this codebase has a long future)

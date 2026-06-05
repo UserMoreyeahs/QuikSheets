@@ -1,5 +1,5 @@
 import { GROQ_MODEL, groq, isGroqConfigured } from '@/lib/groq'
-import { consumeToken } from '@/lib/rateLimit'
+import { consumeTokenDurable } from '@/lib/rateLimit'
 import { getServerSupabase } from '@/lib/supabase/server'
 
 interface AiTextResponseOptions {
@@ -67,7 +67,7 @@ async function getRateLimitKey(request: Request): Promise<string> {
  */
 export async function enforceAiRateLimit(request: Request): Promise<Response | null> {
   const key = await getRateLimitKey(request)
-  const result = consumeToken(key)
+  const result = await consumeTokenDurable(key)
   if (result.ok) return null
   const retrySec = Math.ceil((result.retryAfterMs ?? 60_000) / 1000)
   return new Response(
