@@ -57,7 +57,7 @@ Treat the **Testing_Data** sheet (T001–T029) as the acceptance battery. A feat
 You inherit a partial Quiksheets build that drifted from spec. Honest summary:
 
 **What works and should be preserved:**
-- Supabase project at `https://anfvgmlgsthhdhwncxzt.supabase.co` with the full normalized schema (22 tables) and corrected RLS policies (migrations `0001_…` through `0010_break_cross_table_recursion.sql`).
+- Supabase project (canonical) at `https://mrvzwwfnimqufendjfhj.supabase.co` with the full schema and member-based RLS (migrations `0001_…` through `0013_workbooks_data_column.sql`). (The old `anfvgmlgsthhdhwncxzt` project was a stray empty one — do NOT use it.)
 - Auth: signup/login/reset/confirm pages, middleware-gated routes, `on_auth_user_created` trigger that auto-provisions profile + workspace + owner membership.
 - Server actions for: workbook CRUD, cell upserts, member invites, comments, protected ranges, share links, charts, version snapshots, automations, forms, dashboards (in `src/features/*/actions.ts`).
 - AI routes for formula gen, explain, smart paste, summarize, NL filter, forecast (under `src/app/api/ai/*`).
@@ -262,7 +262,7 @@ Begin with this exact reply (substitute `<...>`):
 Acknowledged. I have read MASTER_REBUILD_PROMPT.md, TECH_STACK.md, FEATURES.md, ARCHITECTURE.md, DATABASE_SCHEMA.md, and the MVP/Testing_Data Excel.
 
 Before Phase 1, three quick verifications:
-1. Confirm Supabase project ref `anfvgmlgsthhdhwncxzt` is the one you want me to keep using.
+1. Canonical Supabase project ref is `mrvzwwfnimqufendjfhj` (the only one in use).
 2. Confirm I should remove `@fortune-sheet/*` and `hyperformula` even though that breaks current callers (which is the point of Phase 1).
 3. Confirm we're shipping to <Vercel | Railway | Fly.io> — pick one now since Phase 7 needs it.
 
