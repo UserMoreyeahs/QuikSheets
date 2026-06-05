@@ -8,10 +8,15 @@ const PUBLIC_PREFIXES = ['/login', '/signup', '/reset', '/confirm', '/unauthoriz
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  const isProtected = PROTECTED_PREFIXES.some((p) => pathname.startsWith(p))
+  // Match on a path BOUNDARY, not a bare prefix. A bare startsWith made the
+  // public '/s' (share-token route) swallow '/sheet/*' — so EVERY sheet route
+  // bypassed the auth gate. `=== p || startsWith(p + '/')` keeps '/s/<token>'
+  // public while '/sheet/<id>' stays protected.
+  const onPathBoundary = (p: string) => pathname === p || pathname.startsWith(`${p}/`)
+  const isProtected = PROTECTED_PREFIXES.some(onPathBoundary)
   if (!isProtected) return NextResponse.next()
   // Skip if any public prefix matches first
-  if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) return NextResponse.next()
+  if (PUBLIC_PREFIXES.some(onPathBoundary)) return NextResponse.next()
 
   // If Supabase isn't configured, fall through (the legacy localStorage path
   // still works and the app should not be locked out in dev).
@@ -43,9 +48,25 @@ export async function middleware(request: NextRequest) {
 
   const {
     data: { user },
+    error,
   } = await supabase.auth.getUser()
 
   if (!user) {
+    // Distinguish "no session" from "Supabase momentarily unreachable".
+    // getUser() returns { user: null } WITHOUT throwing on a network blip
+    // (AuthRetryableFetchError). Redirecting on that logs out a user who
+    // holds a valid cookie — the reported "Failed to fetch → kicked to
+    // /login after a restart/blip". FAIL OPEN on transient/server errors;
+    // only redirect on a genuine null user with no error. (The page's own
+    // client auth still guards data access, so this isn't a security hole.)
+    const status = (error as { status?: number } | null)?.status
+    const transient =
+      !!error &&
+      (error.name === 'AuthRetryableFetchError' ||
+        status === 0 ||
+        (typeof status === 'number' && status >= 500))
+    if (transient) return response
+
     const loginUrl = new URL('/login', request.url)
     // Only ever round-trip a same-origin path. A protocol-relative value
     // like "//evil.com" is a valid pathname but turns the post-login

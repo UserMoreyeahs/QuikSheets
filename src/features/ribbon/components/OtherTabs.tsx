@@ -516,13 +516,14 @@ export function PageLayoutTab(props: PageLayoutTabProps) {
           </div>
           <div className="flex items-center gap-2">
             <span className="w-16 text-zinc-700 dark:text-zinc-200">Headings</span>
-            <label className="flex items-center gap-1">
-              <input
-                type="checkbox"
-                className="h-3 w-3"
-                checked={props.headingsVisible ?? true}
-                onChange={() => props.onToggleHeadings?.()}
-              />
+            {/* On-screen row/column headings are always visible in this web
+                grid and the toggle was never wired through (no-op), so the
+                "View" box is shown disabled. "Print" below is fully functional. */}
+            <label
+              className="flex items-center gap-1 text-zinc-400 dark:text-zinc-500"
+              title="Row/column headings are always shown in Quiksheets"
+            >
+              <input type="checkbox" className="h-3 w-3" defaultChecked disabled />
               View
             </label>
             <label className="flex items-center gap-1">
@@ -541,8 +542,14 @@ export function PageLayoutTab(props: PageLayoutTabProps) {
       {/* Arrange */}
       <RibbonGroup label="Arrange" className="border-r-0">
         <div className="flex flex-col gap-0.5">
-          <RibbonButton label="Bring Forward"   icon={<ArrowUpToLine className="h-3.5 w-3.5" />}   onClick={() => useSelectionPaneStore.getState().openPane()} />
-          <RibbonButton label="Send Backward"   icon={<ArrowDownToLine className="h-3.5 w-3.5" />} onClick={() => useSelectionPaneStore.getState().openPane()} />
+          {/* Per-object z-order needs a *selected* canvas object, which isn't
+              modelled at the ribbon level — the Selection Pane (below) is the
+              real z-order tool (it reorders each object via the overlay store's
+              bringForward/sendBackward). These two are marked coming-soon
+              (hidden in production) instead of silently opening the pane under
+              two different labels. */}
+          <RibbonButton label="Bring Forward"   icon={<ArrowUpToLine className="h-3.5 w-3.5" />}   onClick={ribbonStub('Bring Forward')} />
+          <RibbonButton label="Send Backward"   icon={<ArrowDownToLine className="h-3.5 w-3.5" />} onClick={ribbonStub('Send Backward')} />
           <RibbonButton label="Selection Pane"  icon={<LayoutList className="h-3.5 w-3.5" />}      onClick={() => useSelectionPaneStore.getState().togglePane()} />
         </div>
         <div className="flex flex-col gap-0.5">
@@ -937,12 +944,16 @@ export function ViewTab(props: ViewTabProps) {
 
       {/* Show */}
       <RibbonGroup label="Show">
+        {/* Only Gridlines + Formula Bar are interactive (they drive real grid
+            state). The others are Excel-desktop view options that don't apply
+            to this web grid — shown disabled so they don't look toggleable but
+            inert. Navigation/Headings are effectively always-on here. */}
         <div className="flex flex-col gap-1.5 px-1 py-1 text-[11px]">
-          <label className="flex cursor-pointer items-center gap-1.5 text-zinc-700 dark:text-zinc-200">
-            <input type="checkbox" className="h-3 w-3 rounded accent-emerald-600" defaultChecked /> Navigation
+          <label className="flex items-center gap-1.5 text-zinc-400 dark:text-zinc-500" title="Always shown in Quiksheets">
+            <input type="checkbox" className="h-3 w-3 rounded accent-emerald-600" defaultChecked disabled /> Navigation
           </label>
-          <label className="flex cursor-pointer items-center gap-1.5 text-zinc-700 dark:text-zinc-200">
-            <input type="checkbox" className="h-3 w-3 rounded accent-emerald-600" /> Ruler
+          <label className="flex items-center gap-1.5 text-zinc-400 dark:text-zinc-500" title="Not available in Quiksheets">
+            <input type="checkbox" className="h-3 w-3 rounded accent-emerald-600" disabled /> Ruler
           </label>
           <label className="flex cursor-pointer items-center gap-1.5 text-zinc-700 dark:text-zinc-200">
             <input type="checkbox" className="h-3 w-3 rounded accent-emerald-600" checked={props.gridlinesVisible} onChange={props.onToggleGridlines} /> Gridlines
@@ -952,23 +963,25 @@ export function ViewTab(props: ViewTabProps) {
           </label>
         </div>
         <div className="flex flex-col gap-1.5 px-1 py-1 text-[11px]">
-          <label className="flex cursor-pointer items-center gap-1.5 text-zinc-700 dark:text-zinc-200">
-            <input type="checkbox" className="h-3 w-3 rounded accent-emerald-600" defaultChecked /> Headings
+          <label className="flex items-center gap-1.5 text-zinc-400 dark:text-zinc-500" title="Row/column headings are always shown in Quiksheets">
+            <input type="checkbox" className="h-3 w-3 rounded accent-emerald-600" defaultChecked disabled /> Headings
           </label>
-          <label className="flex cursor-pointer items-center gap-1.5 text-zinc-700 dark:text-zinc-200">
-            <input type="checkbox" className="h-3 w-3 rounded accent-emerald-600" /> Data Type Icons
+          <label className="flex items-center gap-1.5 text-zinc-400 dark:text-zinc-500" title="Not available in Quiksheets">
+            <input type="checkbox" className="h-3 w-3 rounded accent-emerald-600" disabled /> Data Type Icons
           </label>
-          <label className="flex cursor-pointer items-center gap-1.5 text-zinc-700 dark:text-zinc-200">
-            <input type="checkbox" className="h-3 w-3 rounded accent-emerald-600" /> Focus Cell
+          <label className="flex items-center gap-1.5 text-zinc-400 dark:text-zinc-500" title="Not available in Quiksheets">
+            <input type="checkbox" className="h-3 w-3 rounded accent-emerald-600" disabled /> Focus Cell
           </label>
         </div>
       </RibbonGroup>
 
       {/* Zoom */}
       <RibbonGroup label="Zoom">
-        <RibbonLargeButton label="Zoom"             icon={<ZoomIn className="text-blue-500" />}  onClick={props.onZoomIn} />
-        <RibbonLargeButton label="100%"             icon={<Circle className="text-zinc-500" />}   onClick={props.onZoomReset} />
-        <RibbonLargeButton label="Zoom to Selection" icon={<ZoomOut className="text-blue-500" />} onClick={props.onZoomOut} />
+        {/* Labels match their actions: the first zooms in, the third zooms out.
+            (Previously mislabelled "Zoom" / "Zoom to Selection".) */}
+        <RibbonLargeButton label="Zoom In"  icon={<ZoomIn className="text-blue-500" />}  onClick={props.onZoomIn} />
+        <RibbonLargeButton label="100%"     icon={<Circle className="text-zinc-500" />}   onClick={props.onZoomReset} />
+        <RibbonLargeButton label="Zoom Out" icon={<ZoomOut className="text-blue-500" />} onClick={props.onZoomOut} />
       </RibbonGroup>
 
       {/* Window */}

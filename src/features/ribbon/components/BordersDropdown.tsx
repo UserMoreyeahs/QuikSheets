@@ -33,7 +33,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { applyBorder, type BorderPreset, type BorderLineStyle } from '../utils/cellOps'
-import { ribbonStub } from '../utils/ribbonStub'
+import { ribbonStub, HIDE_RIBBON_STUBS } from '../utils/ribbonStub'
 
 interface PresetButtonProps {
   label: string
@@ -221,15 +221,21 @@ export function BordersDropdown() {
           </div>
         </div>
 
-        {/* Divider + More Borders */}
-        <div className="my-1 border-t border-zinc-200 dark:border-zinc-700" />
-        <button
-          type="button"
-          onClick={ribbonStub('More Borders…')}
-          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs text-zinc-600 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
-        >
-          More Borders…
-        </button>
+        {/* Divider + More Borders — hidden in production via the stub flag so
+            it doesn't render as a "coming soon" item (it isn't routed through
+            the RibbonButton primitives that normally honour the flag). */}
+        {!HIDE_RIBBON_STUBS && (
+          <>
+            <div className="my-1 border-t border-zinc-200 dark:border-zinc-700" />
+            <button
+              type="button"
+              onClick={ribbonStub('More Borders…')}
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs text-zinc-600 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              More Borders…
+            </button>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )

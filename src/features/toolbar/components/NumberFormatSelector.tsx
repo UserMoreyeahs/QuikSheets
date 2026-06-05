@@ -21,9 +21,19 @@ const NUMBER_FORMATS: { value: NumberFormat; label: string; example: string }[] 
 interface NumberFormatSelectorProps {
   value: NumberFormat
   onChange: (format: NumberFormat) => void
+  /**
+   * When this flips to `true`, force-open the dropdown. The right-click
+   * "Format cells…" menu dispatches a window event that the Ribbon turns
+   * into this one-shot signal (see Ribbon.tsx). The parent resets its
+   * trigger in `onAutoOpened` so a steady `true` can't re-open it on every
+   * render.
+   */
+  autoOpen?: boolean | undefined
+  /** Fired immediately after an auto-open, so the parent can reset its trigger. */
+  onAutoOpened?: (() => void) | undefined
 }
 
-export function NumberFormatSelector({ value, onChange }: NumberFormatSelectorProps) {
+export function NumberFormatSelector({ value, onChange, autoOpen, onAutoOpened }: NumberFormatSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [rect, setRect] = useState<DOMRect | null>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -45,6 +55,19 @@ export function NumberFormatSelector({ value, onChange }: NumberFormatSelectorPr
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  // Force-open when the Ribbon relays a "Format cells…" request from the
+  // right-click menu. Opening here (instead of letting the parent own
+  // `isOpen`) keeps the dropdown self-contained; `onAutoOpened` lets the
+  // parent clear its one-shot trigger so this can't loop.
+  useEffect(() => {
+    if (!autoOpen) return
+    if (buttonRef.current) {
+      setRect(buttonRef.current.getBoundingClientRect())
+    }
+    setIsOpen(true)
+    onAutoOpened?.()
+  }, [autoOpen, onAutoOpened])
 
   function handleOpen() {
     if (buttonRef.current) {

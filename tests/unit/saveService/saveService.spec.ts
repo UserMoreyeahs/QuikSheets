@@ -261,23 +261,58 @@ describe('id-keyed persistence round-trip', () => {
 // Optimistic concurrency: a stale save is rejected (409) instead of silently
 // overwriting someone else's edit — and the user's work is never lost.
 describe('save-conflict guard', () => {
-  it('sends baseUpdatedAt once a version is noted, surfaces 409 as conflict, and keeps data local', async () => {
+  it('on a versionless 409 drops the stale base and retries unconditionally, then surfaces conflict + keeps data local', async () => {
     const { saveWorkbook, noteWorkbookVersion } = await import('@/lib/saveService')
     mockSession = { access_token: SESSION_TOKEN, user: { id: 'u1' } }
     noteWorkbookVersion('wbc1', '2026-01-01T00:00:00Z')
 
-    let sentBase: string | undefined
+    const sentBases: (string | undefined)[] = []
     mockFetch = async (_url, init) => {
-      sentBase = JSON.parse(String(init?.body)).baseUpdatedAt
+      sentBases.push(JSON.parse(String(init?.body)).baseUpdatedAt)
+      // 409 with NO currentUpdatedAt — sheetApi legitimately sends `null` here.
       return new Response(JSON.stringify({ error: 'conflict' }), { status: 409 })
     }
 
     const result = await saveWorkbook({ id: 'wbc1', name: 'X', data: { v: 1 } })
-    expect(sentBase).toBe('2026-01-01T00:00:00Z')
+    // First attempt sends the noted base; after a versionless 409 it DROPS the
+    // base and retries unconditionally so the client can't wedge forever on a
+    // base it can never advance (the reported "Edited elsewhere" lock-up).
+    expect(sentBases).toHaveLength(2)
+    expect(sentBases[0]).toBe('2026-01-01T00:00:00Z')
+    expect(sentBases[1]).toBeUndefined()
+    // Retry also conflicted → surface conflict, keep work local (no loss).
     expect(result.conflict).toBe(true)
     expect(result.destination).toBe('localStorage')
-    // Work preserved locally — no data loss on conflict.
     expect(store['quiksheets_workbook:u1:id:wbc1']).toBeDefined()
+  })
+
+  it('on a 409 WITH a server version, adopts it and the retry succeeds (self-heal)', async () => {
+    const { saveWorkbook, noteWorkbookVersion } = await import('@/lib/saveService')
+    mockSession = { access_token: SESSION_TOKEN, user: { id: 'u1' } }
+    // Unique id so the module-global version map doesn't leak into other tests.
+    noteWorkbookVersion('wbcHeal', '2026-01-01T00:00:00Z')
+
+    const sentBases: (string | undefined)[] = []
+    let calls = 0
+    mockFetch = async (_url, init) => {
+      sentBases.push(JSON.parse(String(init?.body)).baseUpdatedAt)
+      calls += 1
+      if (calls === 1) {
+        return new Response(
+          JSON.stringify({ error: 'conflict', currentUpdatedAt: '2026-02-02T00:00:00Z' }),
+          { status: 409 },
+        )
+      }
+      return new Response(JSON.stringify({ id: 'wbcHeal', updatedAt: '2026-02-02T00:00:01Z' }), {
+        status: 200,
+      })
+    }
+
+    const result = await saveWorkbook({ id: 'wbcHeal', name: 'X', data: { v: 2 } })
+    expect(sentBases[0]).toBe('2026-01-01T00:00:00Z') // stale first attempt
+    expect(sentBases[1]).toBe('2026-02-02T00:00:00Z') // adopted server version on retry
+    expect(result.destination).toBe('supabase')
+    expect(result.conflict).toBeUndefined()
   })
 
   it('records the returned updatedAt so the NEXT save sends it as the base', async () => {

@@ -171,7 +171,10 @@ async function getAuthContext(): Promise<AuthContext> {
  * if the user is unauthenticated, Supabase is not configured, or the
  * server returns a non-2xx response.
  */
-export async function saveWorkbook(payload: WorkbookSaveData): Promise<SaveResult> {
+export async function saveWorkbook(
+  payload: WorkbookSaveData,
+  options?: { isRetry?: boolean },
+): Promise<SaveResult> {
   const { accessToken, userId } = await getAuthContext()
   if (!accessToken) {
     persistLocally(payload, userId)
@@ -192,8 +195,42 @@ export async function saveWorkbook(payload: WorkbookSaveData): Promise<SaveResul
       body: JSON.stringify(baseUpdatedAt ? { ...payload, baseUpdatedAt } : payload),
     })
     if (res.status === 409) {
-      // Someone else saved first. Keep the user's work locally (NO data
-      // loss) and signal a conflict so the UI can prompt a reload/merge.
+      // Optimistic-concurrency conflict: the row's updated_at moved since we
+      // last synced. The 409 body carries the server's CURRENT updated_at —
+      // adopt it so we stop looping on a stale base, then retry the save ONCE
+      // with the fresh base (last-writer-wins).
+      //
+      // Without this, a single conflict wedged the client into a PERMANENT
+      // 409 loop: every later autosave re-sent the same stale baseUpdatedAt,
+      // so the user's edits never persisted and only a full reload — which
+      // discards them — "recovered". (Trade-off: after a genuine concurrent
+      // edit by another session this resolves last-writer-wins, which is the
+      // expected model for this app and strictly better than losing the
+      // active user's work.)
+      let currentUpdatedAt: string | undefined
+      try {
+        const body = (await res.json()) as { currentUpdatedAt?: string }
+        currentUpdatedAt = body.currentUpdatedAt ?? undefined
+      } catch {
+        // Body wasn't JSON / already consumed — fall through to conflict.
+      }
+      if (payload.id && !options?.isRetry) {
+        if (currentUpdatedAt) {
+          // Adopt the server's current version, then retry with a correct base.
+          noteWorkbookVersion(payload.id, currentUpdatedAt)
+        } else {
+          // Conflict with NO usable server version (currentUpdatedAt was null —
+          // sheetApi sends `?? null` — or the body wasn't JSON). Drop the stale
+          // base so the retry sends no baseUpdatedAt → the server does an
+          // unconditional last-writer-wins update instead of looping forever on
+          // a base we can never advance. Without this, the user stays wedged on
+          // "Edited elsewhere" and edits never persist.
+          delete _workbookVersions[payload.id]
+        }
+        return saveWorkbook(payload, { isRetry: true })
+      }
+      // The retry also conflicted (rapid concurrent edits), or we couldn't
+      // read the server version — keep the work locally and surface it.
       persistLocally(payload, userId)
       return {
         id: payload.id ?? null,

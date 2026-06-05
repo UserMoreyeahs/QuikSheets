@@ -99,6 +99,11 @@ interface HomeTabProps {
   onProtectedRanges?: (() => void) | undefined
   onCustomSort?: (() => void) | undefined
   onAIAssistant: () => void
+  /** Relayed from the Ribbon when the right-click "Format cells…" menu
+   *  fires: force-open the Number Format dropdown. */
+  autoOpenNumberFormat?: boolean | undefined
+  /** Reset callback so the one-shot open signal doesn't repeat. */
+  onNumberFormatAutoOpened?: (() => void) | undefined
 }
 
 export function HomeTab(props: HomeTabProps) {
@@ -302,7 +307,12 @@ export function HomeTab(props: HomeTabProps) {
         <div className="flex flex-col gap-0.5">
           {/* Top row: format dropdown takes ~120px to align with bottom row */}
           <div className="flex h-7 items-center">
-            <NumberFormatSelector value={activeFormatting.numberFormat} onChange={setNumberFormat} />
+            <NumberFormatSelector
+              value={activeFormatting.numberFormat}
+              onChange={setNumberFormat}
+              autoOpen={props.autoOpenNumberFormat}
+              onAutoOpened={props.onNumberFormatAutoOpened}
+            />
           </div>
           {/* Bottom row: 3 narrow buttons (26px) + 2 wider buttons (32px) = ~138px */}
           <div className="flex items-center gap-0.5">
@@ -472,7 +482,18 @@ export function HomeTab(props: HomeTabProps) {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
             <DropdownMenuItem onSelect={props.onFind}>Find…</DropdownMenuItem>
-            <DropdownMenuItem onSelect={props.onFind}>Replace…</DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => {
+                // Open Find & Replace in *replace* mode. FindReplace owns the
+                // find/replace mode locally and switches to replace on Ctrl+H,
+                // so reuse that path instead of threading mode through the store.
+                window.dispatchEvent(
+                  new KeyboardEvent('keydown', { key: 'h', ctrlKey: true, metaKey: true, bubbles: true }),
+                )
+              }}
+            >
+              Replace…
+            </DropdownMenuItem>
             <DropdownMenuItem onSelect={goToDialog}>Go To…</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={selectCellsWithFormulas}>Formulas</DropdownMenuItem>

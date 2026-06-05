@@ -14,7 +14,7 @@
  * Tab state is purely local UI — no global store needed.
  */
 
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import {
   DropdownMenu,
@@ -229,6 +229,22 @@ function RibbonTabBar({
 export function Ribbon({ handlers }: { handlers: RibbonHandlers }) {
   const [activeTab, setActiveTab] = useState<RibbonTab>('home')
 
+  // Right-click → "Format cells…" (SpreadsheetGrid) dispatches
+  // `quiksheets:open-format-cells`. The Home tab's Number Format dropdown
+  // only exists while that tab is mounted, so switch to Home and hand a
+  // one-shot open signal down to it. `clearPendingNumberFormatOpen` resets
+  // the signal once the dropdown has opened so it doesn't re-open later.
+  const [pendingNumberFormatOpen, setPendingNumberFormatOpen] = useState(false)
+  useEffect(() => {
+    function handleOpenFormatCells() {
+      setActiveTab('home')
+      setPendingNumberFormatOpen(true)
+    }
+    window.addEventListener('quiksheets:open-format-cells', handleOpenFormatCells)
+    return () => window.removeEventListener('quiksheets:open-format-cells', handleOpenFormatCells)
+  }, [])
+  const clearPendingNumberFormatOpen = useCallback(() => setPendingNumberFormatOpen(false), [])
+
   return (
     <div className="shrink-0">
       {/* Row 1: Tab selector with File backstage button */}
@@ -258,6 +274,8 @@ export function Ribbon({ handlers }: { handlers: RibbonHandlers }) {
             onInsertSheet={handlers.onInsertSheet}
             onProtectedRanges={handlers.onProtectedRanges}
             onAIAssistant={handlers.onAIAssistant}
+            autoOpenNumberFormat={pendingNumberFormatOpen}
+            onNumberFormatAutoOpened={clearPendingNumberFormatOpen}
           />
         )}
         {activeTab === 'insert' && (

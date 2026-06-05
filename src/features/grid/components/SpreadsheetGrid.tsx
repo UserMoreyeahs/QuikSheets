@@ -183,6 +183,14 @@ export function SpreadsheetGrid({
     (instance: WorkbookInstance | null) => {
       if (workbookRef.current === instance) return
       workbookRef.current = instance
+      // Only PUBLISH a real instance. The null case (React calling the ref on
+      // unmount) is handled by the identity-guarded cleanup effect below. If we
+      // eagerly cleared the store here via a deferred timeout, that timeout
+      // could fire AFTER a remount registered the NEW instance and wipe it —
+      // leaving the store pointing at a dead grid (setCellValue silently
+      // no-ops; some ops throw the generic "Application error" overlay). That
+      // is exactly the stale-instance failure seen after HMR/remount.
+      if (!instance) return
       window.setTimeout(() => {
         if (workbookRef.current === instance) {
           setGridInstance(instance)
@@ -191,6 +199,20 @@ export function SpreadsheetGrid({
     },
     [setGridInstance]
   )
+
+  // Clear the shared gridInstance when THIS grid unmounts so a stale, detached
+  // FortuneSheet instance never lingers in the store. Identity-guarded: only
+  // null the store if it still points at the instance this component
+  // registered (don't clobber a newer one from a fast remount).
+  useEffect(() => {
+    return () => {
+      const owned = workbookRef.current
+      workbookRef.current = null
+      if (owned && useSheetStore.getState().gridInstance === owned) {
+        setGridInstance(null)
+      }
+    }
+  }, [setGridInstance])
 
   const workbookData = useMemo(() => cloneFortuneData(gridSheets), [gridSheets])
   const workbookStructureKey = useMemo(
