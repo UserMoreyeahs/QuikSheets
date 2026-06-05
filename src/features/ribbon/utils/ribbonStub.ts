@@ -17,6 +17,19 @@ import { toast } from 'sonner'
  */
 export const RIBBON_STUB_MARKER = Symbol.for('quiksheets.ribbonStub')
 
+/**
+ * Whether "coming soon" stub controls should be hidden.
+ *
+ * Single source of truth shared by the RibbonButton primitives AND by stub
+ * controls rendered as raw elements (e.g. DropdownMenuItems in CellsGroup /
+ * BordersDropdown) which don't pass through the primitives. Production builds
+ * hide stubs by default; dev shows them so unfinished work stays discoverable.
+ */
+export const HIDE_RIBBON_STUBS =
+  process.env.NEXT_PUBLIC_HIDE_RIBBON_STUBS === 'true' ||
+  (process.env.NODE_ENV === 'production' &&
+    process.env.NEXT_PUBLIC_SHOW_RIBBON_STUBS !== 'true')
+
 export interface RibbonStubHandler {
   (): void
   [RIBBON_STUB_MARKER]: string

@@ -78,7 +78,7 @@ export function CFDropdownMenu({ onOpenManageRules }: CFDropdownMenuProps) {
 
   const { selectedCell, selectedRange } = useSheetStore()
   const { activeSheetId } = useWorkbookStore()
-  const { addRule, applyToActiveSheet, clearFromSheet } = useCFStore()
+  const { addRule, applyToActiveSheet, clearFromSheet, clearRulesFromSelection } = useCFStore()
 
   // Quick add: addRule + applyToActiveSheet
   const quickAddRule = useCallback(
@@ -702,7 +702,9 @@ export function CFDropdownMenu({ onOpenManageRules }: CFDropdownMenuProps) {
                 type="button"
                 className="flex w-full items-center px-3 py-1.5 text-left text-sm text-zinc-700 hover:bg-blue-50 dark:text-zinc-200 dark:hover:bg-zinc-700/60"
                 onClick={() => {
-                  clearFromSheet(activeSheetId)
+                  // Scope the clear to the current selection (was clearing the
+                  // entire sheet, identical to the item below).
+                  clearRulesFromSelection(activeSheetId, selectionToRange(selectedCell, selectedRange))
                   closeAll()
                 }}
               >

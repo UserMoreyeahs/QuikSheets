@@ -4,6 +4,10 @@
 // Must run BEFORE FortuneSheet's dynamic import resolves so its formula parser
 // picks up the new functions.
 import '@/lib/formulajsPatches'
+// Patch @fortune-sheet/formula-parser so bare TRUE/FALSE literals resolve
+// (e.g. VLOOKUP(...,FALSE)) instead of erroring with #NAME?. Same ordering
+// requirement: must run before the FortuneSheet bundle initialises.
+import '@/lib/formulaParserPatches'
 
 import { useState, useCallback, useMemo } from 'react'
 import dynamic from 'next/dynamic'
@@ -21,6 +25,7 @@ import { WorkbookSidebar } from '@/features/workbook/components/WorkbookSidebar'
 import { createWorkbookAction, renameWorkbookAction } from '@/features/workbook/actions'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 import {
+  cloneSheetWithData,
   createSheetFromImportedData,
   createSheetFromImportedDataWithFidelity,
   getCellFormulaBarValue,
@@ -1019,37 +1024,20 @@ export default function SheetPage() {
       return
     }
 
+    // Compact to header + kept rows, then rebuild the sheet via
+    // cloneSheetWithData — which deletes `celldata` and rebuilds `data` in
+    // LOCKSTEP. The previous hand-rolled dual write could ship a non-empty
+    // `data` alongside an empty-but-present `celldata` (e.g. on imported
+    // sheets, whose `celldata` is undefined → `[]`), which FortuneSheet then
+    // treats as authoritative → the whole sheet could blank out. (CLAUDE.md:
+    // `data` and `celldata` must always move together.)
     const sortedKeepRows = [...keepRows].sort((a, b) => a - b)
-    const rowMap = new Map(sortedKeepRows.map((oldR, newR) => [oldR, newR]))
-    const newCelldata = (activeSheet.celldata ?? [])
-      .filter((cell) => keepRows.has(cell.r))
-      .map((cell) => ({ ...cell, r: rowMap.get(cell.r) ?? cell.r }))
-
-    // FortuneSheet renders from the 2-D `data` matrix, not from `celldata`.
-    // If we only rebuild `celldata`, the duplicate rows stay visible on
-    // screen even though the toast claims success — same shape as the
-    // chart-rendering bug from earlier in this session. Rebuild `data`
-    // by compacting rows from the same matrix the dedupe scan ran on.
-    const existingData = activeSheet.data
-    let newData: typeof existingData | undefined
-    if (Array.isArray(existingData) && existingData.length > 0) {
-      const cols = existingData[0]?.length ?? 26
-      const newRows = sortedKeepRows.map(
-        (oldR) => existingData[oldR] ?? (Array(cols).fill(null) as typeof existingData[number]),
-      )
-      // Pad back up to the original height with empty rows so the
-      // grid's overall row count doesn't shrink (and trailing rows
-      // don't suddenly show as missing).
-      while (newRows.length < existingData.length) {
-        newRows.push(Array(cols).fill(null) as typeof existingData[number])
-      }
-      newData = newRows
-    }
+    const compacted = sortedKeepRows.map((oldR) => matrix[oldR] ?? []) as typeof matrix
+    // Preserve the original row count so trailing rows don't appear to vanish.
+    while (compacted.length < matrix.length) compacted.push([])
 
     const updatedSheets = gridSheets.map((s) =>
-      s.id === activeSheet.id
-        ? { ...s, celldata: newCelldata, ...(newData ? { data: newData } : {}) }
-        : s,
+      s.id === activeSheet.id ? cloneSheetWithData(s, compacted) : s,
     )
     replaceGridSheets(updatedSheets)
     toast.success(`Removed ${duplicateCount} duplicate row${duplicateCount === 1 ? '' : 's'}`)
@@ -1319,7 +1307,14 @@ export default function SheetPage() {
             // File
             onNewWorkbook: handleNewWorkbookFromMenu,
             onOpenDashboard: () => router.push('/dashboard'),
-            onSaveNow: () => toast.success('Saved'),
+            onSaveNow: () => {
+              // Trigger a *real* save via the canonical path: SaveStatus owns
+              // performSave() on Ctrl+S and drives the save indicator. This was
+              // previously a toast-only no-op that never persisted anything.
+              window.dispatchEvent(
+                new KeyboardEvent('keydown', { key: 's', ctrlKey: true, metaKey: true, bubbles: true }),
+              )
+            },
             onImport: () => setShowImport(true),
             onExportCSV: () => exportToCSV(getActiveSheetData(), workbookName),
             onExportXLSX: () => exportToExcelFidelity(gridSheets, workbookName, buildExtrasForExport()),

@@ -271,10 +271,51 @@ export const useCFStore = create<CFState & CFActions>()(
         get().applyToActiveSheet()
       },
 
-      clearRulesFromSelection(sheetId, _rangeStr) {
-        // For simplicity, clear ALL rules from the sheet that overlap with the given range
-        // In practice, this is hard to do precisely, so we clear all rules
-        get().clearFromSheet(sheetId)
+      clearRulesFromSelection(sheetId, rangeStr) {
+        // Delete only the rules whose A1 range overlaps the given selection,
+        // so "Clear Rules from Selected Cells" no longer wipes the whole sheet.
+        const parseA1 = (
+          a1: string,
+        ): { sr: number; sc: number; er: number; ec: number } | null => {
+          const cell = (s: string): { r: number; c: number } | null => {
+            const m = /^\$?([A-Za-z]+)\$?(\d+)$/.exec(s.trim())
+            if (!m) return null
+            const letters = (m[1] ?? '').toUpperCase()
+            let col = 0
+            for (let i = 0; i < letters.length; i += 1) {
+              col = col * 26 + (letters.charCodeAt(i) - 64)
+            }
+            return { r: parseInt(m[2] ?? '1', 10) - 1, c: col - 1 }
+          }
+          const parts = (a1 ?? '').split(':')
+          const a = cell(parts[0] ?? '')
+          const b = parts[1] !== undefined ? cell(parts[1]) : a
+          if (!a || !b) return null
+          return {
+            sr: Math.min(a.r, b.r),
+            sc: Math.min(a.c, b.c),
+            er: Math.max(a.r, b.r),
+            ec: Math.max(a.c, b.c),
+          }
+        }
+
+        const sel = parseA1(rangeStr)
+        const rules = get().rules[sheetId] ?? []
+        if (!sel || rules.length === 0) return
+
+        const ids = rules
+          .filter((rule) => {
+            const rr = parseA1(rule.range)
+            // Two rectangles intersect when neither lies fully to one side.
+            return rr
+              ? rr.sr <= sel.er && sel.sr <= rr.er && rr.sc <= sel.ec && sel.sc <= rr.ec
+              : false
+          })
+          .map((rule) => rule.id)
+
+        // deleteRule strips that rule's CF styles, re-applies the remaining
+        // rules, and persists — so this behaves like deleting them one by one.
+        ids.forEach((id) => get().deleteRule(sheetId, id))
       },
     }),
     { name: 'CFStore' }

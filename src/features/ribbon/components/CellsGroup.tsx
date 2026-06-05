@@ -14,7 +14,7 @@ import {
 import { useSheetStore } from '@/store/sheetStore'
 import { useWorkbookStore } from '@/store/workbookStore'
 import { toast } from 'sonner'
-import { ribbonStub } from '../utils/ribbonStub'
+import { ribbonStub, HIDE_RIBBON_STUBS } from '../utils/ribbonStub'
 import { insertColumnLeft, insertColumnRight, deleteColumn, insertRowAbove } from '../utils/cellOps'
 import { autoFitColumns, autoFitRows } from '../utils/autoFit'
 
@@ -324,7 +324,9 @@ export function CellsGroup(props: CellsGroupProps) {
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={unhideAllRows}>Unhide Rows</DropdownMenuItem>
               <DropdownMenuItem onSelect={unhideAllColumns}>Unhide Columns</DropdownMenuItem>
-              <DropdownMenuItem onSelect={ribbonStub('Unhide Sheet')}>Unhide Sheet…</DropdownMenuItem>
+              {!HIDE_RIBBON_STUBS && (
+                <DropdownMenuItem onSelect={ribbonStub('Unhide Sheet')}>Unhide Sheet…</DropdownMenuItem>
+              )}
             </DropdownMenuSubContent>
           </DropdownMenuSub>
           <DropdownMenuSeparator />
@@ -332,7 +334,9 @@ export function CellsGroup(props: CellsGroupProps) {
           {/* Organize Sheets */}
           <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Organize Sheets</div>
           <DropdownMenuItem onSelect={renameActiveSheet}>Rename Sheet</DropdownMenuItem>
-          <DropdownMenuItem onSelect={ribbonStub('Move or Copy Sheet')}>Move or Copy Sheet…</DropdownMenuItem>
+          {!HIDE_RIBBON_STUBS && (
+            <DropdownMenuItem onSelect={ribbonStub('Move or Copy Sheet')}>Move or Copy Sheet…</DropdownMenuItem>
+          )}
 
           {/* R6.3 — tab color picker (replaces the old prompt-with-numbered-list).
               Click any swatch to apply; click "No Color" to clear. */}
@@ -374,8 +378,17 @@ export function CellsGroup(props: CellsGroupProps) {
           {/* Protection */}
           <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Protection</div>
           <DropdownMenuItem onSelect={() => props.onProtectedRanges?.()}>Protect Sheet…</DropdownMenuItem>
-          <DropdownMenuItem onSelect={ribbonStub('Lock Cell')}>Lock Cell</DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => props.onProtectedRanges?.()}>Format Cells…</DropdownMenuItem>
+          {!HIDE_RIBBON_STUBS && (
+            <DropdownMenuItem onSelect={ribbonStub('Lock Cell')}>Lock Cell</DropdownMenuItem>
+          )}
+          {/* "Format Cells…" surfaces the Home tab Number Format control — the
+              same path as the right-click "Format cells…" menu. Previously this
+              was mis-wired to the Protected Ranges dialog. */}
+          <DropdownMenuItem
+            onSelect={() => window.dispatchEvent(new CustomEvent('quiksheets:open-format-cells'))}
+          >
+            Format Cells…
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </>
