@@ -1,6 +1,5 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
-import { UNDO_HISTORY_LIMIT } from '@/lib/constants'
 import { toCellNotation } from '@/lib/cellAddress'
 import { createDefaultWorkbook } from '@/lib/defaultSheet'
 import { sortRows } from '@/features/grid/utils/sortUtils'
@@ -21,10 +20,8 @@ import {
 import type { Cell, Sheet } from '@fortune-sheet/core'
 import type { WorkbookInstance } from '@fortune-sheet/react'
 import type {
-  Workbook,
   CellAddress,
   CellData,
-  HistoryEntry,
   ActiveFormatting,
   NumberFormat,
   SortConfig,
@@ -149,14 +146,11 @@ const defaultFormatting: ActiveFormatting = {
 interface SheetState {
   gridSheets: Sheet[]
   gridInstance: WorkbookInstance | null
-  workbook: Workbook | null
   activeSheetIndex: number
   selectedCell: CellAddress | null
   selectedRange: { start: CellAddress; end: CellAddress } | null
   editingCell: CellAddress | null
   formulaBarValue: string
-  undoStack: HistoryEntry[]
-  redoStack: HistoryEntry[]
   isSaving: boolean
   lastSavedAt: Date | null
   activeFormatting: ActiveFormatting
@@ -194,7 +188,6 @@ interface SheetActions {
   setGridSheets: (sheets: Sheet[]) => void
   replaceGridSheets: (sheets: Sheet[]) => void
   setGridInstance: (instance: WorkbookInstance | null) => void
-  setWorkbook: (workbook: Workbook) => void
   setActiveSheet: (index: number) => void
   setSelectedCell: (cell: CellAddress | null) => void
   setSelectedRange: (range: { start: CellAddress; end: CellAddress } | null) => void
@@ -210,8 +203,6 @@ interface SheetActions {
       cellAddress?: string
     }
   ) => void
-  undo: () => void
-  redo: () => void
   setIsSaving: (saving: boolean) => void
   setLastSavedAt: (date: Date) => void
   reset: () => void
@@ -257,14 +248,11 @@ interface SheetActions {
 const initialState: SheetState = {
   gridSheets: createDefaultWorkbook(),
   gridInstance: null,
-  workbook: null,
   activeSheetIndex: 0,
   selectedCell: null,
   selectedRange: null,
   editingCell: null,
   formulaBarValue: '',
-  undoStack: [],
-  redoStack: [],
   isSaving: false,
   lastSavedAt: null,
   activeFormatting: defaultFormatting,
@@ -572,7 +560,6 @@ export const useSheetStore = create<SheetState & SheetActions>()(
 
         setGridInstance: (instance) => set({ gridInstance: instance }),
 
-        setWorkbook: (workbook) => set({ workbook }),
         setActiveSheet: (index) => set({ activeSheetIndex: index, selectedCell: null }),
         setSelectedCell: (cell) => set({ selectedCell: cell, editingCell: null }),
         setSelectedRange: (range) => set({ selectedRange: range }),
@@ -580,11 +567,13 @@ export const useSheetStore = create<SheetState & SheetActions>()(
         setFormulaBarValue: (value) => set({ formulaBarValue: value }),
 
         updateCell: (address, data, previousData = null, historyOptions = {}) => {
+          // FortuneSheet owns the authoritative cell + its own undo stack; the
+          // store no longer mirrors cells. updateCell's only job is to record the
+          // change to Supabase cell-history (best-effort).
           const state = get()
-          const workbookId = historyOptions.workbookId ?? state.workbook?.id ?? null
+          const workbookId = historyOptions.workbookId ?? null
           const sheetId =
             historyOptions.sheetId ??
-            state.workbook?.sheets[address.sheet]?.id ??
             (typeof state.gridSheets[address.sheet]?.id === 'string'
               ? (state.gridSheets[address.sheet]!.id as string)
               : '')
@@ -599,82 +588,7 @@ export const useSheetStore = create<SheetState & SheetActions>()(
               cellDataToHistoryValue(data)
             )
           }
-
-          set((currentState) => {
-            const entry: HistoryEntry = {
-              cellAddress: address,
-              before: previousData,
-              after: data,
-              timestamp: Date.now(),
-            }
-            const newUndoStack = [...currentState.undoStack.slice(-UNDO_HISTORY_LIMIT + 1), entry]
-            if (!currentState.workbook) return { undoStack: newUndoStack }
-
-            const key = `${address.row}:${address.col}`
-            return {
-              undoStack: newUndoStack,
-              redoStack: [],
-              workbook: {
-                ...currentState.workbook,
-                sheets: currentState.workbook.sheets.map((sheet, index) =>
-                  index === address.sheet
-                    ? { ...sheet, cells: { ...sheet.cells, [key]: data } }
-                    : sheet
-                ),
-              },
-            }
-          })
         },
-
-        undo: () =>
-          set((state) => {
-            const lastEntry = state.undoStack.at(-1)
-            if (!lastEntry || !state.workbook) return state
-
-            const key = `${lastEntry.cellAddress.row}:${lastEntry.cellAddress.col}`
-            return {
-              undoStack: state.undoStack.slice(0, -1),
-              redoStack: [...state.redoStack, lastEntry].slice(-UNDO_HISTORY_LIMIT + 1),
-              workbook: {
-                ...state.workbook,
-                sheets: state.workbook.sheets.map((sheet, index) => {
-                  if (index !== lastEntry.cellAddress.sheet) return sheet
-                  const cells = { ...sheet.cells }
-                  if (lastEntry.before) {
-                    cells[key] = lastEntry.before
-                  } else {
-                    delete cells[key]
-                  }
-                  return { ...sheet, cells }
-                }),
-              },
-            }
-          }),
-
-        redo: () =>
-          set((state) => {
-            const lastEntry = state.redoStack.at(-1)
-            if (!lastEntry || !state.workbook) return state
-
-            const key = `${lastEntry.cellAddress.row}:${lastEntry.cellAddress.col}`
-            return {
-              redoStack: state.redoStack.slice(0, -1),
-              undoStack: [...state.undoStack, lastEntry].slice(-UNDO_HISTORY_LIMIT + 1),
-              workbook: {
-                ...state.workbook,
-                sheets: state.workbook.sheets.map((sheet, index) => {
-                  if (index !== lastEntry.cellAddress.sheet) return sheet
-                  const cells = { ...sheet.cells }
-                  if (lastEntry.after) {
-                    cells[key] = lastEntry.after
-                  } else {
-                    delete cells[key]
-                  }
-                  return { ...sheet, cells }
-                }),
-              },
-            }
-          }),
 
         setIsSaving: (saving) => set({ isSaving: saving }),
         setLastSavedAt: (date) => set({ lastSavedAt: date }),
