@@ -125,12 +125,20 @@ export async function POST(request: Request): Promise<Response> {
       throw new Error('pg_not_installed')
     })
 
-    const client = new Client({ connectionString, ssl: { rejectUnauthorized: false } })
+    // Verify the server's TLS certificate. Previously `rejectUnauthorized:false`
+    // disabled verification entirely → a MITM could impersonate the DB. Untrusted
+    // / self-signed certs are now correctly rejected.
+    const client = new Client({ connectionString, ssl: { rejectUnauthorized: true } })
     await client.connect()
 
     let queryResult: { fields: { name: string }[]; rows: Record<string, unknown>[] }
     try {
+      // DB-ENFORCED read-only: Postgres rejects ANY write inside a READ ONLY
+      // transaction — including data-modifying CTEs (`WITH x AS (DELETE … RETURNING)
+      // SELECT …`) that slip past the textual isSafeQuery() guard. Defense in depth.
+      await client.query('BEGIN TRANSACTION READ ONLY')
       queryResult = await client.query(limitedQuery)
+      await client.query('ROLLBACK')
     } finally {
       await client.end()
     }
