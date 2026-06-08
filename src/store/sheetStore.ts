@@ -51,12 +51,15 @@ export interface FoundCell {
   value: string
 }
 
-function numberFormatString(fmt: NumberFormat): string {
+export function numberFormatString(fmt: NumberFormat): string {
   switch (fmt) {
     case 'number':
       return '0.00'
     case 'currency':
-      return '$0.00'
+      // Excel's Currency format always groups thousands ($#,##0.00 → $12,000.00).
+      // The old '$0.00' rendered "$12000.00" — a real parity gap. The locale
+      // currency SYMBOL (₹/€/£…) is handled by the Accounting ribbon button.
+      return '$#,##0.00'
     case 'accounting':
       return '$#,##0.00'
     case 'percentage':
