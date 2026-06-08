@@ -5,6 +5,7 @@ import type { Sheet } from '@fortune-sheet/core'
 import { useSheetStore } from '@/store/sheetStore'
 import { getBrowserSupabase } from '@/lib/supabase/client'
 import { loadWorkbookData, noteWorkbookVersion } from '@/lib/saveService'
+import { healHydratedSheets } from '@/lib/healHydratedSheets'
 
 /**
  * Restore a workbook's SAVED cell data when the sheet page opens.
@@ -135,8 +136,11 @@ async function resolveSavedSheets(
   return extractSheets(local?.data)
 }
 
-/** Coerce an unknown saved `data` blob into a non-empty Sheet[] or null. */
+/** Coerce an unknown saved `data` blob into a non-empty Sheet[] or null.
+ * Runs the formula self-heal so workbooks saved before the formula-seed fix
+ * (formula `f` with a leading "=" and/or no cached value → blank cells) render
+ * correctly on open. No-op for healthy workbooks. */
 function extractSheets(data: unknown): Sheet[] | null {
-  if (Array.isArray(data) && data.length > 0) return data as Sheet[]
+  if (Array.isArray(data) && data.length > 0) return healHydratedSheets(data as Sheet[])
   return null
 }
