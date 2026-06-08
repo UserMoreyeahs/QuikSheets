@@ -199,36 +199,82 @@ function filter(arr: unknown, include: unknown, ifEmpty: unknown = NA): unknown 
   return out
 }
 
+// ─── Sorting helpers ────────────────────────────────────────────────────────
+
+/** Normalize a FortuneSheet arg to a 2-D grid (1-D → column vector). */
+function to2D(arg: unknown): Cell[][] {
+  if (Array.isArray(arg)) {
+    if (arg.length > 0 && Array.isArray(arg[0])) return arg as Cell[][]
+    return (arg as Cell[]).map((v) => [v])
+  }
+  return [[arg as Cell]]
+}
+
+/** Excel-style cell comparison: numbers numerically, else lexicographically,
+ * with BLANKS sorted last in either direction (matches Excel). */
+function compareCells(a: Cell, b: Cell, order: number): number {
+  const aEmpty = a === null || a === undefined || a === ''
+  const bEmpty = b === null || b === undefined || b === ''
+  if (aEmpty && bEmpty) return 0
+  if (aEmpty) return 1
+  if (bEmpty) return -1
+  const an = toNumber(a)
+  const bn = toNumber(b)
+  if (an !== null && bn !== null) return (an - bn) * order
+  return String(a).localeCompare(String(b)) * order
+}
+
+/** Collapse a single-column grid back to a flat array; else keep 2-D. */
+function collapse(grid: Cell[][]): Cell[] | Cell[][] {
+  return grid.every((r) => r.length <= 1) ? grid.map((r) => r[0] ?? null) : grid
+}
+
 // ─── SORT ─────────────────────────────────────────────────────────────────
 // SORT(array, [sort_index], [sort_order], [by_col])
-// sort_index: 1-based index of the column/row to sort by (default 1)
+// sort_index: 1-based column (or row, if by_col) to sort BY (default 1)
 // sort_order: 1 = ascending (default), -1 = descending
+// by_col: false → sort rows (default); true → sort columns
+// Honors sort_index/by_col on a 2-D range and KEEPS row structure (the old
+// impl flattened everything and ignored both args).
 
-function sort(arr: unknown, _sortIndex: number = 1, sortOrder: number = 1, _byCol = false): unknown {
-  const data = flat2D(arr).filter((v) => v !== null && v !== undefined)
+export function sort(arr: unknown, sortIndex: number = 1, sortOrder: number = 1, byCol = false): unknown {
   const order = sortOrder === -1 ? -1 : 1
-  const sorted = [...data].sort((a, b) => {
-    const an = toNumber(a)
-    const bn = toNumber(b)
-    if (an !== null && bn !== null) return (an - bn) * order
-    return String(a).localeCompare(String(b)) * order
-  })
-  return sorted
+  const grid = to2D(arr)
+  if (grid.length === 0) return arr
+
+  if (byCol) {
+    const rowIdx = Math.max(0, Math.trunc(sortIndex) - 1)
+    const colCount = grid.reduce((m, r) => Math.max(m, r.length), 0)
+    const cols: Cell[][] = []
+    for (let c = 0; c < colCount; c++) cols.push(grid.map((r) => r[c] ?? null))
+    cols.sort((ca, cb) => compareCells(ca[rowIdx] ?? null, cb[rowIdx] ?? null, order))
+    return collapse(grid.map((_, r) => cols.map((col) => col[r] ?? null)))
+  }
+
+  const colIdx = Math.max(0, Math.trunc(sortIndex) - 1)
+  const rows = grid.map((r) => [...r])
+  rows.sort((ra, rb) => compareCells(ra[colIdx] ?? null, rb[colIdx] ?? null, order))
+  return collapse(rows)
 }
 
 // ─── SORTBY ───────────────────────────────────────────────────────────────
 // SORTBY(array, by_array1, [order1], [by_array2, order2, ...])
+// Multi-key: each later (by_array, order) pair breaks ties left-to-right.
 
-function sortby(arr: unknown, byArray1: unknown, order1: number = 1): unknown {
+export function sortby(arr: unknown, ...rest: AnyArgs): unknown {
   const data = flat2D(arr)
-  const keys = flat2D(byArray1)
-  const ord = order1 === -1 ? -1 : 1
-  const indexed = data.map((v, i) => ({ v, k: keys[i] }))
+  const criteria: { keys: Cell[]; order: number }[] = []
+  for (let i = 0; i < rest.length; i += 2) {
+    criteria.push({ keys: flat2D(rest[i]), order: rest[i + 1] === -1 ? -1 : 1 })
+  }
+  if (criteria.length === 0) return data
+  const indexed = data.map((v, i) => ({ v, i }))
   indexed.sort((a, b) => {
-    const an = toNumber(a.k)
-    const bn = toNumber(b.k)
-    if (an !== null && bn !== null) return (an - bn) * ord
-    return String(a.k).localeCompare(String(b.k)) * ord
+    for (const { keys, order } of criteria) {
+      const cmp = compareCells(keys[a.i] ?? null, keys[b.i] ?? null, order)
+      if (cmp !== 0) return cmp
+    }
+    return a.i - b.i // stable for full ties
   })
   return indexed.map((x) => x.v)
 }
@@ -338,7 +384,15 @@ const patches: Record<string, (...args: AnyArgs) => unknown> = {
 // module as readonly.
 const ns = formulajs as unknown as Record<string, (...args: AnyArgs) => unknown>
 for (const [name, impl] of Object.entries(patches)) {
-  ns[name] = impl
+  // In the app, @formulajs is a CJS module whose exports object is mutable.
+  // Under native ESM (e.g. vitest), namespace props are non-configurable and
+  // the assignment throws — guard so one frozen prop can't abort every patch
+  // or crash the import. The functions are also exported directly for tests.
+  try {
+    ns[name] = impl
+  } catch {
+    /* namespace not writable in this environment */
+  }
 }
 
 export const PATCHED_FUNCTIONS = Object.keys(patches)
