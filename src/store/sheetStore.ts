@@ -15,6 +15,7 @@ import {
   cloneFortuneData,
   cloneSheetWithData,
   getCellDisplayValue,
+  getCellSortValue,
   getSheetMatrix,
 } from '@/lib/fortuneSheet'
 import type { Cell, Sheet } from '@fortune-sheet/core'
@@ -706,8 +707,10 @@ export const useSheetStore = create<SheetState & SheetActions>()(
 
           const rows = sortableData.map((row, rowIndex) => ({
             rowIndex,
+            // Sort by the RAW value (getCellSortValue), not the formatted
+            // display — otherwise "$1,200" sorts before "$900" lexically.
             cells: Object.fromEntries(
-              (row ?? []).map((cell, columnIndex) => [columnIndex, getCellDisplayValue(cell)])
+              (row ?? []).map((cell, columnIndex) => [columnIndex, getCellSortValue(cell)])
             ),
           }))
 
