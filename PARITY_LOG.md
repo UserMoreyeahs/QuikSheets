@@ -29,7 +29,7 @@ PASSED: 25 · PARTIAL: 2 (T003 date-detect, T015 NL-needs-key) · FLAGGED: 2 (T0
 |------|--------|----------------|---------|----------|
 | T001 | Workbook create | Workbook + Sheet1 | PASS (CODE/TEST) | defaultSheet.ts, sampleWorkbook.spec.ts |
 | T002 | Add 2nd sheet | Sheet added | PASS (CODE) | workbookStore.ts addSheet/ensureUniqueSheetName |
-| T003 | Edit text/number/date | values save/display | PARTIAL | text/number PASS; **date NOT auto-detected** — `01-04-2026` stored as text (deferred, see D3) |
+| T003 | Edit text/number/date | values save/display | **PASS — FIXED** | date auto-detect now upgrades `01-04-2026`→serial 46113 (real-engine cross-checked); detectExcelDate.spec.ts + coerceDateCells.spec.ts |
 | T004 | Sort by amount desc | Amit (23000) first | PASS (TEST) | sheetStore.applySort + getCellSortValue, sort spec |
 | T005 | Currency format | ₹ display, grouped | **PASS — FIXED (real-engine verified)** | numberFormat.spec.ts + currencyMask.spec.ts — FortuneSheet `update('₹#,##0.00',12000)`→"₹12,000.00"; old lakh mask throws |
 | T006 | SUM(B2:B4) | 40500 | PASS (TEST) | evaluateCell.spec.ts, HyperFormulaAdapter.spec.ts |
@@ -62,8 +62,8 @@ PASSED: 25 · PARTIAL: 2 (T003 date-detect, T015 NL-needs-key) · FLAGGED: 2 (T0
 ### D1 / D2 — New + pre-existing workbooks rendered Revenue/Total BLANK — FIXED + LIVE-VERIFIED
 Seed stored `f:'=C2*D2'` (leading `=` FortuneSheet can't parse) with no cached value → blank. Fixed seed (`13ec421`/`931e404`) + hydration self-heal for old workbooks (`b334ef6`/`3c35fae`). **DB-verified 2026-06-08** on a fresh prod workbook: all formula cells store `f` without `=` and carry correct computed `v`/`m`.
 
-### D3 — No auto date-detection on free-form cell entry (T003) — DEFERRED (risk)
-`beforeUpdateCell`/`createCell` store `01-04-2026` as literal text (left-aligned), not a date serial; Excel auto-converts a General cell. Breaks date sort/math on hand-typed dates. Fix: in `SpreadsheetGrid.beforeUpdateCell`, when the column is untyped and the string matches a date pattern (`parseLooseDate`), commit a date cell. Deferred — the edit hot-path is risky to change without live canvas testing.
+### D3 — No auto date-detection on free-form cell entry (T003) — FIXED
+`createCell` stored `01-04-2026` as literal text, not a date serial; Excel auto-converts a General cell. Now `detectExcelDate` (pure, strict, day-first, real-engine cross-checked) + `coerceDateCells` upgrade a freshly-typed date string to `{ v: serial, m: display, ct: { fa: mask, t: 'n' } }` so it sorts/calcs/displays as a date. Wired into the edit handler GUARDED: only strict date strings in untyped columns, try/caught (failure → leave text), and the display mirrors the typed format (invisible on screen — only the semantics upgrade). Commit `b704963`. **Live-verify pending** (DB read of a typed date on prod).
 
 ### D4 — ₹ Indian-Rupee currency format threw (T005) — FIXED
 `AccountingDropdown` INR mask `₹#,##,##0.00` (Indian lakh grouping) is rejected by FortuneSheet's bundled SSF 0.11.2 (`unsupported format |#,##,##0|`), no try/catch → cell left unformatted + error toast. The user's locale-default currency. Fixed to `₹#,##0.00;[Red]-₹#,##0.00` (Western grouping renders `₹12,000.00`). True lakh grouping needs a post-format pass on `m` (out of scope; only matters ≥ 1 lakh). `AccountingDropdown.tsx`.
@@ -80,7 +80,7 @@ Seed stored `f:'=C2*D2'` (leading `=` FortuneSheet can't parse) with no cached v
 ### D8 — DEFERRED / FLAGGED (real, but lower priority or deployment-gated)
 - **NL→formula (T015):** only the literal "add columns A,B,C" works without a GROQ key; GST/% etc. 503 offline. Prod has the key, so live it works — but add a deterministic %-of-column template for offline parity. `ai/formula/route.ts`.
 - **CSV import injection (T009):** `sanitizeImportedCellValue` exists+tested but isn't called on import (export already guards the real Excel-execution vector). Wire it into `importUtils.ts` as defense-in-depth.
-- **Formula semantics:** `LET` returns only its last arg (not the evaluated body); `SORT` ignores `sort_index`/`by_col`; `SORTBY` is single-key. `formulajsPatches.ts:207,222,300`.
+- **Formula semantics:** `SORT` (sort_index/by_col) + `SORTBY` (multi-key) **FIXED** (`59594cd`, 7 tests). `LET` still returns its last arg — a true fix needs lazy/parser-level eval (args arrive pre-evaluated); left honestly deferred. CSV-import injection guard intentionally NOT blanket-applied — it would break legit formula import (Excel keeps CSV formulas; export already neutralizes the real attack vector). Offline NL→formula left as-is (prod has the GROQ key).
 - **Row-Level Security (T028):** client-side row hiding only — full data ships to the browser; role/identity come from client state; the apply-hook isn't even mounted. Flag-OFF by default. Needs server-side enforcement before it's "security". `row-rls/**`.
 - **Postgres connector (T027):** needs `pg` package + `POSTGRES_CONNECTOR_ENABLED=true` + `NEXT_PUBLIC_FF_CONNECTORS=true`; 503 otherwise (by design). Deployment prerequisite, proxy itself is correct/secure.
 - **date_short mask** is US `MM/DD/YYYY` (typed-columns already uses en-IN `DD-MMM-YYYY`) — locale nuance, not a crash.
