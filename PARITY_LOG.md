@@ -31,7 +31,7 @@ PASSED: 25 · PARTIAL: 2 (T003 date-detect, T015 NL-needs-key) · FLAGGED: 2 (T0
 | T002 | Add 2nd sheet | Sheet added | PASS (CODE) | workbookStore.ts addSheet/ensureUniqueSheetName |
 | T003 | Edit text/number/date | values save/display | PARTIAL | text/number PASS; **date NOT auto-detected** — `01-04-2026` stored as text (deferred, see D3) |
 | T004 | Sort by amount desc | Amit (23000) first | PASS (TEST) | sheetStore.applySort + getCellSortValue, sort spec |
-| T005 | Currency format | ₹ display, grouped | **PASS — FIXED** | numberFormatString `$#,##0.00`, AccountingDropdown ₹ mask, numberFormat.spec.ts |
+| T005 | Currency format | ₹ display, grouped | **PASS — FIXED (real-engine verified)** | numberFormat.spec.ts + currencyMask.spec.ts — FortuneSheet `update('₹#,##0.00',12000)`→"₹12,000.00"; old lakh mask throws |
 | T006 | SUM(B2:B4) | 40500 | PASS (TEST) | evaluateCell.spec.ts, HyperFormulaAdapter.spec.ts |
 | T007 | IF(B2>10000,…) | High | PASS (TEST) | evaluateCell.spec.ts |
 | T008 | VLOOKUP exact | matching name / #N/A | PASS (TEST) | booleanLiterals.spec.ts; minor: bare TRUE/FALSE on HF-adapter path uses 0/1 (deferred) |
