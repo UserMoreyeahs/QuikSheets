@@ -46,7 +46,10 @@ const CURRENCIES: Currency[] = [
   { symbol: '€', code: 'EUR', label: 'Euro',          format: '€#,##0.00;[Red]-€#,##0.00' },
   { symbol: '£', code: 'GBP', label: 'British Pound', format: '£#,##0.00;[Red]-£#,##0.00' },
   { symbol: '¥', code: 'JPY', label: 'Japanese Yen',  format: '¥#,##0;[Red]-¥#,##0' },
-  { symbol: '₹', code: 'INR', label: 'Indian Rupee',  format: '₹#,##,##0.00;[Red]-₹#,##,##0.00' },
+  // Western 3-digit grouping, NOT Indian lakh grouping (#,##,##0): FortuneSheet's
+  // bundled SSF rejects the lakh mask ("unsupported format |#,##,##0|") and throws,
+  // leaving the cell unformatted. #,##0.00 renders ₹12,000.00 correctly.
+  { symbol: '₹', code: 'INR', label: 'Indian Rupee',  format: '₹#,##0.00;[Red]-₹#,##0.00' },
   { symbol: '元', code: 'CNY', label: 'Chinese Yuan',  format: '¥#,##0.00;[Red]-¥#,##0.00' },
 ]
 
