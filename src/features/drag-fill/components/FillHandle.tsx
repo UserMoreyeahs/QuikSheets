@@ -17,7 +17,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSheetStore } from '@/store/sheetStore'
 import { detectAndFill } from '../utils/patternDetector'
+import { offsetFormula } from '../utils/offsetFormula'
 import { getCellDisplayValue, getSheetMatrix, cloneSheetWithData } from '@/lib/fortuneSheet'
+import type { Cell } from '@fortune-sheet/core'
 import { toast } from 'sonner'
 
 const HANDLE_SIZE = 8
@@ -236,43 +238,98 @@ export function FillHandle() {
     const nextMatrix = matrix.map((row) => [...(row ?? [])])
     const { startRow, startCol, endRow, endCol, fillCount, direction } = state
 
+    // A source cell's formula string, or null if it isn't a formula. Dragging
+    // a formula must PROPAGATE it (relative refs shifted) — not flatten it to
+    // the displayed value, which is what made "=P1*2" fill as 20,20,20.
+    const formulaOf = (cell: Cell | null | undefined): string | null =>
+      cell && typeof cell.f === 'string' && cell.f.length > 0 ? cell.f : null
+    const ensureRow = (r: number) => {
+      while (nextMatrix.length <= r) {
+        nextMatrix.push(Array.from({ length: nextMatrix[0]?.length ?? 1 }, () => null))
+      }
+    }
+
     try {
       if (direction === 'down' || direction === 'up') {
         for (let c = startCol; c <= endCol; c++) {
-          const sourceValues: (string | number | null)[] = []
-          for (let r = startRow; r <= endRow; r++) {
-            sourceValues.push(getCellDisplayValue(matrix[r]?.[c]) as string | number | null)
-          }
-          const { values } = detectAndFill(sourceValues, fillCount)
+          const sourceCells: (Cell | null)[] = []
+          for (let r = startRow; r <= endRow; r++) sourceCells.push((matrix[r]?.[c] ?? null) as Cell | null)
+          const blockSize = sourceCells.length
+          const hasFormula = sourceCells.some((cell) => formulaOf(cell) !== null)
 
-          for (let i = 0; i < fillCount; i++) {
-            const targetRow = direction === 'down' ? endRow + 1 + i : startRow - 1 - i
-            if (targetRow < 0) continue
-            const val = values[i]
-            const cellValue = typeof val === 'number' ? val : String(val ?? '')
-            // Ensure the row exists in the matrix
-            while (nextMatrix.length <= targetRow) {
-              nextMatrix.push(Array.from({ length: nextMatrix[0]?.length ?? 1 }, () => null))
+          if (hasFormula) {
+            // Excel-style formula fill: each target = the source formula with
+            // relative refs shifted by its row distance from that source cell.
+            for (let i = 0; i < fillCount; i++) {
+              const targetRow = direction === 'down' ? endRow + 1 + i : startRow - 1 - i
+              if (targetRow < 0) continue
+              const srcInBlock = i % blockSize
+              const srcRow = direction === 'down' ? startRow + srcInBlock : endRow - srcInBlock
+              const srcCell = (matrix[srcRow]?.[c] ?? null) as Cell | null
+              ensureRow(targetRow)
+              const row = nextMatrix[targetRow]
+              if (!row) continue
+              const f = formulaOf(srcCell)
+              if (f !== null && srcCell) {
+                const next: Cell = { ...srcCell, f: offsetFormula(f, targetRow - srcRow, 0) }
+                delete next.v // strip cached value/display so FortuneSheet recomputes
+                delete next.m
+                row[c] = next
+              } else {
+                row[c] = srcCell ? { ...srcCell } : null
+              }
             }
-            const row = nextMatrix[targetRow]
-            if (row) row[c] = { v: cellValue, m: String(cellValue) }
+          } else {
+            const sourceValues = sourceCells.map((cell) => getCellDisplayValue(cell) as string | number | null)
+            const { values } = detectAndFill(sourceValues, fillCount)
+            for (let i = 0; i < fillCount; i++) {
+              const targetRow = direction === 'down' ? endRow + 1 + i : startRow - 1 - i
+              if (targetRow < 0) continue
+              const val = values[i]
+              const cellValue = typeof val === 'number' ? val : String(val ?? '')
+              ensureRow(targetRow)
+              const row = nextMatrix[targetRow]
+              if (row) row[c] = { v: cellValue, m: String(cellValue) }
+            }
           }
         }
       } else {
         for (let r = startRow; r <= endRow; r++) {
-          const sourceValues: (string | number | null)[] = []
-          for (let c = startCol; c <= endCol; c++) {
-            sourceValues.push(getCellDisplayValue(matrix[r]?.[c]) as string | number | null)
-          }
-          const { values } = detectAndFill(sourceValues, fillCount)
+          const sourceCells: (Cell | null)[] = []
+          for (let c = startCol; c <= endCol; c++) sourceCells.push((matrix[r]?.[c] ?? null) as Cell | null)
+          const blockSize = sourceCells.length
+          const hasFormula = sourceCells.some((cell) => formulaOf(cell) !== null)
 
-          for (let i = 0; i < fillCount; i++) {
-            const targetCol = direction === 'right' ? endCol + 1 + i : startCol - 1 - i
-            if (targetCol < 0) continue
-            const val = values[i]
-            const cellValue = typeof val === 'number' ? val : String(val ?? '')
-            const row = nextMatrix[r]
-            if (row) row[targetCol] = { v: cellValue, m: String(cellValue) }
+          if (hasFormula) {
+            for (let i = 0; i < fillCount; i++) {
+              const targetCol = direction === 'right' ? endCol + 1 + i : startCol - 1 - i
+              if (targetCol < 0) continue
+              const srcInBlock = i % blockSize
+              const srcCol = direction === 'right' ? startCol + srcInBlock : endCol - srcInBlock
+              const srcCell = (matrix[r]?.[srcCol] ?? null) as Cell | null
+              const row = nextMatrix[r]
+              if (!row) continue
+              const f = formulaOf(srcCell)
+              if (f !== null && srcCell) {
+                const next: Cell = { ...srcCell, f: offsetFormula(f, 0, targetCol - srcCol) }
+                delete next.v
+                delete next.m
+                row[targetCol] = next
+              } else {
+                row[targetCol] = srcCell ? { ...srcCell } : null
+              }
+            }
+          } else {
+            const sourceValues = sourceCells.map((cell) => getCellDisplayValue(cell) as string | number | null)
+            const { values } = detectAndFill(sourceValues, fillCount)
+            for (let i = 0; i < fillCount; i++) {
+              const targetCol = direction === 'right' ? endCol + 1 + i : startCol - 1 - i
+              if (targetCol < 0) continue
+              const val = values[i]
+              const cellValue = typeof val === 'number' ? val : String(val ?? '')
+              const row = nextMatrix[r]
+              if (row) row[targetCol] = { v: cellValue, m: String(cellValue) }
+            }
           }
         }
       }
