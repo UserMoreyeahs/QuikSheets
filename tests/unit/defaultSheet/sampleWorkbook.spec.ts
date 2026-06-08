@@ -34,11 +34,16 @@ describe('createSampleWorkbook', () => {
     expect(headerVals).toEqual(['Product', 'Region', 'Units', 'Unit Price', 'Revenue'])
   })
 
-  it('includes formula cells (Revenue + totals) so formulas are demonstrated', () => {
-    const e2 = sheet!.data?.[1]?.[4] as { f?: string } | null
-    expect(e2?.f).toBe('=C2*D2')
-    const e7 = sheet!.data?.[6]?.[4] as { f?: string } | null
-    expect(e7?.f).toBe('=SUM(E2:E5)')
+  it('formula cells store f WITHOUT a leading "=" and cache v/m so they render on mount', () => {
+    // Regression: a leading "=" in `f` is unparseable by FortuneSheet AND
+    // doubles to "==" in the formula bar; missing v/m left the cell blank on
+    // hydration. Revenue column showed blank on every new workbook.
+    const e2 = sheet!.data?.[1]?.[4] as { f?: string; v?: unknown } | null
+    expect(e2?.f).toBe('C2*D2')
+    expect(e2?.v).toBe(1198.8)
+    const e7 = sheet!.data?.[6]?.[4] as { f?: string; v?: unknown } | null
+    expect(e7?.f).toBe('SUM(E2:E5)')
+    expect(e7?.v).toBe(5169.8)
   })
 
   it('data and celldata agree on A1', () => {
