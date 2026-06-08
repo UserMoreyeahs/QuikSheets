@@ -335,6 +335,7 @@ export async function loadWorkbook(name: string): Promise<WorkbookSaveData | nul
 
 let _saveTimer: ReturnType<typeof setTimeout> | null = null
 let _pendingPayload: WorkbookSaveData | null = null
+let _pendingOnResult: ((result: SaveResult) => void) | null = null
 
 /**
  * Auto-save debounce window. 2s (was 30s). 30s meant a user who typed and
@@ -349,14 +350,23 @@ const AUTOSAVE_DEBOUNCE_MS = 2_000
  * The latest payload is retained so {@link flushPendingSave} can persist it
  * immediately on navigation / tab close.
  */
-export function debouncedSave(payload: WorkbookSaveData): void {
+export function debouncedSave(
+  payload: WorkbookSaveData,
+  onResult?: (result: SaveResult) => void,
+): void {
   _pendingPayload = payload
+  _pendingOnResult = onResult ?? null
   if (_saveTimer !== null) clearTimeout(_saveTimer)
   _saveTimer = setTimeout(() => {
     _saveTimer = null
     const p = _pendingPayload
+    const cb = _pendingOnResult
     _pendingPayload = null
-    if (p) void saveWorkbook(p)
+    _pendingOnResult = null
+    // Report the result so the SaveStatus UI can flip to "Saved"/"conflict"
+    // instead of being stuck on "Unsaved changes" (the autosave used to be
+    // fire-and-forget, so a successful save never updated the indicator).
+    if (p) void saveWorkbook(p).then((result) => cb?.(result))
   }, AUTOSAVE_DEBOUNCE_MS)
 }
 
@@ -372,11 +382,13 @@ export function flushPendingSave(): void {
     _saveTimer = null
   }
   const p = _pendingPayload
+  const cb = _pendingOnResult
   _pendingPayload = null
+  _pendingOnResult = null
   if (!p) return
   // Synchronous local mirror — guaranteed to land even during unload.
   // Use the last-known user id so the key matches what the load path reads
   // (the async getSession() can't complete during unload).
   persistLocally(p, _lastKnownUserId)
-  void saveWorkbook(p)
+  void saveWorkbook(p).then((result) => cb?.(result))
 }
