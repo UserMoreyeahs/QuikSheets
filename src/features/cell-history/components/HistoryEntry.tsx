@@ -48,6 +48,11 @@ function userInitial(userId: string | null): string {
 }
 
 export function HistoryEntry({ entry, isRestoring, onRestore }: HistoryEntryProps) {
+  // Per-cell restore is not yet implemented — restoreCell() is a stub that
+  // returns null (pending the R6.x cells-table migration). Disable the action
+  // instead of showing a button that pops a confirm dialog then silently does
+  // nothing. History viewing still works; only restore is gated.
+  const restoreUnavailable = true
   return (
     <li className="relative border-l border-zinc-200 pb-5 pl-4 last:pb-0">
       <span className="absolute -left-[5px] top-1 h-2.5 w-2.5 rounded-full border border-blue-200 bg-blue-500" />
@@ -85,7 +90,8 @@ export function HistoryEntry({ entry, isRestoring, onRestore }: HistoryEntryProp
         <button
           type="button"
           onClick={() => onRestore(entry.id)}
-          disabled={isRestoring}
+          disabled={restoreUnavailable || isRestoring}
+          title="Per-cell restore is coming soon — this panel is view-only for now"
           className="flex shrink-0 items-center gap-1 rounded border border-zinc-200 px-2 py-1 text-[11px] font-medium text-zinc-600 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <RotateCcw className="h-3 w-3" aria-hidden="true" />

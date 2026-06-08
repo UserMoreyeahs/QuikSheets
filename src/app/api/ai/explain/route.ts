@@ -66,11 +66,11 @@ export async function POST(request: Request) {
 
   const dependencies = parseFormulaReferences(formula)
 
+  // No AI key → serve the deterministic fallback (correct dependencies + a
+  // generic but accurate explanation) instead of 503-ing, matching the
+  // graceful degradation of /api/ai/summarize.
   if (!groq) {
-    return jsonError(
-      'AI assistance is not configured. Set GROQ_API_KEY to enable this feature.',
-      503
-    )
+    return Response.json(fallbackExplanation(formula, dependencies))
   }
 
   try {
