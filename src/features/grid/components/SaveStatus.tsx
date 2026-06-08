@@ -105,12 +105,27 @@ export function SaveStatus({ workbookName, workbookData, workbookId }: SaveStatu
     }
 
     setSaveState('unsaved')
-    debouncedSave({
-      ...(currentId ? { id: currentId } : {}),
-      name: workbookName,
-      data: workbookData,
-    })
-  }, [currentId, workbookData, workbookName])
+    // Autosave through the shared debounce, and update the indicator when it
+    // resolves. Previously this was fire-and-forget, so the chip stayed on
+    // "Unsaved changes" forever even though the save succeeded (POST 200) —
+    // which made it look like nothing was saving.
+    debouncedSave(
+      {
+        ...(currentId ? { id: currentId } : {}),
+        name: workbookName,
+        data: workbookData,
+      },
+      (result) => {
+        if (result.conflict) {
+          setSaveState('conflict')
+          return
+        }
+        if (result.id && result.destination === 'supabase') setCurrentId(result.id)
+        setLastSavedAt(new Date())
+        setSaveState('saved')
+      },
+    )
+  }, [currentId, workbookData, workbookName, setLastSavedAt])
 
   const statusConfig = {
     saved: {
