@@ -25,6 +25,7 @@ import { PreviewOverlay, RangeHighlight, ResultBadge, useLivePreview } from '@/f
 import { ColumnIntentBanner, useColumnIntent } from '@/features/intent-columns'
 import { useColumnTypesStore, validateForEdit } from '@/features/typed-columns'
 import { useInlineEditSync } from '../hooks/useInlineEditSync'
+import { coerceDateCells, type DateTarget } from '../utils/coerceDateCells'
 import { CellContextMenu } from './CellContextMenu'
 import { insertHyperlink, defineNameFromSelection } from '@/features/ribbon/utils/cellOps'
 import { fireTrigger, buildEvent } from '@/features/automation/triggerClient'
@@ -325,7 +326,7 @@ export function SpreadsheetGrid({
     (data: Sheet[]) => {
       const incomingSheetsAreEmpty = data.every((sheet) => isSheetEmpty(sheet))
       const currentSheetsHaveData = gridSheetsRef.current.some((sheet) => !isSheetEmpty(sheet))
-      const nextSheets = cloneFortuneData(data)
+      let nextSheets = cloneFortuneData(data)
       const nextSheetsKey = stringifySheets(nextSheets)
       if (nextSheetsKey === stringifySheets(gridSheetsRef.current)) {
         if (pendingImperativeSyncRef.current === nextSheetsKey) {
@@ -372,6 +373,29 @@ export function SpreadsheetGrid({
           cellAddress: change.cellAddress,
         })
       })
+
+      // ── Excel-style date auto-detection ────────────────────────────
+      // Upgrade freshly-typed date strings ("01-04-2026") to real date cells
+      // so they sort/calc/display like Excel. Additive + guarded: only strict
+      // date strings in UNTYPED columns are touched, and any failure leaves
+      // the typed text untouched — this can never block a normal edit.
+      try {
+        const dateTargets: DateTarget[] = []
+        for (const change of cellChanges) {
+          const value = change.newData.value
+          if (typeof value !== 'string' || change.newData.formula) continue
+          if (useColumnTypesStore.getState().getColumnType(change.sheetId, change.address.col)) continue
+          dateTargets.push({
+            sheetId: change.sheetId,
+            row: change.address.row,
+            col: change.address.col,
+            value,
+          })
+        }
+        if (dateTargets.length > 0) nextSheets = coerceDateCells(nextSheets, dateTargets)
+      } catch {
+        /* date detection is best-effort — never block a normal edit */
+      }
 
       // Broadcast every local edit to the realtime channel so other
       // connected users see updates in <1s. The broadcaster is provided
