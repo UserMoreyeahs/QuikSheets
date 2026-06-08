@@ -5,6 +5,18 @@ export type RangeMatrix = (string | number | null)[][]
 /**
  * Maps a range matrix + ChartConfig to a minimal ECharts options object.
  * Pure function — no side effects. Supports all 14 chart kinds.
+ *
+ * LAYOUT CONTRACT (fixes "chart values overlapping each other"):
+ *   • title  → top-center, its own row.
+ *   • legend → a separate row below the title (cartesian) or the bottom
+ *     strip (pie/funnel/radar) — never stacked on top of the plot or title.
+ *   • cartesian plots use a `grid` with `containLabel: true` so the axis
+ *     VALUES (long y numbers, x categories) stay inside the box instead of
+ *     spilling over the bars, plus `axisLabel.hideOverlap` so crowded
+ *     category labels drop out instead of piling up.
+ *   • pie/doughnut use `avoidLabelOverlap` so slice labels don't collide.
+ * The result is the Excel-like separation of title / legend / axis / plot the
+ * user asked for.
  */
 export function toEChartsOption(matrix: RangeMatrix, config: ChartConfig): Record<string, unknown> {
   const dataRows = config.hasHeader ? matrix.slice(1) : matrix
@@ -22,6 +34,49 @@ export function toEChartsOption(matrix: RangeMatrix, config: ChartConfig): Recor
 
   const kind: ChartKind = config.kind
 
+  // ── Shared layout blocks ────────────────────────────────────────
+  // Computed once and reused so every chart kind separates its title,
+  // legend, axis values and plot into their own regions.
+  const hasTitle = !!config.title
+  const showLegend = config.legend !== false
+
+  const titleBlock = hasTitle
+    ? { text: config.title, left: 'center', top: 6, textStyle: { fontSize: 14, fontWeight: 600 } }
+    : undefined
+
+  // Legend on its own row just below the title (cartesian charts).
+  const legendRow = showLegend ? { top: hasTitle ? 30 : 6, type: 'scroll' } : undefined
+  // Legend pinned to the bottom strip (round charts where a top legend
+  // would crowd the plot).
+  const legendBottom = showLegend ? { bottom: 6, type: 'scroll' } : undefined
+
+  // Plot box for cartesian charts. `containLabel` is the key fix: it grows
+  // the box inward to fit the axis labels rather than letting them overlap
+  // the series. Top clears the title+legend rows; bottom clears the x-axis
+  // name when present.
+  const cartesianGrid = {
+    left: config.yAxisLabel ? 20 : 12,
+    right: 28,
+    top: (hasTitle ? 30 : 6) + (showLegend ? 26 : 12),
+    bottom: config.xAxisLabel ? 44 : 20,
+    containLabel: true,
+  }
+
+  // Category x-axis: hide labels that would collide; put the axis name
+  // centered below the labels instead of jammed at the axis end.
+  const categoryXAxis = (data: string[]) => ({
+    type: 'category',
+    data,
+    axisLabel: { hideOverlap: true },
+    ...(config.xAxisLabel ? { name: config.xAxisLabel, nameLocation: 'middle', nameGap: 30 } : {}),
+  })
+  const valueYAxis = () => ({
+    type: 'value',
+    ...(config.yAxisLabel
+      ? { name: config.yAxisLabel, nameLocation: 'middle', nameGap: 44, nameRotate: 90 }
+      : {}),
+  })
+
   // ── Pie / Doughnut ──────────────────────────────────────────────
   if (kind === 'pie' || kind === 'doughnut') {
     const series = config.seriesColumns.map((colIdx) => {
@@ -29,15 +84,17 @@ export function toEChartsOption(matrix: RangeMatrix, config: ChartConfig): Recor
       return {
         type: 'pie' as const,
         name: seriesName(colIdx),
-        radius: kind === 'doughnut' ? ['40%', '65%'] : '60%',
+        radius: kind === 'doughnut' ? ['40%', '62%'] : '58%',
+        center: ['50%', hasTitle ? '54%' : '50%'],
+        avoidLabelOverlap: true,
         data: values.map((value, i) => ({ name: categories[i] ?? `#${i + 1}`, value })),
         label: { show: true, formatter: '{b}: {d}%' },
       }
     })
     return {
-      title: config.title ? { text: config.title, left: 'center' } : undefined,
-      tooltip: { trigger: 'item' },
-      legend: config.legend !== false ? { bottom: 0 } : undefined,
+      title: titleBlock,
+      tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+      legend: legendBottom,
       series,
     }
   }
@@ -48,7 +105,7 @@ export function toEChartsOption(matrix: RangeMatrix, config: ChartConfig): Recor
     const vals = numericValues(colIdx)
     const avg = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0
     return {
-      title: config.title ? { text: config.title, left: 'center' } : undefined,
+      title: titleBlock,
       tooltip: { formatter: '{a} <br/>{b} : {c}' },
       series: [
         {
@@ -66,14 +123,17 @@ export function toEChartsOption(matrix: RangeMatrix, config: ChartConfig): Recor
     const colIdx = config.seriesColumns[0] ?? 0
     const values = numericValues(colIdx)
     return {
-      title: config.title ? { text: config.title, left: 'center' } : undefined,
+      title: titleBlock,
       tooltip: { trigger: 'item', formatter: '{a} <br/>{b} : {c}' },
-      legend: config.legend !== false ? { bottom: 0 } : undefined,
+      legend: legendBottom,
       series: [
         {
           type: 'funnel',
           name: seriesName(colIdx),
+          top: hasTitle ? 40 : 16,
+          bottom: showLegend ? 40 : 16,
           sort: 'descending',
+          label: { show: true, position: 'inside' },
           data: values
             .map((v, i) => ({ name: categories[i] ?? `#${i + 1}`, value: v }))
             .sort((a, b) => b.value - a.value),
@@ -87,12 +147,13 @@ export function toEChartsOption(matrix: RangeMatrix, config: ChartConfig): Recor
     const colIdx = config.seriesColumns[0] ?? 0
     const values = numericValues(colIdx)
     return {
-      title: config.title ? { text: config.title, left: 'center' } : undefined,
+      title: titleBlock,
       tooltip: { formatter: '{b}: {c}' },
       series: [
         {
           type: 'treemap',
           name: seriesName(colIdx),
+          top: hasTitle ? 40 : 12,
           data: values.map((v, i) => ({ name: categories[i] ?? `#${i + 1}`, value: v })),
         },
       ],
@@ -107,10 +168,10 @@ export function toEChartsOption(matrix: RangeMatrix, config: ChartConfig): Recor
       name: seriesName(colIdx),
     }))
     return {
-      title: config.title ? { text: config.title, left: 'center' } : undefined,
+      title: titleBlock,
       tooltip: {},
-      legend: config.legend !== false ? { bottom: 0, data: series.map((s) => s.name) } : undefined,
-      radar: { indicator: indicators },
+      legend: showLegend ? { bottom: 6, type: 'scroll', data: series.map((s) => s.name) } : undefined,
+      radar: { indicator: indicators, center: ['50%', hasTitle ? '54%' : '50%'], radius: '62%' },
       series: [{ type: 'radar', data: series }],
     }
   }
@@ -131,9 +192,10 @@ export function toEChartsOption(matrix: RangeMatrix, config: ChartConfig): Recor
     }
     const allVals = data.map((d) => d[2])
     return {
-      title: config.title ? { text: config.title, left: 'center' } : undefined,
+      title: titleBlock,
       tooltip: { position: 'top' },
-      xAxis: { type: 'category', data: categories, splitArea: { show: true } },
+      grid: { left: 12, right: 16, top: hasTitle ? 44 : 20, bottom: 70, containLabel: true },
+      xAxis: { type: 'category', data: categories, splitArea: { show: true }, axisLabel: { hideOverlap: true } },
       yAxis: { type: 'category', data: yLabels, splitArea: { show: true } },
       visualMap: {
         min: allVals.length > 0 ? Math.min(...allVals) : 0,
@@ -141,7 +203,7 @@ export function toEChartsOption(matrix: RangeMatrix, config: ChartConfig): Recor
         calculable: true,
         orient: 'horizontal',
         left: 'center',
-        bottom: '15%',
+        bottom: 8,
       },
       series: [{
         name: seriesName(colIdx),
@@ -167,11 +229,15 @@ export function toEChartsOption(matrix: RangeMatrix, config: ChartConfig): Recor
       }
     })
     return {
-      title: config.title ? { text: config.title } : undefined,
+      title: titleBlock,
       tooltip: { trigger: 'item' },
-      legend: config.legend !== false ? {} : undefined,
-      xAxis: { type: 'value', name: config.xAxisLabel },
-      yAxis: { type: 'value', name: config.yAxisLabel },
+      legend: legendRow,
+      grid: cartesianGrid,
+      xAxis: {
+        type: 'value',
+        ...(config.xAxisLabel ? { name: config.xAxisLabel, nameLocation: 'middle', nameGap: 28 } : {}),
+      },
+      yAxis: valueYAxis(),
       series,
     }
   }
@@ -198,10 +264,11 @@ export function toEChartsOption(matrix: RangeMatrix, config: ChartConfig): Recor
       running += v
     }
     return {
-      title: config.title ? { text: config.title } : undefined,
+      title: titleBlock,
       tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-      xAxis: { type: 'category', data: categories, name: config.xAxisLabel },
-      yAxis: { type: 'value', name: config.yAxisLabel },
+      grid: cartesianGrid,
+      xAxis: categoryXAxis(categories),
+      yAxis: valueYAxis(),
       series: [
         {
           name: 'Base',
@@ -245,13 +312,15 @@ export function toEChartsOption(matrix: RangeMatrix, config: ChartConfig): Recor
       }
     })
     return {
-      title: config.title ? { text: config.title } : undefined,
+      title: titleBlock,
       tooltip: { trigger: 'axis' },
-      legend: config.legend !== false ? {} : undefined,
-      xAxis: { type: 'category', data: categories, name: config.xAxisLabel },
+      legend: legendRow,
+      // Extra right margin for the secondary y-axis.
+      grid: { ...cartesianGrid, right: 48 },
+      xAxis: categoryXAxis(categories),
       yAxis: [
-        { type: 'value', name: config.yAxisLabel },
-        { type: 'value', name: 'Secondary' },
+        valueYAxis(),
+        { type: 'value', name: 'Secondary', nameLocation: 'middle', nameGap: 44, nameRotate: 90 },
       ],
       series,
     }
@@ -272,18 +341,12 @@ export function toEChartsOption(matrix: RangeMatrix, config: ChartConfig): Recor
   })
 
   return {
-    title: config.title ? { text: config.title } : undefined,
+    title: titleBlock,
     tooltip: { trigger: 'axis' },
-    legend: config.legend !== false ? {} : undefined,
-    xAxis: {
-      type: 'category',
-      data: categories,
-      name: config.xAxisLabel,
-    },
-    yAxis: {
-      type: 'value',
-      name: config.yAxisLabel,
-    },
+    legend: legendRow,
+    grid: cartesianGrid,
+    xAxis: categoryXAxis(categories),
+    yAxis: valueYAxis(),
     series,
   }
 }

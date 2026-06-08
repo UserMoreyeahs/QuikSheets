@@ -53,3 +53,49 @@ describe('toEChartsOption', () => {
     ])
   })
 })
+
+/**
+ * Pins the layout fix for "chart values overlapping each other / want a
+ * separate section for values". Title, legend, axis values and plot must each
+ * occupy their own region.
+ */
+describe('toEChartsOption layout (no-overlap contract)', () => {
+  const base = { hasHeader: true as const, categoryColumn: 0, seriesColumns: [1] }
+
+  it('cartesian charts use a containLabel grid so axis values stay inside the plot', () => {
+    const opt = toEChartsOption(matrix, { ...base, kind: 'bar' }) as { grid: { containLabel: boolean } }
+    expect(opt.grid.containLabel).toBe(true)
+  })
+
+  it('puts the legend on its own row below the title, and the plot below both', () => {
+    const opt = toEChartsOption(matrix, { ...base, kind: 'bar', title: 'Sales', legend: true }) as {
+      title: { top: number; left: string }
+      legend: { top: number }
+      grid: { top: number }
+    }
+    expect(opt.title.left).toBe('center')
+    expect(opt.legend.top).toBeGreaterThan(opt.title.top) // legend below title
+    expect(opt.grid.top).toBeGreaterThan(opt.legend.top) // plot below legend
+  })
+
+  it('hides overlapping category labels on the x-axis', () => {
+    const opt = toEChartsOption(matrix, { ...base, kind: 'bar' }) as {
+      xAxis: { axisLabel: { hideOverlap: boolean } }
+    }
+    expect(opt.xAxis.axisLabel.hideOverlap).toBe(true)
+  })
+
+  it('pie slices avoid label overlap and the legend drops to the bottom strip', () => {
+    const opt = toEChartsOption(matrix, { ...base, kind: 'pie', legend: true }) as {
+      series: Array<{ avoidLabelOverlap: boolean }>
+      legend: { bottom: number }
+    }
+    expect(opt.series[0]?.avoidLabelOverlap).toBe(true)
+    expect(opt.legend.bottom).toBeDefined()
+  })
+
+  it('omits the legend entirely when disabled', () => {
+    const opt = toEChartsOption(matrix, { ...base, kind: 'bar', legend: false }) as { legend?: unknown }
+    expect(opt.legend).toBeUndefined()
+  })
+})
