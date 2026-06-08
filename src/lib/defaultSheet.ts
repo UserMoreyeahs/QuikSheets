@@ -40,16 +40,22 @@ export function createSampleWorkbook(): Sheet[] {
   const header = (v: string): Cell => ({ v, m: v, bl: 1, bg: '#eef2ff', fc: '#1e293b' })
   const txt = (v: string): Cell => ({ v, m: v })
   const num = (v: number): Cell => ({ v, m: String(v) })
-  const formula = (f: string): Cell => ({ f })
+  // FortuneSheet stores `f` WITHOUT the leading "=" (matches createCell, the
+  // edit path, and every template). A leading "=" is unparseable AND doubles
+  // to "==" in our formula bar. We also cache the computed `v`/`m` so the cell
+  // shows its value immediately on hydration — FortuneSheet does NOT reliably
+  // recompute formula-only cells on mount, which is why the Revenue column
+  // rendered blank on every new workbook. Same shape the working templates use.
+  const formula = (f: string, val: number): Cell => ({ f, v: val, m: String(val) })
 
   const rows: Array<Array<Cell | null>> = [
     [header('Product'), header('Region'), header('Units'), header('Unit Price'), header('Revenue')],
-    [txt('Widget A'), txt('North'), num(120), num(9.99), formula('=C2*D2')],
-    [txt('Widget B'), txt('South'), num(85), num(14.5), formula('=C3*D3')],
-    [txt('Gadget C'), txt('East'), num(210), num(7.25), formula('=C4*D4')],
-    [txt('Gadget D'), txt('West'), num(64), num(19), formula('=C5*D5')],
+    [txt('Widget A'), txt('North'), num(120), num(9.99), formula('C2*D2', 1198.8)],
+    [txt('Widget B'), txt('South'), num(85), num(14.5), formula('C3*D3', 1232.5)],
+    [txt('Gadget C'), txt('East'), num(210), num(7.25), formula('C4*D4', 1522.5)],
+    [txt('Gadget D'), txt('West'), num(64), num(19), formula('C5*D5', 1216)],
     [null, null, null, null, null],
-    [{ v: 'Total', m: 'Total', bl: 1 }, null, formula('=SUM(C2:C5)'), null, formula('=SUM(E2:E5)')],
+    [{ v: 'Total', m: 'Total', bl: 1 }, null, formula('SUM(C2:C5)', 479), null, formula('SUM(E2:E5)', 5169.8)],
   ]
 
   const celldata: CellWithRowAndCol[] = []
