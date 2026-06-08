@@ -104,6 +104,24 @@ export function getCellDisplayValue(cell: Cell | null | undefined): string | num
   return null
 }
 
+/**
+ * Value to SORT / COMPARE a cell by. Prefers the raw underlying value `v`
+ * (the number 1200 behind a "$1,200.00" currency cell, 0.1234 behind
+ * "12.34%", a date serial, or a formula's computed result) so numeric and
+ * date columns sort by magnitude — not by their formatted display string.
+ * Falls back to the display `m`, then the formula text.
+ *
+ * Sorting on the display value made "$1,200" sort before "$900" (lexically,
+ * because '1' < '9'); sorting on `v` fixes that.
+ */
+export function getCellSortValue(cell: Cell | null | undefined): string | number | boolean | null {
+  if (!cell) return null
+  if (cell.v !== undefined && cell.v !== null && cell.v !== '') return cell.v
+  if (cell.m !== undefined && cell.m !== null) return cell.m
+  if (cell.f) return `=${cell.f}`
+  return null
+}
+
 export function getCellFormulaBarValue(cell: Cell | null | undefined): string {
   if (!cell) return ''
   if (cell.f) return `=${cell.f}`
