@@ -22,6 +22,8 @@ interface MockRow {
   id?: string
   name?: string
   data?: unknown
+  workspace_id?: string
+  owner_id?: string
 }
 
 interface MockTableState {
@@ -42,6 +44,8 @@ function makeMockClient(state: Record<string, MockTableState>) {
       eq(col: string, val: unknown) { filters.push([col, val]); return chain },
       update(values: MockRow) { pendingUpdate = values; return chain },
       insert(values: MockRow) { pendingInsert = values; return chain },
+      order(_col: string, _opts?: unknown) { return chain },
+      limit(_n: number) { return chain },
       async maybeSingle() {
         return resolve('maybeSingle')
       },
@@ -79,11 +83,13 @@ function makeMockClient(state: Record<string, MockTableState>) {
 }
 
 const supabaseState = {
-  workbooks:        { rows: [] as MockRow[] },
-  workbook_members: { rows: [] as MockRow[] },
+  workbooks:         { rows: [] as MockRow[] },
+  workbook_members:  { rows: [] as MockRow[] },
+  workspace_members: { rows: [] as MockRow[] },
 } as Record<string, MockTableState> & {
-  workbooks:        MockTableState
-  workbook_members: MockTableState
+  workbooks:         MockTableState
+  workbook_members:  MockTableState
+  workspace_members: MockTableState
 }
 
 vi.mock('@/lib/supabase', () => ({
@@ -100,6 +106,7 @@ beforeEach(async () => {
   vi.resetModules()
   supabaseState.workbooks.rows = []
   supabaseState.workbook_members.rows = []
+  supabaseState.workspace_members.rows = []
   sheetApi = await import('@/lib/sheetApi')
 })
 
@@ -110,6 +117,7 @@ const OWNER_ID    = 'user_owner'
 const EDITOR_ID   = 'user_editor'
 const VIEWER_ID   = 'user_viewer'
 const STRANGER_ID = 'user_stranger'
+const WORKSPACE_ID = 'ws_test'
 
 function seedWorkbook() {
   supabaseState.workbooks.rows.push({
@@ -227,7 +235,9 @@ describe('saveWorkbookRecord', () => {
   it('saving an id with NO existing row creates it — caller becomes owner (localStorage→cloud heal)', async () => {
     // No seedWorkbook(): the id exists nowhere. Mirrors a workbook created with
     // a client-generated id in localStorage being saved for the first time. It
-    // must be INSERTED (not 403'd) so it reaches the cloud.
+    // must be INSERTED (not 403'd) so it reaches the cloud — with the caller's
+    // workspace_id (NOT NULL FK) resolved from workspace_members.
+    supabaseState.workspace_members.rows.push({ workspace_id: WORKSPACE_ID, user_id: OWNER_ID, role: 'owner' })
     const ORPHAN_ID = 'wb_orphan_local'
     const result = await sheetApi.saveWorkbookRecord(
       { id: ORPHAN_ID, name: 'Vinay', data: { v: 9 } },
@@ -240,5 +250,17 @@ describe('saveWorkbookRecord', () => {
       | Record<string, unknown>
       | undefined
     expect(row?.owner_id).toBe(OWNER_ID)
+    expect(row?.workspace_id).toBe(WORKSPACE_ID)
+  })
+
+  it('orphan-id save with no workspace membership → 409 (cannot create)', async () => {
+    // User belongs to no workspace → cannot satisfy the NOT NULL workspace_id.
+    const result = await sheetApi.saveWorkbookRecord(
+      { id: 'wb_no_ws', name: 'X', data: {} },
+      STRANGER_ID,
+    )
+    expect('response' in result).toBe(true)
+    if (!('response' in result)) return
+    expect(result.response.status).toBe(409)
   })
 })
