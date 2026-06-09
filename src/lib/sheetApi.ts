@@ -183,9 +183,34 @@ export async function saveWorkbookRecord(
       }
     }
     if (!existing.data) {
+      // workbooks.workspace_id is a NOT NULL FK. Resolve the caller's workspace
+      // the same way the UI does (first workspace they belong to, by join date)
+      // so the created workbook lands where the user expects.
+      const ws = await service
+        .from('workspace_members')
+        .select('workspace_id')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      const workspaceId = (ws.data as { workspace_id?: string } | null)?.workspace_id
+      if (!workspaceId) {
+        return {
+          response: Response.json(
+            { error: 'No workspace found for this user; cannot create the workbook.' },
+            { status: 409 }
+          ),
+        }
+      }
       const created = await service
         .from('workbooks')
-        .insert({ id: payload.id, name: payload.name, data: payload.data, owner_id: userId })
+        .insert({
+          id: payload.id,
+          name: payload.name,
+          data: payload.data,
+          owner_id: userId,
+          workspace_id: workspaceId,
+        })
         .select('id, updated_at')
         .maybeSingle()
       if (created.error || !created.data) {
