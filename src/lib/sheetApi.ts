@@ -151,8 +151,8 @@ export async function saveWorkbookRecord(
       }
     }
 
-    // Slow path: user is not the owner. Allow only if they are an
-    // `editor` member.
+    // Slow path: the owner fast-path matched 0 rows. Use the service role to
+    // figure out WHY before deciding access.
     const service = getServiceRoleSupabase()
     if (!service) {
       return {
@@ -163,6 +163,43 @@ export async function saveWorkbookRecord(
       }
     }
 
+    // Does a row for this id exist at all? A client-generated id with NO row
+    // anywhere is a localStorage-origin workbook being saved to the cloud for
+    // the first time — INSERT it (caller becomes owner, id kept stable) rather
+    // than 403-ing forever. Previously every save of such a workbook returned
+    // 403 ("Not allowed to edit") → the client fell back to localStorage and
+    // the workbook never synced to Supabase.
+    const existing = await service
+      .from('workbooks')
+      .select('id, updated_at')
+      .eq('id', payload.id)
+      .maybeSingle()
+    if (existing.error) {
+      return {
+        response: Response.json(
+          { error: 'Failed to look up workbook.', details: existing.error.message },
+          { status: 500 }
+        ),
+      }
+    }
+    if (!existing.data) {
+      const created = await service
+        .from('workbooks')
+        .insert({ id: payload.id, name: payload.name, data: payload.data, owner_id: userId })
+        .select('id, updated_at')
+        .maybeSingle()
+      if (created.error || !created.data) {
+        return {
+          response: Response.json(
+            { error: 'Failed to create workbook.', details: created.error?.message ?? 'insert returned no row' },
+            { status: 500 }
+          ),
+        }
+      }
+      return savedResult(payload.id, (created.data as { updated_at?: string }).updated_at)
+    }
+
+    // Row exists but isn't owned by the caller → allow only `editor` members.
     const memberQuery = await service
       .from('workbook_members')
       .select('role')
