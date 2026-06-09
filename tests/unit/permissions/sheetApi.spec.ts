@@ -223,4 +223,22 @@ describe('saveWorkbookRecord', () => {
     if ('response' in result) return
     expect(typeof result.id).toBe('string')
   })
+
+  it('saving an id with NO existing row creates it — caller becomes owner (localStorage→cloud heal)', async () => {
+    // No seedWorkbook(): the id exists nowhere. Mirrors a workbook created with
+    // a client-generated id in localStorage being saved for the first time. It
+    // must be INSERTED (not 403'd) so it reaches the cloud.
+    const ORPHAN_ID = 'wb_orphan_local'
+    const result = await sheetApi.saveWorkbookRecord(
+      { id: ORPHAN_ID, name: 'Vinay', data: { v: 9 } },
+      OWNER_ID,
+    )
+    expect('response' in result).toBe(false)
+    if ('response' in result) return
+    expect(result.id).toBe(ORPHAN_ID)
+    const row = supabaseState.workbooks.rows.find((r) => r.id === ORPHAN_ID) as
+      | Record<string, unknown>
+      | undefined
+    expect(row?.owner_id).toBe(OWNER_ID)
+  })
 })
