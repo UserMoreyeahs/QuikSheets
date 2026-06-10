@@ -5,7 +5,7 @@ import { useSheetStore } from '@/store/sheetStore'
 import { debouncedSave, saveWorkbook, flushPendingSave } from '@/lib/saveService'
 import { cn } from '@/lib/utils'
 
-type SaveState = 'saved' | 'saving' | 'unsaved' | 'error' | 'conflict'
+type SaveState = 'saved' | 'saving' | 'unsaved' | 'error' | 'conflict' | 'offline'
 
 interface SaveStatusProps {
   workbookName: string
@@ -25,7 +25,7 @@ function formatTime(date: Date): string {
 }
 
 export function SaveStatus({ workbookName, workbookData, workbookId }: SaveStatusProps) {
-  const { isSaving, lastSavedAt, setIsSaving, setLastSavedAt } = useSheetStore()
+  const { isSaving, lastSavedAt, setIsSaving, setLastSavedAt, isHydrated } = useSheetStore()
   const [saveState, setSaveState] = useState<SaveState>('saved')
   const [currentId, setCurrentId] = useState<string | undefined>(workbookId)
 
@@ -58,14 +58,13 @@ export function SaveStatus({ workbookName, workbookData, workbookId }: SaveStatu
       return
     }
 
-    // Save fell back to localStorage. We treat this as "saved" for the
-    // UI (the user's work is at least on disk) but a future iteration
-    // could distinguish "saved offline" with a separate icon. Important:
-    // we DON'T call setSaveState('error') here because a 401 (logged
-    // out / demo session) still shouldn't scare the user when their
-    // edits are safely in localStorage.
+    // Save fell back to localStorage. Show an HONEST distinct state — the
+    // old behavior showed plain "Saved", which made cloud-save failures
+    // invisible (users believed their data synced when it only lived in
+    // this browser). Not 'error': the work IS safe locally; clicking
+    // retries the cloud save.
     setLastSavedAt(new Date())
-    setSaveState('saved')
+    setSaveState('offline')
   }, [setIsSaving, setLastSavedAt])
 
   useEffect(() => {
@@ -104,6 +103,16 @@ export function SaveStatus({ workbookName, workbookData, workbookId }: SaveStatu
       return
     }
 
+    // HYDRATION GATE — never autosave before the mount-time load finishes.
+    // The name-load effect changes workbookName right after mount, which
+    // armed a 2s-debounced save of the PRISTINE EMPTY grid; when the
+    // server GET took >2s, that empty save overwrote the user's data
+    // (no baseUpdatedAt on a fresh reload → unconditional update).
+    // When isHydrated flips true this effect re-runs and arms one save
+    // with the REAL hydrated data — which also syncs any pending local
+    // copy to the cloud.
+    if (!isHydrated) return
+
     setSaveState('unsaved')
     // Autosave through the shared debounce, and update the indicator when it
     // resolves. Previously this was fire-and-forget, so the chip stayed on
@@ -122,10 +131,10 @@ export function SaveStatus({ workbookName, workbookData, workbookId }: SaveStatu
         }
         if (result.id && result.destination === 'supabase') setCurrentId(result.id)
         setLastSavedAt(new Date())
-        setSaveState('saved')
+        setSaveState(result.destination === 'supabase' ? 'saved' : 'offline')
       },
     )
-  }, [currentId, workbookData, workbookName, setLastSavedAt])
+  }, [currentId, workbookData, workbookName, setLastSavedAt, isHydrated])
 
   const statusConfig = {
     saved: {
@@ -156,6 +165,12 @@ export function SaveStatus({ workbookName, workbookData, workbookId }: SaveStatu
       label: 'Edited elsewhere - click to reload',
       color: 'text-amber-600',
       icon: '!',
+      spin: false,
+    },
+    offline: {
+      label: 'Saved on this device - not synced',
+      color: 'text-amber-600',
+      icon: '⌂',
       spin: false,
     },
   } as const

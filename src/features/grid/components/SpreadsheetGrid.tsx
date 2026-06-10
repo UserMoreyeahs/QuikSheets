@@ -11,6 +11,7 @@ import {
   getCellFromSheet,
   getSheetMatrix,
   isSheetEmpty,
+  stripSelectionState,
 } from '@/lib/fortuneSheet'
 import { isValidValue } from '@/lib/validation'
 import { createDefaultSheet } from '@/lib/defaultSheet'
@@ -215,7 +216,13 @@ export function SpreadsheetGrid({
     }
   }, [setGridInstance])
 
-  const workbookData = useMemo(() => cloneFortuneData(gridSheets), [gridSheets])
+  const workbookData = useMemo(
+    // stripSelectionState: never let a round-tripped selection snapshot be
+    // restored RAW on remount — it rendered the selection box (and the fill
+    // handle on its corner) at a stale cell. See fortuneSheet.ts.
+    () => stripSelectionState(cloneFortuneData(gridSheets)),
+    [gridSheets]
+  )
   const workbookStructureKey = useMemo(
     () => {
       // hydrationVersion forces a remount whenever the sheet store does a
@@ -241,6 +248,40 @@ export function SpreadsheetGrid({
 
   useEffect(() => {
     pendingHydrationRef.current = true
+  }, [workbookStructureKey])
+
+  // After a remount (structure-key change) the Workbook falls back to its
+  // default A1 selection (we strip the round-tripped snapshot — see
+  // stripSelectionState). Re-assert the user's REAL selection from the
+  // store: setSelection normalizes against live geometry, which snaps the
+  // selection box AND the built-in fill handle to the true corner, so the
+  // selection survives fill/sort/paste/CF remounts like it does in Excel.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const instance = workbookRef.current
+      if (!instance) return
+      const { selectedRange, selectedCell } = useSheetStore.getState()
+      const range =
+        selectedRange ?? (selectedCell ? { start: selectedCell, end: selectedCell } : null)
+      if (!range) return
+      try {
+        instance.setSelection([
+          {
+            row: [
+              Math.min(range.start.row, range.end.row),
+              Math.max(range.start.row, range.end.row),
+            ],
+            column: [
+              Math.min(range.start.col, range.end.col),
+              Math.max(range.start.col, range.end.col),
+            ],
+          },
+        ])
+      } catch {
+        // Best-effort — a failed re-assert just leaves the default selection.
+      }
+    }, 150)
+    return () => window.clearTimeout(timer)
   }, [workbookStructureKey])
 
   useEffect(() => {
@@ -286,7 +327,7 @@ export function SpreadsheetGrid({
       return
     }
 
-    const syncData = cloneFortuneData(gridSheets)
+    const syncData = stripSelectionState(cloneFortuneData(gridSheets))
     const syncKey = stringifySheets(syncData)
     const timer = window.setTimeout(() => {
       try {

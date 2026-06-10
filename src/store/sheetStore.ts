@@ -157,6 +157,16 @@ interface SheetState {
   formulaBarValue: string
   isSaving: boolean
   lastSavedAt: Date | null
+  /**
+   * True once the mount-time hydration (Supabase / localStorage / template)
+   * has finished — success OR definitive miss. Autosave MUST NOT run before
+   * this: a name-change effect on refresh armed a 2s-debounced save of the
+   * PRISTINE EMPTY default grid, and when hydration (GET /api/sheet) took
+   * longer than 2s the empty grid was POSTed with no baseUpdatedAt —
+   * unconditionally overwriting the user's saved data ("refresh lost
+   * everything").
+   */
+  isHydrated: boolean
   activeFormatting: ActiveFormatting
   sortConfig: SortConfig | null
   activeFilters: FilterRule[]
@@ -209,6 +219,7 @@ interface SheetActions {
   ) => void
   setIsSaving: (saving: boolean) => void
   setLastSavedAt: (date: Date) => void
+  setHydrated: (hydrated: boolean) => void
   reset: () => void
   setActiveFormatting: (formatting: Partial<ActiveFormatting>) => void
   applyFormatToSelection: (formatting: Partial<ActiveFormatting>) => void
@@ -259,6 +270,7 @@ const initialState: SheetState = {
   formulaBarValue: '',
   isSaving: false,
   lastSavedAt: null,
+  isHydrated: false,
   activeFormatting: defaultFormatting,
   sortConfig: null,
   activeFilters: [],
@@ -596,6 +608,7 @@ export const useSheetStore = create<SheetState & SheetActions>()(
 
         setIsSaving: (saving) => set({ isSaving: saving }),
         setLastSavedAt: (date) => set({ lastSavedAt: date }),
+        setHydrated: (hydrated) => set({ isHydrated: hydrated }),
 
         reset: () => {
           const gridInstance = get().gridInstance

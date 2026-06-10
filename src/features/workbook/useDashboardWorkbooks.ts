@@ -14,17 +14,39 @@ export interface DashboardWorkbook {
 
 const SUPABASE_KEY = ['dashboard', 'workbooks', 'supabase'] as const
 
-function readLocalWorkbooks(): DashboardWorkbook[] {
+/**
+ * List the CURRENT user's local (offline-fallback) workbooks.
+ *
+ * Reads the user-scoped data blobs `quiksheets_workbook:<scope>:id:<wbId>`
+ * written by saveService — scope is the Supabase user id, or 'anon' when
+ * logged out. Names come from the blob payload.
+ *
+ * SECURITY: this must NEVER list another scope's entries. The previous
+ * implementation scanned the device-global `quiksheets_workbook_name:<id>`
+ * keys (no user segment), so on a shared browser a newly logged-in user saw
+ * every workbook ANY previous user had opened — a cross-user leak. Those
+ * unscoped name keys are no longer consulted for listing.
+ */
+export function readLocalWorkbooks(userId: string | null): DashboardWorkbook[] {
   if (typeof window === 'undefined') return []
   try {
+    const scope = userId ?? 'anon'
+    const prefix = `quiksheets_workbook:${scope}:id:`
     const out: DashboardWorkbook[] = []
     for (let i = 0; i < window.localStorage.length; i++) {
       const key = window.localStorage.key(i)
-      if (key?.startsWith('quiksheets_workbook_name:')) {
-        const id = key.replace('quiksheets_workbook_name:', '')
-        const name = window.localStorage.getItem(key) ?? `Workbook ${id.slice(0, 8)}`
-        out.push({ id, name, source: 'local' })
+      if (!key?.startsWith(prefix)) continue
+      const id = key.slice(prefix.length)
+      let name = `Workbook ${id.slice(0, 8)}`
+      try {
+        const blob = JSON.parse(window.localStorage.getItem(key) ?? 'null') as {
+          name?: string
+        } | null
+        if (blob?.name?.trim()) name = blob.name
+      } catch {
+        /* unreadable blob — keep the derived name */
       }
+      out.push({ id, name, source: 'local' })
     }
     return out
   } catch {
@@ -51,18 +73,24 @@ function toDashboardRow(row: WorkbookSummary): DashboardWorkbook {
  */
 export function useDashboardWorkbooks() {
   const [hasAuth, setHasAuth] = useState<boolean | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
   const [localRows, setLocalRows] = useState<DashboardWorkbook[]>([])
   const qc = useQueryClient()
 
   useEffect(() => {
-    setLocalRows(readLocalWorkbooks())
     const supabase = getBrowserSupabase()
     if (!supabase) {
       setHasAuth(false)
+      setLocalRows(readLocalWorkbooks(null))
       return
     }
     void supabase.auth.getUser().then(({ data }) => {
-      setHasAuth(Boolean(data.user))
+      const uid = data.user?.id ?? null
+      setHasAuth(Boolean(uid))
+      setUserId(uid)
+      // Only list local blobs AFTER the user scope is known — listing the
+      // 'anon' scope to an authenticated user (or vice versa) is the leak.
+      setLocalRows(readLocalWorkbooks(uid))
     })
   }, [])
 
@@ -84,8 +112,8 @@ export function useDashboardWorkbooks() {
   }
 
   const refreshLocal = useCallback(() => {
-    setLocalRows(readLocalWorkbooks())
-  }, [])
+    setLocalRows(readLocalWorkbooks(userId))
+  }, [userId])
 
   const refreshRemote = useCallback(() => {
     void qc.invalidateQueries({ queryKey: SUPABASE_KEY })

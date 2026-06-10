@@ -229,7 +229,6 @@ const PivotsLayer = dynamic(
 )
 import { usePivotUiStore } from '@/features/pivot/store/pivotUiStore'
 import { SlicersLayer } from '@/features/slicers/components/SlicersLayer'
-import { FillHandle } from '@/features/drag-fill/components/FillHandle'
 import { RemoteCursors, PresenceAvatars } from '@/features/collab/components/RemoteCursors'
 import { useRealtimeCollab } from '@/features/collab/hooks/useRealtimeCollab'
 const ForecastPanel = dynamic(
@@ -1397,7 +1396,10 @@ export default function SheetPage() {
         <ErrorBoundary silent><WatchWindow /></ErrorBoundary>
         <ErrorBoundary silent><PivotsLayer /></ErrorBoundary>
         <ErrorBoundary silent><SlicersLayer /></ErrorBoundary>
-        <ErrorBoundary silent><FillHandle /></ErrorBoundary>
+        {/* Drag-fill: FortuneSheet's BUILT-IN fill handle (.luckysheet-cs-fillhandle)
+            does Excel-grade series/date/format/formula fill natively. The old
+            custom <FillHandle/> hid it (its invisible hover zone swallowed the
+            mousedown) while positioning itself off a stale DOM overlay. */}
         <ErrorBoundary silent><RemoteCursors /></ErrorBoundary>
         {showMap && (
           <ErrorBoundary fallback={<div className="absolute inset-0 z-40 flex items-center justify-center bg-white/80 text-sm text-red-600 dark:bg-zinc-900/80">Dependency map failed to render.</div>}>

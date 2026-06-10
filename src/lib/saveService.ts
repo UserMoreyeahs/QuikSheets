@@ -150,6 +150,18 @@ function persistLocally(payload: WorkbookSaveData, userId: string | null): void 
  */
 let _lastKnownUserId: string | null = null
 
+/**
+ * Resolve (and cache) the auth context once, without saving anything.
+ * The sheet page calls this on mount so `_lastKnownUserId` is primed for the
+ * SYNCHRONOUS unload flush — otherwise a refresh that hydrated from the
+ * server (where loadWorkbookData never runs) left it null, and an early tab
+ * close keyed the flushed blob under 'anon' while the loader reads the
+ * '<userId>' segment ("data gone after refresh").
+ */
+export async function primeAuthContext(): Promise<void> {
+  await getAuthContext()
+}
+
 async function getAuthContext(): Promise<AuthContext> {
   const supabase = getBrowserSupabase()
   if (!supabase) return { accessToken: null, userId: null }
@@ -300,10 +312,34 @@ export async function loadWorkbookData(
       if (hit) return JSON.parse(hit) as WorkbookSaveData
     }
 
-    // 2. name-scoped, then 3. legacy.
+    // 1b. id-scoped under ANY user segment. Saver and loader resolve the
+    // session independently, so the same workbook can end up written under
+    // ':anon:' (auth not yet resolved / unload flush) while the loader reads
+    // ':<userId>:' — making saved data look gone after a refresh. Workbook
+    // ids are globally unique, so a cross-segment id hit can only be this
+    // workbook; re-home it under the current segment.
+    if (opts.id && idKey) {
+      const suffix = `:id:${opts.id}`
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const key = window.localStorage.key(i)
+        if (!key || !key.startsWith(`${KEY_PREFIX}:`) || !key.endsWith(suffix)) continue
+        const hit = window.localStorage.getItem(key)
+        if (!hit) continue
+        try {
+          window.localStorage.setItem(idKey, hit) // re-home for clean future reads
+        } catch {
+          /* best-effort */
+        }
+        return JSON.parse(hit) as WorkbookSaveData
+      }
+    }
+
+    // 2. name-scoped, then 3. legacy — but NEVER serve the legacy
+    // (pre-isolation, user-UNSCOPED) blob to an authenticated user: on a
+    // shared browser it could be a different person's data.
     const nameHit = window.localStorage.getItem(nameKey)
     const legacyKey = legacyLocalStorageKey(opts.name)
-    const legacyHit = nameHit ? null : window.localStorage.getItem(legacyKey)
+    const legacyHit = nameHit || userId !== null ? null : window.localStorage.getItem(legacyKey)
     const raw = nameHit ?? legacyHit
     if (!raw) return null
 
