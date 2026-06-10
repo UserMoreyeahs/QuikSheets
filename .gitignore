@@ -47,5 +47,5 @@ playwright-report/
 # claude worktrees
 .claude/worktrees/
 
-
-.vercel
+# local session scratch
+.clone/
