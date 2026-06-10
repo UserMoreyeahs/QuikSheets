@@ -12,11 +12,8 @@ Quiksheets is a production-grade browser spreadsheet application with AI-native 
 - shadcn/ui
 - Supabase PostgreSQL/Auth/Storage/Realtime/RLS
 - Supabase Broadcast + Presence
-- Primary spreadsheet engine: Univer Sheets
-- Fallback spreadsheet engine: FortuneSheet
-- Required abstraction: SpreadsheetEngineAdapter
-- Primary formula engine: Univer formula engine
-- Optional fallback formula engine: HyperFormula through FormulaEngineAdapter only
+- Spreadsheet engine: FortuneSheet (committed decision, commit 37bda3c — direct coupling allowed; the Univer/SpreadsheetEngineAdapter scaffolding was deleted, do not rebuild it)
+- Formula engine: in-grid via @fortune-sheet/formula-parser + @formulajs/formulajs (patched in src/lib/formulajsPatches.ts); HyperFormula for validation/preview/explainer behind FormulaEngineAdapter (src/features/formula/FormulaEngineAdapter.ts) only
 - Zustand for UI/app state only
 - TanStack Query for server state
 - Groq SDK server-side only
@@ -32,7 +29,7 @@ Quiksheets is a production-grade browser spreadsheet application with AI-native 
 - Do not upgrade to Next.js 16 unless a separate compatibility spike proves it safe.
 - Do not call Groq from client/browser code.
 - Do not expose API keys.
-- Do not directly couple Univer, FortuneSheet, or HyperFormula outside adapters.
+- Do not couple HyperFormula outside FormulaEngineAdapter. (FortuneSheet coupling is allowed — it is the committed engine per 37bda3c.)
 - Do not store every spreadsheet cell in Zustand.
 - Do not implement P2 before P0 and P1 are stable.
 - Do not create placeholder UI and mark it complete.

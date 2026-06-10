@@ -62,6 +62,21 @@ export async function POST(request: Request) {
     return jsonError('Describe what the formula should do.', 400)
   }
 
+  // Deterministic fast-path BEFORE the no-key guard, so the simple
+  // column-addition template works offline too (without it, the 503 below
+  // made the route a hard failure with no GROQ key — nothing ran).
+  const deterministicResult = getSimpleColumnAdditionFormula(
+    instruction,
+    parseCellRow(body.cellAddress)
+  )
+  if (deterministicResult) {
+    return Response.json({
+      formula: deterministicResult.formula,
+      explanation: deterministicResult.explanation,
+      targetCell: deterministicResult.targetCell,
+    })
+  }
+
   if (!groq) {
     return jsonError(
       'AI assistance is not configured. Set GROQ_API_KEY to enable this feature.',
@@ -79,56 +94,44 @@ export async function POST(request: Request) {
     .join('\n\n')
 
   try {
-    const deterministicResult = getSimpleColumnAdditionFormula(
-      instruction,
-      parseCellRow(body.cellAddress)
-    )
+    const formulaCompletion = await groq.chat.completions.create({
+      model: GROQ_MODEL,
+      temperature: 0.1,
+      max_tokens: 120,
+      messages: [
+        { role: 'system', content: FORMULA_SYSTEM_PROMPT },
+        { role: 'user', content: userPrompt },
+      ],
+    })
 
-    let formula = deterministicResult?.formula ?? null
-    if (!formula) {
-      const formulaCompletion = await groq.chat.completions.create({
-        model: GROQ_MODEL,
-        temperature: 0.1,
-        max_tokens: 120,
-        messages: [
-          { role: 'system', content: FORMULA_SYSTEM_PROMPT },
-          { role: 'user', content: userPrompt },
-        ],
-      })
-
-      const formulaText = formulaCompletion.choices[0]?.message?.content
-      formula = cleanFormula(formulaText ?? '')
-    }
+    const formulaText = formulaCompletion.choices[0]?.message?.content
+    const formula = cleanFormula(formulaText ?? '')
     if (!formula.trim()) {
       return jsonError('The AI service returned an empty formula.', 502)
     }
 
-    let explanation = deterministicResult?.explanation
+    const explanationCompletion = await groq.chat.completions.create({
+      model: GROQ_MODEL,
+      temperature: 0.1,
+      max_tokens: 80,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'Explain spreadsheet formulas in plain English. One short sentence only. Do not suggest alternate formulas.',
+        },
+        {
+          role: 'user',
+          content: `Explain what this formula does: ${formula}`,
+        },
+      ],
+    })
 
-    if (!explanation) {
-      const explanationCompletion = await groq.chat.completions.create({
-        model: GROQ_MODEL,
-        temperature: 0.1,
-        max_tokens: 80,
-        messages: [
-          {
-            role: 'system',
-            content:
-              'Explain spreadsheet formulas in plain English. One short sentence only. Do not suggest alternate formulas.',
-          },
-          {
-            role: 'user',
-            content: `Explain what this formula does: ${formula}`,
-          },
-        ],
-      })
+    const explanation =
+      explanationCompletion.choices[0]?.message?.content?.trim() ||
+      'This formula follows the requested spreadsheet calculation.'
 
-      explanation =
-        explanationCompletion.choices[0]?.message?.content?.trim() ||
-        'This formula follows the requested spreadsheet calculation.'
-    }
-
-    return Response.json({ formula, explanation, targetCell: deterministicResult?.targetCell })
+    return Response.json({ formula, explanation })
   } catch (error) {
     const details = error instanceof Error ? error.message : 'Unknown error'
     if (

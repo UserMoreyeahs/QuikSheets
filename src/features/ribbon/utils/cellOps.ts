@@ -237,8 +237,10 @@ function countDecimals(format: string): number {
  * Apply an arbitrary Excel-style number format string to the selection.
  *
  * Used by the Currency-symbol dropdown to set non-preset formats like
- * `₹#,##,##0.00;[Red]-₹#,##,##0.00` (Indian Rupee with lakh-style
- * grouping) — which the canned NumberFormat presets can't express.
+ * `₹#,##0.00;[Red]-₹#,##0.00` — which the canned NumberFormat presets
+ * can't express. NOTE: lakh-style grouping (`#,##,##0`) is NOT supported —
+ * FortuneSheet's bundled SSF throws on it (pinned by currencyMask.spec.ts);
+ * the catch below surfaces a toast if a caller passes one.
  *
  * Writes the format into FortuneSheet's `ct.fa` per-cell. Cell type
  * stays 'n' (numeric) so calculations keep working.

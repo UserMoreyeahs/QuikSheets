@@ -34,6 +34,7 @@ export function useFormSubmissionMergeOnMount(
         '@/lib/formsApi'
       )
       const { cloneSheetWithData, getSheetMatrix } = await import('@/lib/fortuneSheet')
+      const { submissionValueToCell } = await import('@/features/forms/utils/mergeCellValue')
       await migrateLocalFormsToSupabase()
       const forms = await loadForms(workbookId)
       if (forms.length === 0) return
@@ -61,25 +62,9 @@ export function useFormSubmissionMergeOnMount(
             next[writeRow] = row
           }
           for (const field of form.fields) {
-            const raw = sub.values[field.id]
-            if (raw === undefined || raw === null || raw === '') {
-              row[field.columnIndex] = { v: '', m: '' }
-              continue
-            }
-            // Number/currency fields must land as NUMERIC cells. Writing
-            // String(raw) stored "15000" as text, which won't SUM or sort
-            // numerically (the T019 fidelity gap). Coerce, stripping any
-            // currency punctuation the submitter included.
-            if (field.kind === 'number' || field.kind === 'currency') {
-              const n =
-                typeof raw === 'number' ? raw : Number(String(raw).replace(/[₹$€£,\s]/g, ''))
-              if (Number.isFinite(n)) {
-                row[field.columnIndex] = { v: n, m: String(n) }
-                continue
-              }
-            }
-            const display = String(raw)
-            row[field.columnIndex] = { v: display, m: display }
+            // number/currency land as NUMERIC cells (T019 fidelity) — see
+            // submissionValueToCell, pinned by mergeCellValue.spec.ts.
+            row[field.columnIndex] = submissionValueToCell(field.kind, sub.values[field.id])
           }
           writeRow++
         }

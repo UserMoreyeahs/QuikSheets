@@ -7,7 +7,7 @@
 ## Build / Test / Run (verified working)
 - Dev server: `npm run dev`
 - Production build: `npm run build` (compiles clean; `/sheet/[id]` ≈ 839 kB)
-- Unit tests: `npx vitest run` — **571 passing / 46 files**
+- Unit tests: `npx vitest run` — **622 passing / 55 files** (as of 2026-06-09)
 - Typecheck: `npx tsc --noEmit` (note: there is **no** `npm run typecheck` script)
 - Lint: `npx eslint src/ --max-warnings 0`
 - Deploy: work on `develop`; merge `develop → main` → Vercel auto-deploys `quiksheets-v2`.
@@ -27,7 +27,7 @@ Notes: Dual-store: `useSheetStore` (grid data, selection, sort/filter/validation
 ## Formula Engine — Parser / Evaluator / Dependency Graph / Recalc
 Location: @fortune-sheet/formula-parser (in-grid), src/lib/formulaParserPatches.ts, src/lib/formulajsPatches.ts, src/features/formula/adapters/HyperFormulaAdapter.ts, src/lib/hyperformula.ts, src/features/dependency-map/utils/graphBuilder.ts
 Status: **IMPLEMENTED** (recalc path: **PARTIAL**)
-Notes: Hybrid engine. FortuneSheet's parser (backed by @formulajs/formulajs) evaluates **in-grid** formulas and self-recalculates on edit. A separate **HyperFormula adapter** powers validation, autocomplete, live-preview and the explainer. Patches add modern Excel fns (XLOOKUP/XMATCH/FILTER/SORT/UNIQUE/SEQUENCE/TEXTJOIN/LET/IFS) and fix bare TRUE/FALSE→#NAME?. **Gap:** `HyperFormulaAdapter.recalculateWorkbook` is orphaned (never called post-edit) — fine because the grid recalcs itself, but the adapter is not the source of truth. `LET` returns a pre-computed value only; `SORT/SORTBY` ignore multi-key/by-col args (formulajsPatches.ts:207,222,300).
+Notes: Hybrid engine. FortuneSheet's parser (backed by @formulajs/formulajs) evaluates **in-grid** formulas and self-recalculates on edit. A separate **HyperFormula adapter** powers validation, autocomplete, live-preview and the explainer. Patches add modern Excel fns (XLOOKUP/XMATCH/FILTER/SORT/UNIQUE/SEQUENCE/TEXTJOIN/LET/IFS) and fix bare TRUE/FALSE→#NAME?. **Gap:** `HyperFormulaAdapter.recalculateWorkbook` is orphaned (never called post-edit) — fine because the grid recalcs itself, but the adapter is not the source of truth. `LET` returns a pre-computed value only (true fix needs lazy parser-level eval). `SORT`/`SORTBY` were FIXED in `59594cd` — sort honors sort_index/sort_order/by_col on 2-D ranges, sortby is multi-key (formulajsPatches.ts `sort`/`sortby`, pinned by sortFunctions.spec.ts).
 
 ## Cross-Sheet References
 Location: src/features/formula-engine/formulaEngine.ts, src/features/live-preview/hooks/useLivePreview.ts, src/features/drag-fill/utils/offsetFormula.ts, src/features/dependency-map/utils/graphBuilder.ts
@@ -37,7 +37,7 @@ Notes: `Sheet2!A1` and `'My Sheet'!B5:D20` extracted, range-expanded, evaluated 
 ## Formatting Layer — Styles / Number Formats / Conditional Formatting
 Location: src/store/sheetStore.ts (FCellStyle, toFCellStyle, pushFormatToGrid, numberFormatString), src/features/toolbar/**, src/features/ribbon/components/HomeTab.tsx, src/features/conditional-formatting/**
 Status: **IMPLEMENTED** (default number formatting: see gap)
-Notes: Bold/italic/underline/strike/font/size/color/align/wrap + currency/accounting/percent/date/scientific/custom (e.g. `₹#,##,##0.00`), increase/decrease-decimal. CF supports 13 condition types × {standard, data-bar, color-scale, icon-set} with per-cell style backup. **Gap (Excel parity):** a cell with **no explicit format shows the raw float** (e.g. `3.368421053`) — Excel-standard (value≠format), but QuikSheets never applies a *sensible default* format, which is the source of the "raw float" complaint in Known Defects.
+Notes: Bold/italic/underline/strike/font/size/color/align/wrap + currency/accounting/percent/date/scientific/custom (e.g. `₹#,##0.00` — NOTE: lakh grouping `#,##,##0` THROWS in FortuneSheet's bundled SSF, never use it; pinned by currencyMask.spec.ts), increase/decrease-decimal. CF supports 13 condition types × {standard, data-bar, color-scale, icon-set} with per-cell style backup. **Gap (Excel parity):** a cell with **no explicit format shows the raw float** (e.g. `3.368421053`) — Excel-standard (value≠format), but QuikSheets never applies a *sensible default* format, which is the source of the "raw float" complaint in Known Defects.
 
 ## Charts
 Location: src/features/charts/components/ChartRenderer.tsx, src/features/charts/utils/toEChartsOption.ts, src/features/charts/store/chartPanelStore.ts
@@ -87,7 +87,7 @@ Notes: Cell-anchored comments, `@mention` parse → resolve via workbook_members
 ## AI Copilot (NL→formula, explain, clean, summarize, paste, filter, flash-fill)
 Location: src/app/api/ai/** , src/features/ai-cell/**, src/features/row-summarizer/**, src/features/smart-paste/**, src/lib/groq.ts
 Status: **IMPLEMENTED** (needs `GROQ_API_KEY`)
-Notes: 7 Groq endpoints (model llama-3.3-70b). Deterministic fallbacks exist for formula (A+B), filter (NL parser), summarize (stats). Without the key, AI routes return 503 (forecast is deterministic, no key needed).
+Notes: 7 Groq endpoints (model llama-3.3-70b). Without the key: `/api/ai/explain` and `/api/ai/summarize` serve deterministic fallbacks at 200, and the formula route's simple column-addition template runs pre-guard (offlineFallbacks.spec.ts); the remaining AI routes return 503 (forecast is deterministic, no key needed).
 
 ## Version History & Audit
 Location: src/features/version-history/storage/localVersionStore.ts, src/lib/versionsApi.ts, src/features/cell-history/services/historyService.ts
