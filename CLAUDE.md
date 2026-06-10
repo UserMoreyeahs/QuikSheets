@@ -2,11 +2,10 @@
 
 > Some session notes below describe earlier iterations of the codebase. New work follows the Quiksheets target stack documented in `AGENTS.md` and `docs/02_TECH_STACK_AND_DEPENDENCIES.md`.
 
-## Stack (legacy — being migrated; new code must follow AGENTS.md)
-- Next.js 14 → **target Next.js 15.x** (R2)
-- TypeScript strict, App Router
-- FortuneSheet (grid) — **target: behind SpreadsheetEngineAdapter, Univer primary** (R3)
-- HyperFormula (formulas) — **target: behind FormulaEngineAdapter, Univer formula primary** (R3)
+## Stack
+- Next.js 15.x, TypeScript strict, App Router
+- FortuneSheet (grid) — **committed engine, direct coupling allowed** (Univer/SpreadsheetEngineAdapter scaffolding deleted in `37bda3c`; do not rebuild it)
+- Formulas: in-grid via @fortune-sheet/formula-parser + @formulajs (patched in `src/lib/formulajsPatches.ts`); HyperFormula for validation/preview/explainer behind `src/features/formula/FormulaEngineAdapter.ts` only
 - Supabase (DB + Auth), Groq API (AI — free)
 - Zustand (state), Tailwind + shadcn/ui (styling)
 - ECharts (charts), SheetJS (import/export)
@@ -36,13 +35,19 @@
 - [x] Session 21: Starter Templates + Conditional Formatting
 
 ## Current Session
-- None — MVP launch-readiness pass complete (May 2026)
+- None — Excel-parity + cloud-save session complete (2026-06-09). See `PARITY_LOG.md` for T001–T029 verdicts and `CODEBASE_MAP.md` for subsystem status.
+
+## Excel-parity + cloud-save session (2026-06-08/09) — 12 fixes shipped, live-verified
+- **Cloud-save root-cause fix (most important):** new workbooks are born with a client-generated id in localStorage; `saveWorkbookRecord` only ever UPDATEd, so their first save 403'd → silent localStorage fallback FOREVER (SaveStatus still said "Saved"). Fixed: create-on-missing with `owner_id` + `workspace_id` (NOT NULL FK, resolved via first `workspace_members` row, same as the UI). Verified live: orphan-id POST went 403→500→200; the user's real workbook was healed localStorage→cloud. `src/lib/sheetApi.ts`.
+- **Excel-parity fixes (each pinned by unit tests, suite 612 green):** drag-fill propagates formulas with shifted relative refs (`offsetFormula`); chart title/legend/axis/plot separated — no overlap (`toEChartsOption`); sort by raw `v` not display (`getCellSortValue`); Currency mask `$#,##0.00`; ₹ Accounting mask `₹#,##0.00` — the lakh-grouped `₹#,##,##0.00` THROWS in FortuneSheet's bundled SSF, never reintroduce it; SORT honors sort_index/by_col + SORTBY multi-key (`formulajsPatches`); Excel-style date auto-detection on entry (`detectExcelDate`/`coerceDateCells` — typing `01-04-2026` stores serial 46113 + `ct {fa:'dd-mm-yyyy',t:'n'}`, display unchanged); explain-route offline fallback; form-submission numeric coercion; dead cell-history Restore button disabled (`restoreCell` is a stub).
+- **Verification channels that work** (the canvas grid defeats screenshots/CDP): Supabase `execute_sql` on `workbooks.data`, unit tests, FortuneSheet's real `update()` engine for masks/serials, browser localStorage reads via JS. Excel Online is NOT drivable by Claude-for-Chrome (domain blocked); Excel ground truth = master-prompt Phase-7 expected results.
+- **Honestly deferred:** LET (needs lazy parser-level eval — args arrive pre-evaluated); server-side Row-RLS (blocked on a normalized cells-table migration — the single `workbooks.data` blob can't be row-filtered safely on load); CSV-import injection guard (blanket-applying would break legit formula import; export already neutralizes the real vector).
 
 ## Next Session
 > Last reviewed: 2026-05-27. Earlier entries below are append-log session notes — treat current-state claims with caution.
 - Wave 1 (this session) shipped: dead-code purge, redoStack cap, formula-explainer LRU cap, exportUtils lazy-loaded, CLAUDE.md hygiene.
 - Wave 2 next: extract shared persistence helpers (`getClientSession`, `createMigrationFlag`, `makeLocalStore`) and refactor the seven `src/lib/*Api.ts` modules onto them — ~40 % LOC reduction per file, behavior-preserving.
-- Wave 3+: god-file splits, perf fixes (overlay React.memo, useLivePreview incremental HF, single-pass cfEvaluator), adapter completion. See the senior-engineer audit report from 2026-05-27 for the full plan.
+- Wave 3+: god-file splits, perf fixes (overlay React.memo, useLivePreview incremental HF, single-pass cfEvaluator). (Adapter work is obsolete — repo committed to FortuneSheet in `37bda3c`.) See the senior-engineer audit report from 2026-05-27 for the full plan.
 
 ## MVP launch-readiness session (latest) — 14 commits, 3 P0 fixes, anti-hallucination flag
 
@@ -339,7 +344,7 @@ Each helper goes through the real store/action — no shadow state.
 - addFilter/removeFilter/clearFilters recompute hidden rows via computeHiddenRows and write config.rowhidden to the active sheet in gridSheets — does NOT just store filter state
 - findInGrid searches celldata values and stores FoundCell[] in findResults state; replaceInGrid modifies matching cells in gridSheets and returns count
 - clearFormatOnSelection strips all style keys from the cell v object, preserving only v (value), f (formula), m (display)
-- Auto-save debounced at 30 seconds using inline debounce in saveService (not shared util — async return type clash)
+- Auto-save debounced at 2 seconds (`AUTOSAVE_DEBOUNCE_MS` in src/lib/saveService.ts — was 30s); pending saves flush synchronously on route change/tab close
 - Ctrl+S triggers immediate manual save
 - If Supabase is not configured (env vars absent) — supabase.ts exports null; saveService falls back to localStorage silently, no crash
 - If user is not authenticated — same localStorage fallback
@@ -380,7 +385,7 @@ Each helper goes through the real store/action — no shadow state.
 - Cell history opens from the grid right-click context menu via View Cell History.
 - CellHistoryPanel is a fixed 320px slide-in panel with date filtering, timeline entries, and restore actions.
 - Cell changes are detected from FortuneSheet onChange, routed through sheetStore.updateCell, and persisted with recordCellChange when a valid workbook UUID and Supabase user are available.
-- Restoring a history entry updates the workbook data in Supabase, records a new history row, and mirrors the restored value into local grid state.
+- ~~Restoring a history entry updates the workbook data in Supabase…~~ STALE — the cell-history panel is **view-only**: the Restore button is disabled (`restoreUnavailable=true` in HistoryEntry.tsx) because `restoreCell()` is a stub returning null; re-enable only with a real per-cell restore (pinned by historyEntryRestoreDisabled.spec.tsx).
 - Session 16 natural language filters use `/api/ai/filter` with Groq when needed and a deterministic parser for common filters like "status is Active".
 - NLFilterBar renders inline above the grid, debounces input by 800ms, shows active filter chips, and exposes the AI interpretation.
 - NL filters call setActiveFilters; setActiveFilters now recomputes hidden rows for the active sheet.
@@ -398,7 +403,7 @@ Each helper goes through the real store/action — no shadow state.
 - Session 19 removed the visible session badge from the sheet header and replaced the hardcoded workbook name with local workbook-name state.
 - Next.js version pinned to 15.5.15 (per package.json). The "16.2.4" note below from Session 19 was incorrect.
 - Final local checks pass: `npm run build`, `npx tsc --noEmit`, and `npx eslint src/ --max-warnings 0`.
-- Vercel deployment URL is pending because `npx vercel --prod --yes` failed with an invalid token.
+- Deployed on Vercel as `quiksheets-v2`. Prod deploys from `main`; merge develop→main to ship — fixes on develop alone are NOT live.
 - The attached master QuikSheets prompt files reference Univer, but this repo remains locked to FortuneSheet per the stack section above.
 - Session 20 row summarizer opens from multi-row row-header selections, right-click on selected rows, and Alt+S.
 - Session 20 `/api/ai/summarize` uses Groq when configured and falls back to deterministic stats-based output when AI is unavailable.
@@ -418,10 +423,7 @@ Each helper goes through the real store/action — no shadow state.
 - Folder structure — do not reorganize
 
 ## Warnings for Next Session
-- Session 21 prompt is pending from the user.
-- Production deployment still needs a valid Vercel token or fresh `vercel login`.
-- Deployed-site verification is pending until Vercel deployment succeeds.
-- AI features need GROQ_API_KEY in .env.local.
+- AI features need GROQ_API_KEY in .env.local; `/api/ai/explain`, `/api/ai/summarize`, and the formula route's simple column-addition template serve deterministic offline fallbacks without it — the other AI routes 503.
 - AI features use Groq API (free) not Anthropic.
 - Formula autocomplete shows when localValue starts with '=' and has no '(' yet; hides on '(' typed or Escape
 - All toolbar dropdowns use position:fixed + getBoundingClientRect() — never use absolute inside overflow-x-auto

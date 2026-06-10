@@ -10,8 +10,8 @@
 - Grid is a `<canvas>` behind a persistent realtime WS, so `screenshot`/`executeScript` time out. **Most reliable channels:** Supabase `execute_sql` (cell DATA in `workbooks.data`), unit tests (logic), chart SVG DOM, production build. Used those; Claude-in-Chrome only for opportunistic spot-checks.
 
 ## Summary
-PASSED: 25 · PARTIAL: 2 (T003 date-detect, T015 NL-needs-key) · FLAGGED: 2 (T027/T028 — P2, flag-OFF by default).
-**Fixed this pass: T005, T016, T019, T025** (+ currency-separator pre-fix). Verified by 580-green unit suite + clean tsc/eslint + Supabase DB. Audit = 7 parallel code-audit agents; every fix re-verified against source.
+PASSED: 26 · PARTIAL: 1 (T015 — full NL→formula needs GROQ key; the deterministic column-addition template now runs offline) · FLAGGED: 2 (T027/T028 — P2, flag-OFF by default).
+**Fixed across this effort: T003, T005, T016, T019, T025** (+ currency-separator pre-fix, SORT/SORTBY, cloud-save create-on-missing). Verified by 622-green unit suite + clean tsc/eslint + Supabase DB + live prod checks. Audit = 7 parallel code-audit agents + a 24-agent closeout audit; every fix re-verified against source.
 
 ## Phase 0
 ✅ `CODEBASE_MAP.md` complete — every MVP subsystem located + status-marked. App is largely IMPLEMENTED; parity work = Gap list + Known Defects, not green-field.
@@ -41,7 +41,7 @@ PASSED: 25 · PARTIAL: 2 (T003 date-detect, T015 NL-needs-key) · FLAGGED: 2 (T0
 | T012 | Auto-save | saved, no manual | PASS (TEST) | saveService.spec.ts (200/no-session/403/network + 409 self-heal) |
 | T013 | Typed column validate | blocks text in currency | PASS (TEST) | columnTypeFormatters.validateForEdit, formatters.spec.ts |
 | T014 | Template | predefined columns | PASS (CODE) | templates/index.ts ("Monthly Budget"; no literal "Expense Tracker" — naming only) |
-| T015 | AI formula gen | =B2*18% valid | PARTIAL | needs GROQ_API_KEY (prod has it); offline fallback only does A+B+C (deferred, see D7) |
+| T015 | AI formula gen | =B2*18% valid | PARTIAL | needs GROQ_API_KEY for full NL (prod has it); the deterministic column-addition template now runs BEFORE the no-key guard so it works offline (was dead code behind the 503 — fixed, pinned by offlineFallbacks.spec.ts). GST/% offline template deferred, see D8 |
 | T016 | Explain formula | correct explanation | **PASS — FIXED** | explain/route.ts now serves fallbackExplanation offline (was 503) |
 | T017 | Clean phones | normalized | PASS (CODE) | data-cleaning/cleaners.ts normalizePhone (offline, both inputs → +91-9876543210) |
 | T018 | Summarize rows | insights | PASS (CODE) | rowStats.ts + summarize route fallback (HTTP 200) |
@@ -78,7 +78,7 @@ Seed stored `f:'=C2*D2'` (leading `=` FortuneSheet can't parse) with no cached v
 `useFormSubmissionMergeOnMount` wrote `String(raw)` for every field, so Deal=15000 became text "15000" (won't SUM/sort). Now coerces `number`/`currency` fields to numeric cells (stripping currency punctuation). `useFormSubmissionMergeOnMount.ts`.
 
 ### D8 — DEFERRED / FLAGGED (real, but lower priority or deployment-gated)
-- **NL→formula (T015):** only the literal "add columns A,B,C" works without a GROQ key; GST/% etc. 503 offline. Prod has the key, so live it works — but add a deterministic %-of-column template for offline parity. `ai/formula/route.ts`.
+- **NL→formula (T015):** the deterministic column-addition template now runs BEFORE the no-key guard, so "add columns A and B" works offline (it was dead code behind the 503 — closeout-audit fix, pinned by offlineFallbacks.spec.ts); GST/% etc. still 503 offline. Prod has the key, so live it all works — a deterministic %-of-column template remains a nice-to-have. `ai/formula/route.ts`.
 - **CSV import injection (T009):** `sanitizeImportedCellValue` exists+tested but isn't called on import (export already guards the real Excel-execution vector). Wire it into `importUtils.ts` as defense-in-depth.
 - **Formula semantics:** `SORT` (sort_index/by_col) + `SORTBY` (multi-key) **FIXED** (`59594cd`, 7 tests). `LET` still returns its last arg — a true fix needs lazy/parser-level eval (args arrive pre-evaluated); left honestly deferred. CSV-import injection guard intentionally NOT blanket-applied — it would break legit formula import (Excel keeps CSV formulas; export already neutralizes the real attack vector). Offline NL→formula left as-is (prod has the GROQ key).
 - **Row-Level Security (T028):** client-side row hiding only — full data ships to the browser; role/identity come from client state; the apply-hook isn't even mounted. Flag-OFF by default. Needs server-side enforcement before it's "security". `row-rls/**`.

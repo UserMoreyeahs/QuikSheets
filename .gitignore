@@ -44,8 +44,16 @@ next-env.d.ts
 test-results/
 playwright-report/
 
-# claude worktrees
+# claude worktrees + per-machine settings (permissions allowlist — never shared)
 .claude/worktrees/
+.claude/settings.local.json
 
 # local session scratch
 .clone/
+
+# user's local working documents — keep out of the public repo
+/QuikSheets_Excel_Parity_Master_Prompt.md
+/Quiksheets_Codebase_Audit_Report.docx
+/Quiksheets_Documentation.zip
+/Quiksheets_Documentation/
+/pdfinj.pdf
