@@ -7,7 +7,7 @@
  * Each cursor shows the user's name tag and highlights their selected cell.
  *
  * Positioned using FortuneSheet's default cell sizing (same assumptions as
- * useGridScroll + FillHandle).
+ * useGridScroll).
  *
  * IMPORTANT: Zustand selectors must return stable references. Never create
  * a new array/object inside a selector — that causes an infinite re-render

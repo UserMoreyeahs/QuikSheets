@@ -219,14 +219,19 @@ describe('loadWorkbook migration', () => {
     expect(await loadWorkbook('Nope')).toBeNull()
   })
 
-  it('migrates under a user-scoped key when a session user id is present', async () => {
+  it('NEVER serves the legacy unscoped blob to an authenticated user (cross-user isolation)', async () => {
+    // SECURITY contract (supersedes the old "migrate legacy for authed users"
+    // behavior): the legacy `quiksheets_workbook_<name>` key has NO user
+    // segment, so on a shared browser it may hold a DIFFERENT person's data.
+    // Authenticated users must not hydrate it; only anon sessions may (their
+    // own pre-isolation residue, migrated by the test above).
     mockSession = { access_token: SESSION_TOKEN, user: { id: 'user-xyz' } }
     store[`${LEGACY_KEY_PREFIX}_Q1`] = JSON.stringify({ name: 'Q1', data: { legacy: true } })
 
     const { loadWorkbook } = await import('@/lib/saveService')
     const loaded = await loadWorkbook('Q1')
-    expect(loaded!.data).toEqual({ legacy: true })
-    expect(store['quiksheets_workbook:user-xyz:name:q1']).toBeDefined()
+    expect(loaded).toBeNull()
+    expect(store['quiksheets_workbook:user-xyz:name:q1']).toBeUndefined()
   })
 })
 

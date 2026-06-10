@@ -194,3 +194,14 @@
 .dark .text-zinc-400 {
   color: rgb(161 161 170) !important;
 }
+
+/* ── Drag-fill handle (FortuneSheet built-in) ───────────────────────────
+   We rely on FortuneSheet's native fill handle for Excel-grade drag-fill
+   (series, dates, number formats, formula re-offset). The stock 6×6px
+   square is hard to grab — enlarge it like Excel's. */
+.luckysheet-cs-fillhandle {
+  width: 10px !important;
+  height: 10px !important;
+  right: -6px !important;
+  bottom: -6px !important;
+}

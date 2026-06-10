@@ -29,6 +29,11 @@ export interface WorkbookSummary {
 export async function listWorkbooksAction(): Promise<WorkbookSummary[]> {
   const supabase = await getServerSupabase()
   if (!supabase) return []
+  // Defense-in-depth: row visibility is enforced by RLS (owner-or-member,
+  // verified live), but never run the unfiltered select without an
+  // authenticated user — one RLS misconfiguration away from a full dump.
+  const { data: auth } = await supabase.auth.getUser()
+  if (!auth?.user) return []
   const { data, error } = await supabase
     .from('workbooks')
     .select('id, workspace_id, owner_id, name, description, updated_at, last_opened_at')

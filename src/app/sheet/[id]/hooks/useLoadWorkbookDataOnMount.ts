@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import type { Sheet } from '@fortune-sheet/core'
 import { useSheetStore } from '@/store/sheetStore'
 import { getBrowserSupabase } from '@/lib/supabase/client'
-import { loadWorkbookData, noteWorkbookVersion } from '@/lib/saveService'
+import { loadWorkbookData, noteWorkbookVersion, primeAuthContext } from '@/lib/saveService'
 import { healHydratedSheets } from '@/lib/healHydratedSheets'
 
 /**
@@ -40,7 +40,17 @@ export function useLoadWorkbookDataOnMount(
 
     let cancelled = false
 
+    // Re-arm the hydration gate for THIS workbook. isHydrated is global
+    // store state, so without this a client-side navigation from another
+    // sheet would leave it true while this one is still loading.
+    useSheetStore.getState().setHydrated(false)
+
     void (async () => {
+      // Prime the cached auth context so the SYNCHRONOUS unload flush keys
+      // localStorage under the right user segment even before the first
+      // debounced save resolves a session.
+      void primeAuthContext()
+
       // 1. Brand-new seeded workbook — template hook owns hydration.
       try {
         if (typeof window !== 'undefined' &&
@@ -83,7 +93,13 @@ export function useLoadWorkbookDataOnMount(
       if (!currentIsPristineDefault) return
 
       state.replaceGridSheets(sheets)
-    })()
+    })().finally(() => {
+      // Hydration finished — success, miss, or template-owned. Only now may
+      // autosave run (SaveStatus gates on this): an autosave armed BEFORE
+      // hydration carried the pristine EMPTY grid, and when the server GET
+      // took >2s it overwrote the user's saved data with emptiness.
+      if (!cancelled) useSheetStore.getState().setHydrated(true)
+    })
 
     return () => {
       cancelled = true

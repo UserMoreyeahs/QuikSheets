@@ -48,6 +48,31 @@ export function cloneFortuneData<T>(value: T): T {
   return value
 }
 
+/**
+ * Remove FortuneSheet's per-sheet SELECTION snapshot before handing sheets
+ * to the Workbook (`data` prop or `updateSheet`).
+ *
+ * FortuneSheet round-trips `luckysheet_select_save` through onChange, so the
+ * snapshot in our store is whatever selection existed at the LAST change.
+ * On every remount (hydrationVersion bump: fill/sort/dedupe/paste/CF) the
+ * Workbook restores that snapshot RAW — without normalizing against live
+ * geometry — so the visible selection box (and the fill handle riding its
+ * corner) pointed at a STALE cell while the store/name-box had the real one.
+ * That desync is why drag-fill "didn't work": the handle wasn't where the
+ * selection was. Stripping the snapshot makes the grid fall back to its A1
+ * default, and SpreadsheetGrid re-asserts the true selection from the store.
+ *
+ * Mutates the passed sheets (callers pass a fresh clone) and returns them.
+ */
+export function stripSelectionState(sheets: Sheet[]): Sheet[] {
+  for (const sheet of sheets) {
+    const rec = sheet as unknown as Record<string, unknown>
+    delete rec['luckysheet_select_save']
+    delete rec['luckysheet_selection_range']
+  }
+  return sheets
+}
+
 export function getSheetMatrix(sheet: Sheet): CellMatrix {
   if (sheet.data && sheet.data.length > 0) {
     return sheet.data.map((row) => [...(row ?? [])]) as CellMatrix
